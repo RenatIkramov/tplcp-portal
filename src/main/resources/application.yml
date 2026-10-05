@@ -1,0 +1,34 @@
+spring:
+  application:
+    name: tplcp-portal
+
+  datasource:
+    # Подключаемся РОЛЬЮ ПРИЛОЖЕНИЯ portal_app, а не владельцем схемы.
+    # Владелец обходит политики RLS — изоляция поклажедателей не сработает.
+    url: jdbc:postgresql://localhost:5432/tplcp?currentSchema=dbo
+    username: portal_app
+    password: portal_app_dev
+    hikari:
+      maximum-pool-size: 10
+
+  flyway:
+    # Схема накатана вручную скриптом, поэтому Flyway пока выключен.
+    # Чтобы передать схему под его управление: удалить базу, создать пустую
+    # со схемой dbo, положить файлы V1..V12 в src/main/resources/db/migration
+    # и поставить enabled: true — Flyway создаст всё сам и запомнит версию.
+    enabled: false
+    schemas: dbo
+    default-schema: dbo
+
+# Режим разработки: включает удобства, которых не должно быть в продакшне —
+# выбор поклажедателя по коду (?depositorCode=D-001) и эндпоинты /api/dev/*.
+portal:
+  dev-mode: true
+
+server:
+  port: 8080
+
+logging:
+  level:
+    # Показывать SQL-запросы в консоли — полезно, пока разбираетесь
+    org.springframework.jdbc.core: DEBUG

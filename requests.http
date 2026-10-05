@@ -1,0 +1,134 @@
+### Запросы к API портала
+#
+# Файл для HTTP-клиента IntelliJ (есть в версии Ultimate). В Community
+# проще проверять через браузер — адреса ниже открываются как есть,
+# потому что в dev-режиме поклажедатель указывается параметром.
+
+@host = http://localhost:8080
+
+### Какие вообще есть поклажедатели (коды и UUID)
+GET {{host}}/api/dev/depositors
+
+### Какие есть пользователи (логины для X-User-Login)
+GET {{host}}/api/dev/users
+
+### Запасы по коду поклажедателя — 9 строк
+GET {{host}}/api/stock?depositorCode=D-001
+
+### Только склад Алматы — 8 строк
+GET {{host}}/api/stock?depositorCode=D-001&warehouseId=WH-ALA
+
+### Поиск по названию — 3 строки
+GET {{host}}/api/stock?depositorCode=D-001&search=рога
+
+### Другой поклажедатель — 4 строки, молочная продукция
+GET {{host}}/api/stock?depositorCode=D-002
+
+### Без поклажедателя — ошибка 400
+GET {{host}}/api/stock
+
+### Чужой поклажедатель при известном пользователе — ошибка 403
+GET {{host}}/api/stock?depositorCode=D-002
+X-User-Login: client@roga-kopyta.kz
+
+### Свой поклажедатель при известном пользователе — работает
+GET {{host}}/api/stock?depositorCode=D-001
+X-User-Login: client@roga-kopyta.kz
+
+### Вариант с UUID в заголовке (так будет работать продакшн-клиент)
+GET {{host}}/api/stock
+X-Depositor-Id: ПОДСТАВИТЬ-UUID-ИЗ-/api/dev/depositors
+
+### ---- Документы ----
+
+### Поступления
+GET {{host}}/api/receipts?depositorCode=D-001
+
+### Поступления: только принятые
+GET {{host}}/api/receipts?depositorCode=D-001&status=received
+
+### Поступления: поиск по поставщику
+GET {{host}}/api/receipts?depositorCode=D-001&search=козлов
+
+### Заказы на отгрузку
+GET {{host}}/api/orders?depositorCode=D-001
+
+### Перемещения
+GET {{host}}/api/transfers?depositorCode=D-001
+
+### Карточка документа (docId взять из списка выше)
+GET {{host}}/api/receipts/ПОДСТАВИТЬ-DOC-ID?depositorCode=D-001
+
+### Состав документа
+GET {{host}}/api/receipts/ПОДСТАВИТЬ-DOC-ID/lines?depositorCode=D-001
+
+### Детализация строки 1 по партиям
+GET {{host}}/api/receipts/ПОДСТАВИТЬ-DOC-ID/line-details?lineNumber=1&depositorCode=D-001
+
+### ---- Справочники и биллинг ----
+
+### Номенклатура
+GET {{host}}/api/sku?depositorCode=D-001
+
+### Номенклатура: поиск и фильтр группы
+GET {{host}}/api/sku?depositorCode=D-001&search=рога
+GET {{host}}/api/sku?depositorCode=D-001&group=Мясная продукция
+
+### Поставщики / грузополучатели / склады
+GET {{host}}/api/suppliers?depositorCode=D-001
+GET {{host}}/api/consignees?depositorCode=D-001
+GET {{host}}/api/warehouses?depositorCode=D-001
+
+### Биллинг
+GET {{host}}/api/service-tariffs?depositorCode=D-001
+GET {{host}}/api/invoices?depositorCode=D-001
+
+### Партии одного товара (экран «Запасы» → «Детализация»)
+GET {{host}}/api/stock/details?skuCode=RK-ROG-01&depositorCode=D-001
+
+### ---- Черновики документов (этап 7) ----
+# Во всех запросах нужен X-User-Login: запись фиксирует автора (§11).
+
+### Создать черновик прихода
+POST {{host}}/api/receipts?depositorCode=D-001
+X-User-Login: client@roga-kopyta.kz
+Content-Type: application/json
+
+{"warehouse_id": "WH-ALA", "eta_date": "2026-11-05"}
+
+### Изменить шапку (docId из ответа выше)
+PUT {{host}}/api/receipts/ПОДСТАВИТЬ-DOC-ID?depositorCode=D-001
+X-User-Login: client@roga-kopyta.kz
+Content-Type: application/json
+
+{"erp_number": "ERP-2026-5555", "comment": "Поставка по договору"}
+
+### Добавить строку состава (sku_id взять из /api/sku)
+POST {{host}}/api/receipts/ПОДСТАВИТЬ-DOC-ID/lines?depositorCode=D-001
+X-User-Login: client@roga-kopyta.kz
+Content-Type: application/json
+
+{"sku_id": "ПОДСТАВИТЬ-SKU-ID", "expected_qty": 120, "price": 2500, "currency_id": 1}
+
+### Удалить строки 1 и 2
+DELETE {{host}}/api/receipts/ПОДСТАВИТЬ-DOC-ID/lines?lineNumbers=1,2&depositorCode=D-001
+X-User-Login: client@roga-kopyta.kz
+
+### Проверить готовность к отправке, не отправляя
+GET {{host}}/api/receipts/ПОДСТАВИТЬ-DOC-ID/validate?depositorCode=D-001
+X-User-Login: client@roga-kopyta.kz
+
+### Подтвердить (отправка в WMS пока заглушена)
+POST {{host}}/api/receipts/ПОДСТАВИТЬ-DOC-ID/confirm?depositorCode=D-001
+X-User-Login: client@roga-kopyta.kz
+
+### Транспорт — только в статусе, где это разрешено
+PUT {{host}}/api/receipts/ПОДСТАВИТЬ-DOC-ID/transport?depositorCode=D-001
+X-User-Login: client@roga-kopyta.kz
+Content-Type: application/json
+
+{"carrier": "ТОО «КазТранс»", "car_number": "777 AAA 02", "driver_name": "Петров С.И."}
+
+### Удалить черновик
+DELETE {{host}}/api/receipts/ПОДСТАВИТЬ-DOC-ID?depositorCode=D-001
+X-User-Login: client@roga-kopyta.kz
