@@ -105,6 +105,14 @@ public class DocumentController {
         return drafts.addLine(DocumentType.ofPath(docType), docId, line);
     }
 
+    /** Заменить состав документа целиком (экран черновика присылает итоговый список). */
+    @PutMapping("/{docId}/lines")
+    public Map<String, Object> replaceLines(@PathVariable String docType,
+                                            @PathVariable String docId,
+                                            @RequestBody List<Map<String, Object>> lines) {
+        return drafts.replaceLines(DocumentType.ofPath(docType), docId, lines);
+    }
+
     @PutMapping("/{docId}/lines/{lineNumber}")
     public Map<String, Object> updateLine(@PathVariable String docType,
                                           @PathVariable String docId,

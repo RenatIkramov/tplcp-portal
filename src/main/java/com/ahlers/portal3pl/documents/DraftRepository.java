@@ -107,6 +107,13 @@ public class DraftRepository {
                 .update();
     }
 
+    /** Удаляет весь состав документа — используется при замене состава целиком. */
+    public int deleteAllLines(DocumentType type, String docId) {
+        return jdbc.sql("DELETE FROM dbo.%s WHERE doc_id = :docId::uuid".formatted(type.lineTable()))
+                .param("docId", docId)
+                .update();
+    }
+
     public int nextLineNumber(DocumentType type, String docId) {
         String sql = "SELECT COALESCE(MAX(line_number), 0) + 1 FROM dbo.%s WHERE doc_id = :docId::uuid"
                 .formatted(type.lineTable());

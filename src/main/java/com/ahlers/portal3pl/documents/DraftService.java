@@ -118,6 +118,34 @@ public class DraftService {
         return card(type, docId);
     }
 
+    /**
+     * Заменяет состав документа целиком.
+     *
+     * Экран редактирования черновика ведёт состав у себя: там работают
+     * объединение дублей, пересчёт по упаковке, подстановка цены. Присылать
+     * результат целиком надёжнее, чем угадывать по одной строке, что именно
+     * изменилось, и порядок строк при этом сохраняется ровно таким,
+     * каким его видит пользователь.
+     */
+    @Transactional
+    public Map<String, Object> replaceLines(DocumentType type, String docId, List<Map<String, Object>> lines) {
+        depositorScope.apply();
+        currentUser.requireUserId();
+        requireDraft(type, docId);
+
+        for (Map<String, Object> line : lines) {
+            requirePositiveQty(type, line);
+        }
+
+        drafts.deleteAllLines(type, docId);
+        int lineNumber = 1;
+        for (Map<String, Object> line : lines) {
+            drafts.addLine(type, docId, lineNumber++, line);
+        }
+        drafts.refreshLineCount(type, docId);
+        return card(type, docId);
+    }
+
     @Transactional
     public Map<String, Object> deleteLines(DocumentType type, String docId, List<Integer> lineNumbers) {
         depositorScope.apply();

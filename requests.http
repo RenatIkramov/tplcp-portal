@@ -132,3 +132,7 @@ Content-Type: application/json
 ### Удалить черновик
 DELETE {{host}}/api/receipts/ПОДСТАВИТЬ-DOC-ID?depositorCode=D-001
 X-User-Login: client@roga-kopyta.kz
+
+### Кто я и что мне разрешено
+GET {{host}}/api/me?depositorCode=D-001
+X-User-Login: client@roga-kopyta.kz
