@@ -10,7 +10,7 @@ import java.util.List;
 /**
  * HTTP-слой: превращает запрос GET /api/stock в вызов сервиса,
  * а результат — в JSON. Больше ничего здесь делать не нужно.
- *
+ * <p>
  * Примеры:
  *   GET /api/stock
  *   GET /api/stock?warehouseId=WH-ALA

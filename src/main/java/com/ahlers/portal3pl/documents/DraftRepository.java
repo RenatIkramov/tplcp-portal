@@ -47,12 +47,12 @@ public class DraftRepository {
                 .single();
     }
 
-    /** Обновляет разрешённые поля шапки. Возвращает число изменённых строк. */
-    public int updateHeader(DocumentType type, String docId, Map<String, Object> values,
-                            Set<String> allowed, String userId, boolean draftOnly) {
+    /** Обновляет разрешённые поля шапки. */
+    public void updateHeader(DocumentType type, String docId, Map<String, Object> values,
+                             Set<String> allowed, String userId, boolean draftOnly) {
         Map<String, Object> clean = filter(values, allowed);
         if (clean.isEmpty()) {
-            return 0;
+            return;
         }
         // Значения приходят из JSON строками, поэтому типы указываем явно (SqlCast)
         String assignments = clean.keySet().stream()
@@ -80,7 +80,7 @@ public class DraftRepository {
         for (var e : clean.entrySet()) {
             spec = spec.param(e.getKey(), e.getValue());
         }
-        return spec.update();
+        spec.update();
     }
 
     public int deleteDraft(DocumentType type, String docId) {
@@ -96,20 +96,20 @@ public class DraftRepository {
                 .update();
     }
 
-    public int deleteLines(DocumentType type, String docId, List<Integer> lineNumbers) {
+    public void deleteLines(DocumentType type, String docId, List<Integer> lineNumbers) {
         String sql = """
                 DELETE FROM dbo.%s
                 WHERE doc_id = :docId::uuid AND line_number IN (:lines)
                 """.formatted(type.lineTable());
-        return jdbc.sql(sql)
+        jdbc.sql(sql)
                 .param("docId", docId)
                 .param("lines", lineNumbers)
                 .update();
     }
 
     /** Удаляет весь состав документа — используется при замене состава целиком. */
-    public int deleteAllLines(DocumentType type, String docId) {
-        return jdbc.sql("DELETE FROM dbo.%s WHERE doc_id = :docId::uuid".formatted(type.lineTable()))
+    public void deleteAllLines(DocumentType type, String docId) {
+        jdbc.sql("DELETE FROM dbo.%s WHERE doc_id = :docId::uuid".formatted(type.lineTable()))
                 .param("docId", docId)
                 .update();
     }
@@ -121,7 +121,7 @@ public class DraftRepository {
     }
 
     /** Добавляет строку состава: плановая запись без партии (решение Р1). */
-    public int addLine(DocumentType type, String docId, int lineNumber, Map<String, Object> values) {
+    public void addLine(DocumentType type, String docId, int lineNumber, Map<String, Object> values) {
         Map<String, Object> clean = filter(values, type.editableLineColumns());
         clean.put("doc_id", docId);
         clean.put("line_number", lineNumber);
@@ -137,7 +137,7 @@ public class DraftRepository {
         for (var e : clean.entrySet()) {
             spec = spec.param(e.getKey(), e.getValue());
         }
-        return spec.update();
+        spec.update();
     }
 
     public int updateLine(DocumentType type, String docId, int lineNumber, Map<String, Object> values) {
@@ -163,7 +163,7 @@ public class DraftRepository {
     }
 
     /** Переводит документ в статус по коду. */
-    public int setStatus(DocumentType type, String docId, String statusCode, boolean markConfirmed) {
+    public void setStatus(DocumentType type, String docId, String statusCode, boolean markConfirmed) {
         String sql = """
                 UPDATE dbo.%s
                    SET status_id = (SELECT id FROM dbo.enum_status
@@ -172,7 +172,7 @@ public class DraftRepository {
                        updated_at = now()
                  WHERE doc_id = :docId::uuid
                 """.formatted(type.headerTable());
-        return jdbc.sql(sql)
+        jdbc.sql(sql)
                 .param("objectType", type.objectTypeId())
                 .param("statusCode", statusCode)
                 .param("markConfirmed", markConfirmed)

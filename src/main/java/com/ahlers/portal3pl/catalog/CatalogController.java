@@ -11,7 +11,7 @@ import java.util.Map;
 
 /**
  * Справочники и списки биллинга:
- *
+ * <p>
  *   GET /api/sku?search=рога&group=Сырьё
  *   GET /api/suppliers
  *   GET /api/consignees

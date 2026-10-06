@@ -120,7 +120,7 @@ public class DraftService {
 
     /**
      * Заменяет состав документа целиком.
-     *
+     * <p>
      * Экран редактирования черновика ведёт состав у себя: там работают
      * объединение дублей, пересчёт по упаковке, подстановка цены. Присылать
      * результат целиком надёжнее, чем угадывать по одной строке, что именно
@@ -168,7 +168,7 @@ public class DraftService {
 
         List<String> problems = validateForConfirm(type, docId);
         if (!problems.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
+            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_CONTENT,
                     "Документ не готов к отправке: " + String.join("; ", problems));
         }
 
@@ -188,7 +188,7 @@ public class DraftService {
 
     /**
      * Что мешает подтвердить документ. Пустой список — можно отправлять.
-     *
+     * <p>
      * Метод вызывают и снаружи (экран спрашивает, активна ли кнопка), и изнутри.
      * Поэтому контекст поклажедателя выставляется здесь же: без него своя
      * же транзакция не увидит документ — RLS отработает честно и вернёт пусто.

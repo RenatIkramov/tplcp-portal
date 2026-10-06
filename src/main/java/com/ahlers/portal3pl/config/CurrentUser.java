@@ -8,7 +8,7 @@ import org.springframework.web.server.ResponseStatusException;
 /**
  * Кто выполняет действие. Логин берётся из сессии (см. AuthFilter),
  * идентификатор — из базы по логину.
- *
+ * <p>
  * Для записи документов пользователь обязателен: поля «кто создал» и
  * «кто изменил» требует §11 спецификации, и ставить их наугад нельзя.
  */
@@ -40,7 +40,9 @@ public class CurrentUser {
         if (login == null || login.isBlank()) {
             return false;
         }
-        return Boolean.TRUE.equals(jdbc.sql("""
+        // orElse(false) уже исключает null, поэтому обёртка Boolean.TRUE.equals
+        // не нужна: распаковка значения здесь безопасна
+        return jdbc.sql("""
                         SELECT COALESCE(s.can_edit_transport, true)
                         FROM dbo.app_user u
                         LEFT JOIN dbo.user_settings s ON s.user_id = u.user_id
@@ -49,7 +51,7 @@ public class CurrentUser {
                 .param("login", login)
                 .query(Boolean.class)
                 .optional()
-                .orElse(false));
+                .orElse(false);
     }
 
     /** Персональные настройки видимости разделов (§6.3) — экран их спрашивает. */

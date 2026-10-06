@@ -20,7 +20,7 @@ import java.util.Map;
 /**
  * Один контроллер на три типа документов: поступления, заказы, перемещения.
  * Тип приходит частью адреса и проверяется по перечислению DocumentType.
- *
+ * <p>
  *   GET /api/receipts?search=ПН&status=received&dateFrom=2026-09-01
  *   GET /api/orders/{docId}            — карточка: шапка, состав, детализация
  *   GET /api/transfers/{docId}/lines   — только состав

@@ -103,7 +103,7 @@ class ReadApiTest extends PortalTestBase {
 
     /**
      * Списки отдают документы поклажедателя.
-     *
+     * <p>
      * Проверяем наличие демо-документов, а не их точное число: в базу
      * разработки добавляются черновики — и руками через портал, и тестами
      * черновиков. Тест, падающий от каждого созданного документа, ловит
@@ -133,7 +133,7 @@ class ReadApiTest extends PortalTestBase {
         List<Map<String, Object>> received =
                 documents.list(DocumentType.RECEIPTS, null, "received", null, null, null);
         assertEquals(1, received.size());
-        assertEquals("ПН-000148", received.getFirst().get("documentNo"));
+        assertEquals(RECEIPT_NO, received.getFirst().get("documentNo"));
 
         assertEquals(1, documents.list(DocumentType.RECEIPTS, "козлов", null, null, null, null).size());
     }
@@ -151,7 +151,7 @@ class ReadApiTest extends PortalTestBase {
     @Test
     void documentLinesAggregateBatches() {
         signIn();
-        String docId = receiptId("ПН-000148");
+        String docId = receiptId();
 
         List<Map<String, Object>> lines = documents.lines(DocumentType.RECEIPTS, docId);
         assertEquals(2, lines.size());
@@ -167,10 +167,10 @@ class ReadApiTest extends PortalTestBase {
     @Test
     void documentCard() {
         signIn();
-        Map<String, Object> card = documents.card(DocumentType.RECEIPTS, receiptId("ПН-000148"));
+        Map<String, Object> card = documents.card(DocumentType.RECEIPTS, receiptId());
         @SuppressWarnings("unchecked")
         Map<String, Object> header = (Map<String, Object>) card.get("header");
-        assertEquals("ПН-000148", header.get("documentNo"));
+        assertEquals(RECEIPT_NO, header.get("documentNo"));
         assertEquals(2, ((List<?>) card.get("lines")).size());
         assertEquals(3, ((List<?>) card.get("lineDetails")).size());
     }
@@ -182,7 +182,7 @@ class ReadApiTest extends PortalTestBase {
     @Test
     void foreignDocumentNotFound() {
         signIn();
-        String docId = receiptId("ПН-000148");
+        String docId = receiptId();
         signInAs(OTHER_USER, OTHER_DEPOSITOR);
         expectRejection(404, () -> documents.card(DocumentType.RECEIPTS, docId));
     }
@@ -218,8 +218,11 @@ class ReadApiTest extends PortalTestBase {
 
     // ---------- вспомогательное ----------
 
-    private String receiptId(String documentNo) {
-        return documents.list(DocumentType.RECEIPTS, documentNo, null, null, null, null)
+    /** Поступление из демо-данных, на котором проверяются карточка и состав. */
+    private static final String RECEIPT_NO = "ПН-000148";
+
+    private String receiptId() {
+        return documents.list(DocumentType.RECEIPTS, RECEIPT_NO, null, null, null, null)
                 .getFirst().get("docId").toString();
     }
 
