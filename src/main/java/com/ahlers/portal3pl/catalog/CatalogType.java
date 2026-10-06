@@ -55,9 +55,4 @@ public enum CatalogType {
     public String orderBy() {
         return orderBy;
     }
-
-    /** Справочники, не привязанные к поклажедателю: их видно без выбора клиента. */
-    public boolean isGlobal() {
-        return this == WAREHOUSES;
-    }
 }

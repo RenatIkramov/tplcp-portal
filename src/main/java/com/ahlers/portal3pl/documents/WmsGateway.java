@@ -1,5 +1,7 @@
 package com.ahlers.portal3pl.documents;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 /**
@@ -16,13 +18,21 @@ import org.springframework.stereotype.Component;
 @Component
 public class WmsGateway {
 
+    private static final Logger log = LoggerFactory.getLogger(WmsGateway.class);
+
     /** Передать документ в WMS. Исключение означает неуспех отправки. */
     public void sendDocument(DocumentType type, String docId) {
-        // TODO этап 8: POST в ArtWMS, разбор ответа, сохранение doc_number
+        // TODO этап 8: POST в ArtWMS, разбор ответа, сохранение doc_number.
+        // Пока только запись в журнал — по ней видно, что портал дошёл до
+        // отправки и с какими данными, а документ переводится в статус
+        // «Отправлен в WMS» так же, как будет с настоящей интеграцией.
+        log.info("Заглушка WMS: документ {} ({}) считается отправленным", docId, type.path());
     }
 
     /** Передать или обновить транспортную информацию по документу. */
     public void sendTransport(DocumentType type, String docId) {
         // TODO этап 8: отдельный запрос к сущностям транспорта ArtWMS
+        log.info("Заглушка WMS: транспорт по документу {} ({}) считается переданным",
+                docId, type.path());
     }
 }
