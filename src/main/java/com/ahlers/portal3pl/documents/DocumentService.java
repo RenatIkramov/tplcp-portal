@@ -44,7 +44,7 @@ public class DocumentService {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Документ не найден");
         }
         return Map.of(
-                "header", header.get(0),
+                "header", header.getFirst(),
                 "lines", repository.lines(type, docId),
                 "lineDetails", repository.lineDetails(type, docId, null));
     }

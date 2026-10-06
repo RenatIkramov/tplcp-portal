@@ -68,7 +68,7 @@ public abstract class PortalTestBase {
      * дальше просто приводится к известному состоянию — активен, пароль
      * известен, смена не требуется, доступны все поклажедатели.
      */
-    protected PortalUser админ() {
+    protected PortalUser portalAdmin() {
         new TransactionTemplate(txManager).executeWithoutResult(tx -> {
             String id = jdbc.sql("SELECT user_id::text FROM dbo.app_user WHERE login = :login")
                     .param("login", ADMIN)
@@ -105,9 +105,9 @@ public abstract class PortalTestBase {
     }
 
     /** Идентификатор пользователя по логину — нужен тестам доступов. */
-    protected String userId(String логин) {
+    protected String userId(String login) {
         return jdbc.sql("SELECT user_id::text FROM dbo.app_user WHERE login = :login")
-                .param("login", логин)
+                .param("login", login)
                 .query(String.class)
                 .single();
     }
@@ -118,15 +118,15 @@ public abstract class PortalTestBase {
      * В приложении эти значения кладёт фильтр из серверной сессии; в тестах
      * выставляем их напрямую — проверяем правила доступа к данным, а не механику входа.
      */
-    protected void войтиКак(String login, String depositorCode) {
-        DepositorContext.set(login, depositorCode == null ? null : поклажедатель(login, depositorCode));
+    protected void signInAs(String login, String depositorCode) {
+        DepositorContext.set(login, depositorCode == null ? null : depositorId(login, depositorCode));
     }
 
     /**
      * Идентификатор поклажедателя по коду — через функцию доступов, ту же,
      * которой пользуется вход. Так тест заодно подтверждает, что доступ есть.
      */
-    protected String поклажедатель(String login, String code) {
+    protected String depositorId(String login, String code) {
         if (login == null) {
             throw new IllegalArgumentException(
                     "Укажите пользователя: с этапа 5 поклажедатель берётся из его доступов");
@@ -140,18 +140,18 @@ public abstract class PortalTestBase {
                         .single());
     }
 
-    protected void войти() {
-        войтиКак(USER, DEPOSITOR);
+    protected void signIn() {
+        signInAs(USER, DEPOSITOR);
     }
 
     @AfterEach
-    void очиститьКонтекст() {
+    void clearContext() {
         DepositorContext.clear();
     }
 
     /** Проверяет, что вызов отклонён с ожидаемым кодом ответа. */
-    protected void ожидатьОтказ(int httpStatus, Runnable действие) {
-        ResponseStatusException e = assertThrows(ResponseStatusException.class, действие::run);
+    protected void expectRejection(int httpStatus, Runnable action) {
+        ResponseStatusException e = assertThrows(ResponseStatusException.class, action::run);
         assertEquals(httpStatus, e.getStatusCode().value(),
                 "ожидался код " + httpStatus + ", получено: " + e.getReason());
     }
@@ -160,19 +160,19 @@ public abstract class PortalTestBase {
      * Чтение из базы напрямую. Таблицы под RLS, поэтому запрос выполняется
      * в транзакции с выставленным контекстом — иначе база честно вернёт ноль строк.
      */
-    protected String идентификатор(String sql) {
+    protected String singleValue(String sql) {
         return new TransactionTemplate(txManager).execute(tx -> {
             jdbc.sql("SELECT set_config('app.depositor_id', :id, true)")
-                    .param("id", поклажедатель(USER, DEPOSITOR)).query(String.class).single();
+                    .param("id", depositorId(USER, DEPOSITOR)).query(String.class).single();
             return jdbc.sql(sql).query(String.class).single();
         });
     }
 
     /** Изменение в базе под контекстом поклажедателя. */
-    protected void вКонтексте(String sql) {
+    protected void inContext(String sql) {
         new TransactionTemplate(txManager).executeWithoutResult(tx -> {
             jdbc.sql("SELECT set_config('app.depositor_id', :id, true)")
-                    .param("id", поклажедатель(USER, DEPOSITOR)).query(String.class).single();
+                    .param("id", depositorId(USER, DEPOSITOR)).query(String.class).single();
             jdbc.sql(sql).update();
         });
     }

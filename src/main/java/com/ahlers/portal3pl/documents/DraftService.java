@@ -223,7 +223,7 @@ public class DraftService {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Документ не найден");
         }
         return Map.of(
-                "header", header.get(0),
+                "header", header.getFirst(),
                 "lines", documents.lines(type, docId),
                 "lineDetails", documents.lineDetails(type, docId, null),
                 "problems", validateForConfirm(type, docId));

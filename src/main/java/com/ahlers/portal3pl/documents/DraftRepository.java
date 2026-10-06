@@ -209,7 +209,7 @@ public class DraftRepository {
                 """.formatted(type.lineTable(), type.lineTable(), type.lineTable(),
                 type.plannedQtyColumn(), type.plannedQtyColumn(), type.headerTable());
         List<Map<String, Object>> rows = jdbc.sql(sql).param("docId", docId).query().listOfRows();
-        return rows.isEmpty() ? Map.of() : SqlRows.toCamelCase(rows).get(0);
+        return rows.isEmpty() ? Map.of() : SqlRows.toCamelCase(rows).getFirst();
     }
 
     /** Какие обязательные поля шапки не заполнены. */
@@ -221,7 +221,7 @@ public class DraftRepository {
         if (rows.isEmpty()) {
             return required;
         }
-        Map<String, Object> row = rows.get(0);
+        Map<String, Object> row = rows.getFirst();
         List<String> missing = new ArrayList<>();
         for (String column : required) {
             if (row.get(column) == null) {
