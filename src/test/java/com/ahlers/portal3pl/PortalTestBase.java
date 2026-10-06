@@ -1,10 +1,13 @@
 package com.ahlers.portal3pl;
 
+import com.ahlers.portal3pl.auth.AuthService;
+import com.ahlers.portal3pl.auth.PortalUser;
 import com.ahlers.portal3pl.config.DepositorContext;
 import org.junit.jupiter.api.AfterEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.server.ResponseStatusException;
@@ -21,22 +24,120 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
  * стабилен, а проверять мы хотим именно правила (кто что может), а не механику
  * HTTP — коды ответов при этом всё равно проверяются, через статус исключения.
  */
-@SpringBootTest(properties = "portal.dev-mode=true")
+@SpringBootTest
 public abstract class PortalTestBase {
 
     protected static final String DEPOSITOR = "D-001";
     protected static final String OTHER_DEPOSITOR = "D-002";
     protected static final String USER = "client@roga-kopyta.kz";
+    protected static final String USER_PASSWORD = "Portal123!";
+
+    /**
+     * Пользователь второго поклажедателя. Нужен для проверок изоляции:
+     * с этапа 5 данные без вошедшего пользователя не отдаются вообще,
+     * поэтому «посмотреть глазами другого клиента» означает именно войти
+     * его учётной записью, а не подставить чужой идентификатор.
+     */
+    protected static final String OTHER_USER = "client@mol-reki.kz";
+
+    /**
+     * Служебный администратор для тестов.
+     *
+     * Намеренно НЕ учётка `admin`: её первый пароль временный по замыслу
+     * портала — человек меняет его при первом входе, и тест, завязанный
+     * на этот пароль, обязан был сломаться. Тесты заводят себе отдельного
+     * администратора и сами приводят его в известное состояние.
+     */
+    protected static final String ADMIN = "qa-admin@ahlers.com";
+    protected static final String ADMIN_PASSWORD = "Qa-admin-2026";
 
     @Autowired
     protected JdbcClient jdbc;
 
     @Autowired
+    protected AuthService authService;
+
+    @Autowired
+    protected PasswordEncoder passwordEncoder;
+
+    @Autowired
     protected PlatformTransactionManager txManager;
 
-    /** Представиться порталом: кто работает и с каким поклажедателем. */
+    /**
+     * Администратор портала для тестов: создаётся при первом обращении,
+     * дальше просто приводится к известному состоянию — активен, пароль
+     * известен, смена не требуется, доступны все поклажедатели.
+     */
+    protected PortalUser админ() {
+        new TransactionTemplate(txManager).executeWithoutResult(tx -> {
+            String id = jdbc.sql("SELECT user_id::text FROM dbo.app_user WHERE login = :login")
+                    .param("login", ADMIN)
+                    .query(String.class)
+                    .optional()
+                    .orElse(null);
+            if (id == null) {
+                // Приведения ::text обязательны: иначе Postgres видит набор
+                // «varchar, unknown, unknown…» и не может выбрать функцию
+                id = jdbc.sql("SELECT dbo.admin_create_user(:login::text,"
+                                + " 'Тестовый администратор'::text, 'admin'::text,"
+                                + " 'Проверка'::text, 'Ahlers Logistics'::text, NULL::text,"
+                                + " :hash::text)::text")
+                        .param("login", ADMIN)
+                        .param("hash", passwordEncoder.encode(ADMIN_PASSWORD))
+                        .query(String.class)
+                        .single();
+            }
+            jdbc.sql("SELECT dbo.auth_set_password(:id::uuid, :hash::text, false)")
+                    .param("id", id)
+                    .param("hash", passwordEncoder.encode(ADMIN_PASSWORD))
+                    .query()
+                    .listOfRows();
+            jdbc.sql("UPDATE dbo.app_user SET is_active = true WHERE user_id = :id::uuid")
+                    .param("id", id)
+                    .update();
+            jdbc.sql("SELECT dbo.admin_set_depositor_access(:id::uuid,"
+                            + " (SELECT array_agg(depositor_id) FROM dbo.admin_depositors()))")
+                    .param("id", id)
+                    .query()
+                    .listOfRows();
+        });
+        return authService.authenticate(ADMIN, ADMIN_PASSWORD);
+    }
+
+    /** Идентификатор пользователя по логину — нужен тестам доступов. */
+    protected String userId(String логин) {
+        return jdbc.sql("SELECT user_id::text FROM dbo.app_user WHERE login = :login")
+                .param("login", логин)
+                .query(String.class)
+                .single();
+    }
+
+    /**
+     * Представиться порталом: кто работает и с каким поклажедателем.
+     *
+     * В приложении эти значения кладёт фильтр из серверной сессии; в тестах
+     * выставляем их напрямую — проверяем правила доступа к данным, а не механику входа.
+     */
     protected void войтиКак(String login, String depositorCode) {
-        DepositorContext.set(login, null, depositorCode);
+        DepositorContext.set(login, depositorCode == null ? null : поклажедатель(login, depositorCode));
+    }
+
+    /**
+     * Идентификатор поклажедателя по коду — через функцию доступов, ту же,
+     * которой пользуется вход. Так тест заодно подтверждает, что доступ есть.
+     */
+    protected String поклажедатель(String login, String code) {
+        if (login == null) {
+            throw new IllegalArgumentException(
+                    "Укажите пользователя: с этапа 5 поклажедатель берётся из его доступов");
+        }
+        return new TransactionTemplate(txManager).execute(tx ->
+                jdbc.sql("SELECT depositor_id::text FROM dbo.depositors_for_user(:login::text)"
+                                + " WHERE code = :code")
+                        .param("login", login)
+                        .param("code", code)
+                        .query(String.class)
+                        .single());
     }
 
     protected void войти() {
@@ -61,8 +162,8 @@ public abstract class PortalTestBase {
      */
     protected String идентификатор(String sql) {
         return new TransactionTemplate(txManager).execute(tx -> {
-            jdbc.sql("SELECT set_config('app.depositor_id', dbo.dev_depositor_by_code(:code)::text, true)")
-                    .param("code", DEPOSITOR).query(String.class).single();
+            jdbc.sql("SELECT set_config('app.depositor_id', :id, true)")
+                    .param("id", поклажедатель(USER, DEPOSITOR)).query(String.class).single();
             return jdbc.sql(sql).query(String.class).single();
         });
     }
@@ -70,8 +171,8 @@ public abstract class PortalTestBase {
     /** Изменение в базе под контекстом поклажедателя. */
     protected void вКонтексте(String sql) {
         new TransactionTemplate(txManager).executeWithoutResult(tx -> {
-            jdbc.sql("SELECT set_config('app.depositor_id', dbo.dev_depositor_by_code(:code)::text, true)")
-                    .param("code", DEPOSITOR).query(String.class).single();
+            jdbc.sql("SELECT set_config('app.depositor_id', :id, true)")
+                    .param("id", поклажедатель(USER, DEPOSITOR)).query(String.class).single();
             jdbc.sql(sql).update();
         });
     }

@@ -1,5 +1,6 @@
 package com.ahlers.portal3pl;
 
+import com.ahlers.portal3pl.auth.AuthService;
 import com.ahlers.portal3pl.catalog.CatalogService;
 import com.ahlers.portal3pl.catalog.CatalogType;
 import com.ahlers.portal3pl.documents.DocumentService;
@@ -31,6 +32,9 @@ class ReadApiTest extends PortalTestBase {
     @Autowired
     CatalogService catalog;
 
+    @Autowired
+    AuthService auth;
+
     // ---------- Запасы ----------
 
     @Test
@@ -52,23 +56,38 @@ class ReadApiTest extends PortalTestBase {
     void разныеПоклажедателиВидятРазныеДанные() {
         войти();
         int своих = stock.list(null, null).size();
-        войтиКак(null, OTHER_DEPOSITOR);
+        войтиКак(OTHER_USER, OTHER_DEPOSITOR);
         int чужих = stock.list(null, null).size();
         assertEquals(9, своих);
         assertEquals(4, чужих);
     }
 
+    /** §6.4: вошёл, но поклажедателя не выбрал — данные не отдаются (409). */
     @Test
     void безПоклажедателяДанныеНеОтдаются() {
         войтиКак(USER, null);
-        ожидатьОтказ(400, () -> stock.list(null, null));
+        ожидатьОтказ(409, () -> stock.list(null, null));
     }
 
+    /** А без входа вообще — 401, независимо от поклажедателя. */
     @Test
-    void чужойПоклажедательЗапрещён() {
-        // пользователь «Рога и Копыта» просит данные «Молочных рек»
-        войтиКак(USER, OTHER_DEPOSITOR);
-        ожидатьОтказ(403, () -> stock.list(null, null));
+    void безВходаДанныеНеОтдаются() {
+        ожидатьОтказ(401, () -> stock.list(null, null));
+    }
+
+    /**
+     * Чужой поклажедатель отсекается при ВЫБОРЕ, в сессии, а не на чтении:
+     * политика RLS отдаёт то, что выставлено в контексте запроса, и о
+     * пользователе ничего не знает. Поэтому проверяем здесь именно проверку
+     * доступа — подставить чужой идентификатор в обход сессии из браузера
+     * невозможно, он больше не передаётся ни параметром, ни заголовком.
+     */
+    @Test
+    void чужойПоклажедательНедоступенПриВыборе() {
+        String чужой = поклажедатель(OTHER_USER, OTHER_DEPOSITOR);
+        assertFalse(auth.mayAccess(USER, чужой),
+                "клиенту «Рога и Копыта» недоступны «Молочные реки»");
+        assertTrue(auth.mayAccess(OTHER_USER, чужой), "а их собственному пользователю — доступны");
     }
 
     @Test
@@ -81,12 +100,30 @@ class ReadApiTest extends PortalTestBase {
 
     // ---------- Документы ----------
 
+    /**
+     * Списки отдают документы поклажедателя.
+     *
+     * Проверяем наличие демо-документов, а не их точное число: в базу
+     * разработки добавляются черновики — и руками через портал, и тестами
+     * черновиков. Тест, падающий от каждого созданного документа, ловит
+     * не ошибку, а факт работы с порталом.
+     */
     @Test
     void спискиДокументов() {
         войти();
-        assertEquals(3, documents.list(DocumentType.RECEIPTS, null, null, null, null, null).size());
-        assertEquals(3, documents.list(DocumentType.ORDERS, null, null, null, null, null).size());
-        assertEquals(1, documents.list(DocumentType.TRANSFERS, null, null, null, null, null).size());
+        assertTrue(номера(DocumentType.RECEIPTS).containsAll(
+                        List.of("ПН-000148", "ПН-000151", "ПН-000152")),
+                "в списке поступлений есть демо-документы");
+        assertTrue(номера(DocumentType.ORDERS).containsAll(
+                        List.of("ЗО-000322", "ЗО-000329", "ЗО-000331")),
+                "в списке заказов есть демо-документы");
+        assertFalse(номера(DocumentType.TRANSFERS).isEmpty(), "перемещения отдаются");
+    }
+
+    private List<String> номера(DocumentType type) {
+        return documents.list(type, null, null, null, null, null).stream()
+                .map(r -> String.valueOf(r.get("documentNo")))
+                .toList();
     }
 
     @Test
@@ -102,7 +139,7 @@ class ReadApiTest extends PortalTestBase {
 
     @Test
     void чужихДокументовНеВидно() {
-        войтиКак(null, OTHER_DEPOSITOR);
+        войтиКак(OTHER_USER, OTHER_DEPOSITOR);
         assertEquals(0, documents.list(DocumentType.RECEIPTS, null, null, null, null, null).size());
     }
 
@@ -137,12 +174,15 @@ class ReadApiTest extends PortalTestBase {
         assertEquals(3, ((List<?>) card.get("lineDetails")).size());
     }
 
-    /** Чужой документ неотличим от несуществующего — намеренно. */
+    /**
+     * Чужой документ неотличим от несуществующего — намеренно: иначе по коду
+     * ответа можно было бы перебором узнать, какие документы есть у других.
+     */
     @Test
     void чужойДокументНеОткрывается() {
         войти();
         String docId = приход("ПН-000148");
-        войтиКак(null, OTHER_DEPOSITOR);
+        войтиКак(OTHER_USER, OTHER_DEPOSITOR);
         ожидатьОтказ(404, () -> documents.card(DocumentType.RECEIPTS, docId));
     }
 
@@ -155,7 +195,7 @@ class ReadApiTest extends PortalTestBase {
         assertEquals(3, catalog.list(CatalogType.SKU, "рога", null, null).size());
         assertEquals(2, catalog.list(CatalogType.SKU, null, "Мясная продукция", null).size());
 
-        войтиКак(null, OTHER_DEPOSITOR);
+        войтиКак(OTHER_USER, OTHER_DEPOSITOR);
         assertEquals(4, catalog.list(CatalogType.SKU, null, null, null).size());
     }
 
@@ -171,7 +211,7 @@ class ReadApiTest extends PortalTestBase {
         assertEquals(4, счета.size());
         assertFalse(счета.get(0).get("amountWithVat") == null, "сумма с НДС рассчитана в представлении");
 
-        войтиКак(null, OTHER_DEPOSITOR);
+        войтиКак(OTHER_USER, OTHER_DEPOSITOR);
         assertEquals(0, catalog.list(CatalogType.INVOICES, null, null, null).size());
     }
 

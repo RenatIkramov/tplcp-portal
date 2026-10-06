@@ -24,12 +24,15 @@ PATCH = r"""
 (function(){
   'use strict';
 
-  // Код поклажедателя. Пока нет аутентификации (этап 5), берём из адреса:
-  //   /index.html?depositorCode=D-002
+  // Поклажедатель и пользователь берутся из сеанса (этап 5): сервер знает,
+  // кто вошёл, по cookie сессии. В адресе и заголовках ничего не передаётся —
+  // подставить чужой код поклажедателя из браузера невозможно.
   const PORTAL = {
-    depositorCode: new URLSearchParams(location.search).get('depositorCode') || 'D-001',
-    // Пока нет аутентификации (этап 5): логин берём из адреса, иначе демо-клиент
-    userLogin: new URLSearchParams(location.search).get('userLogin') || 'client@roga-kopyta.kz',
+    depositorCode: '',      // заполняется из GET /api/auth/session
+    depositorName: '',
+    session: null,
+    user: null,
+    loaders: [],           // что перезагрузить после входа и смены поклажедателя
     rows: [],
     loadedAt: null,
     error: null,
@@ -117,15 +120,10 @@ PATCH = r"""
     PORTAL.error = null;
     renderStatusBar();
     try {
-      const url = '/api/stock?depositorCode=' + encodeURIComponent(PORTAL.depositorCode);
+      const url = '/api/stock';
       const resp = await fetch(url, {headers: {'Accept': 'application/json'}});
       if (!resp.ok){
-        let detail = 'код ' + resp.status;
-        try {
-          const body = await resp.json();
-          if (body && body.message) detail = body.message;
-        } catch (ignored) {}
-        throw new Error(detail);
+        throw new Error(await PORTAL.сообщениеОтвета(resp));
       }
       PORTAL.rows = (await resp.json()).map(toRow);
       PORTAL.loadedAt = new Date();
@@ -139,6 +137,62 @@ PATCH = r"""
     }
   }
   window.portalReloadStock = loadStock;
+
+  /**
+   * Экраны не грузят данные сами по себе: до входа запрашивать нечего,
+   * сервер всё равно ответит 401. Каждый экран регистрирует здесь свою
+   * загрузку, а блок входа (этап 5) вызывает её после того, как стало
+   * известно, кто вошёл и с каким поклажедателем он работает.
+   */
+  /**
+   * Текст ошибки для человека. Сервер почти всегда присылает его сам
+   * (поле message), но если ответ пустой — подставляем понятный по смыслу
+   * кода, а не «код 400», из которого пользователю ничего не ясно.
+   */
+  const ПО_КОДУ = {
+    400: 'Запрос не принят: проверьте заполненные поля',
+    401: 'Нужно войти в портал заново',
+    403: 'Действие недоступно вашей учётной записи',
+    404: 'Запись не найдена',
+    409: 'Действие сейчас невозможно',
+    422: 'Данные заполнены не полностью',
+    429: 'Слишком много попыток. Повторите позже',
+    500: 'Портал не смог выполнить запрос. Обратитесь к администратору',
+    502: 'Нет связи с сервером портала',
+    503: 'Портал временно недоступен'
+  };
+  PORTAL.текстОшибки = (status, data) =>
+    (data && (data.message || data.detail)) || ПО_КОДУ[status]
+    || ('запрос не выполнен (код ' + status + ')');
+
+  /** Разбирает неудачный ответ fetch и возвращает готовое сообщение. */
+  PORTAL.сообщениеОтвета = async resp => {
+    let data = null;
+    try { data = await resp.clone().json(); } catch (e) {}
+    return PORTAL.текстОшибки(resp.status, data);
+  };
+
+  PORTAL.onLogin = fn => { PORTAL.loaders.push(fn); };
+  PORTAL.reloadAll = () => { PORTAL.loaders.forEach(fn => { try { fn(); } catch (e) {} }); };
+
+  /**
+   * Забыть всё, что было показано. Вызывается при выходе и перед сменой
+   * поклажедателя: иначе на экране остались бы чужие данные до того момента,
+   * как придёт ответ сервера, — а при выходе они видны и вовсе не тому.
+   */
+  PORTAL.forgetAll = () => {
+    PORTAL.rows = [];
+    PORTAL.loadedAt = null;
+    PORTAL.error = null;
+    [PORTAL.docs, PORTAL.docsError, PORTAL.docsLoadedAt, PORTAL.catalog, PORTAL.catalogError]
+      .forEach(store => {
+        if (!store) return;
+        Object.keys(store).forEach(k => { store[k] = Array.isArray(store[k]) ? [] : null; });
+      });
+    ['renderStock','renderReceipts','renderOrders','renderTransfers','renderSku',
+     'renderBillingServices','renderBillingInvoices','renderSuppliers','renderConsignees']
+      .forEach(fn => { if (typeof window[fn] === 'function'){ try { window[fn](); } catch (e) {} } });
+  };
 
   /** Клик по строке: карточки товара из API пока нет (появится на этапе 6). */
   window.portalOpenStockRow = function(code){
@@ -191,7 +245,7 @@ PATCH = r"""
   function install(){
     patchColumns();
     window.renderStock = renderStockFromApi;
-    loadStock();
+    PORTAL.onLogin(loadStock);
   }
 
   if (document.readyState === 'loading'){
@@ -340,12 +394,10 @@ PATCH_DOCS = r"""
 
   async function load(table){
     try {
-      const url = '/api/' + table + '?depositorCode=' + encodeURIComponent(PORTAL.depositorCode);
+      const url = '/api/' + table;
       const resp = await fetch(url, {headers: {'Accept': 'application/json'}});
       if (!resp.ok){
-        let detail = 'код ' + resp.status;
-        try { const b = await resp.json(); if (b && b.message) detail = b.message; } catch (e) {}
-        throw new Error(detail);
+        throw new Error(await PORTAL.сообщениеОтвета(resp));
       }
       const data = await resp.json();
       PORTAL.docs[table] = data.map(table === 'receipts' ? toReceipt : toOrder);
@@ -424,8 +476,7 @@ PATCH_DOCS = r"""
     patchColumns();
     window.renderReceipts = () => render('receipts');
     window.renderOrders = () => render('orders');
-    load('receipts');
-    load('orders');
+    PORTAL.onLogin(() => { load('receipts'); load('orders'); });
   }
 
   if (document.readyState === 'loading'){
@@ -463,12 +514,10 @@ PATCH_CATALOG = r"""
     : Number(v).toLocaleString('ru-RU', {minimumFractionDigits: 2, maximumFractionDigits: 2});
 
   async function fetchCatalog(name){
-    const url = '/api/' + name + '?depositorCode=' + encodeURIComponent(PORTAL.depositorCode);
+    const url = '/api/' + name;
     const resp = await fetch(url, {headers: {'Accept': 'application/json'}});
     if (!resp.ok){
-      let detail = 'код ' + resp.status;
-      try { const b = await resp.json(); if (b && b.message) detail = b.message; } catch (e) {}
-      throw new Error(detail);
+      throw new Error(await PORTAL.сообщениеОтвета(resp));
     }
     return resp.json();
   }
@@ -641,11 +690,13 @@ PATCH_CATALOG = r"""
     window.renderSuppliers = renderSuppliersFromApi;
     window.renderConsignees = renderConsigneesFromApi;
 
-    load('sku', renderSkuFromApi);
-    load('service-tariffs', renderTariffsFromApi);
-    load('invoices', renderInvoicesFromApi);
-    load('suppliers', renderSuppliersFromApi);
-    load('consignees', renderConsigneesFromApi);
+    PORTAL.onLogin(() => {
+      load('sku', renderSkuFromApi);
+      load('service-tariffs', renderTariffsFromApi);
+      load('invoices', renderInvoicesFromApi);
+      load('suppliers', renderSuppliersFromApi);
+      load('consignees', renderConsigneesFromApi);
+    });
   }
 
   if (document.readyState === 'loading'){
@@ -728,13 +779,10 @@ PATCH_CARD = r"""
   }
 
   async function fetchCard(type, docId){
-    const url = '/api/' + type + '/' + encodeURIComponent(docId)
-              + '?depositorCode=' + encodeURIComponent(PORTAL.depositorCode);
+    const url = '/api/' + type + '/' + encodeURIComponent(docId);
     const resp = await fetch(url, {headers: {'Accept': 'application/json'}});
     if (!resp.ok){
-      let detail = 'код ' + resp.status;
-      try { const b = await resp.json(); if (b && b.message) detail = b.message; } catch (e) {}
-      throw new Error(detail);
+      throw new Error(await PORTAL.сообщениеОтвета(resp));
     }
     return resp.json();
   }
@@ -872,10 +920,9 @@ PATCH_SKU = r"""
   /* ---------------- Запасы: карточка товара с партиями ---------------- */
 
   async function fetchBatches(skuCode){
-    const url = '/api/stock/details?skuCode=' + encodeURIComponent(skuCode)
-              + '&depositorCode=' + encodeURIComponent(PORTAL.depositorCode);
+    const url = '/api/stock/details?skuCode=' + encodeURIComponent(skuCode);
     const resp = await fetch(url, {headers: {'Accept': 'application/json'}});
-    if (!resp.ok) throw new Error('код ' + resp.status);
+    if (!resp.ok) throw new Error(await PORTAL.сообщениеОтвета(resp));
     return resp.json();
   }
 
@@ -981,9 +1028,9 @@ PATCH_SKU = r"""
 
   async function loadTransfers(){
     try {
-      const url = '/api/transfers?depositorCode=' + encodeURIComponent(PORTAL.depositorCode);
+      const url = '/api/transfers';
       const resp = await fetch(url, {headers: {'Accept': 'application/json'}});
-      if (!resp.ok) throw new Error('код ' + resp.status);
+      if (!resp.ok) throw new Error(await PORTAL.сообщениеОтвета(resp));
       PORTAL.docs.transfers = (await resp.json()).map(toTransfer);
       PORTAL.docsError.transfers = null;
     } catch (e){
@@ -1029,7 +1076,7 @@ PATCH_SKU = r"""
     patchBatchColumns();
     patchTransferColumns();
     window.renderTransfers = renderTransfersFromApi;
-    loadTransfers();
+    PORTAL.onLogin(loadTransfers);
   }
 
   if (document.readyState === 'loading'){
@@ -1060,18 +1107,16 @@ PATCH_DRAFT = r"""
   /* ---------------- обращение к API ---------------- */
 
   async function api(method, path, body){
-    const sep = path.includes('?') ? '&' : '?';
-    const resp = await fetch(path + sep + 'depositorCode=' + encodeURIComponent(PORTAL.depositorCode), {
+    const resp = await fetch(path, {
       method: method,
-      headers: {'Content-Type':'application/json', 'Accept':'application/json',
-                'X-User-Login': PORTAL.userLogin},
+      headers: {'Content-Type':'application/json', 'Accept':'application/json'},
       body: body === undefined ? undefined : JSON.stringify(body)
     });
     if (resp.status === 204) return null;
     const text = await resp.text();
     const data = text ? JSON.parse(text) : null;
     if (!resp.ok){
-      const e = new Error((data && (data.message || data.detail)) || ('код ' + resp.status));
+      const e = new Error(PORTAL.текстОшибки(resp.status, data));
       e.status = resp.status;
       throw e;
     }
@@ -1585,7 +1630,1228 @@ PATCH_DRAFT = r"""
     послеИзмененияСостава('saveOrderLineEditModal', 'orders');
     послеИзмененияСостава('deleteSelectedReceiptLines', 'receipts');
     послеИзмененияСостава('deleteSelectedOrderLines', 'orders');
-    загрузитьСправочники().catch(() => {});
+    // справочники зависят от поклажедателя — перечитываем их при каждом входе
+    PORTAL.onLogin(() => { refs.loaded = false; загрузитьСправочники().catch(() => {}); });
+  }
+
+  if (document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', install);
+  } else {
+    install();
+  }
+})();
+</script>
+"""
+
+
+PATCH_AUTH = r"""
+<!-- ================== ЭТАП 5: вход в портал по логину и паролю ==================
+     Демо-вход (список пользователей на экране авторизации) убран полностью.
+     Теперь форма входа работает по-настоящему: логин и пароль проверяет сервер,
+     он же помнит, кто вошёл, — в адресе страницы и в заголовках запросов
+     ничего не передаётся, подставить чужого поклажедателя из браузера нельзя.
+=============================================================================== -->
+<script>
+(function(){
+  'use strict';
+
+  const PORTAL = window.PORTAL;
+  if (!PORTAL) return;
+
+  async function api(method, path, body){
+    const resp = await fetch(path, {
+      method: method,
+      headers: {'Content-Type':'application/json', 'Accept':'application/json'},
+      body: body === undefined ? undefined : JSON.stringify(body)
+    });
+    if (resp.status === 204) return null;
+    const text = await resp.text();
+    const data = text ? JSON.parse(text) : null;
+    if (!resp.ok){
+      const e = new Error(PORTAL.текстОшибки(resp.status, data));
+      e.status = resp.status;
+      throw e;
+    }
+    return data;
+  }
+
+  /* --------------------------------------------------------------------------
+     1. Сеанс кончился посреди работы
+     -------------------------------------------------------------------------- */
+
+  // Любой запрос к API может вернуться с 401 — например, если истёк срок
+  // сессии. Чтобы это не выглядело как «данные пропали», перехватываем ответ
+  // один раз в одном месте и возвращаем человека на экран входа.
+  const штатныйFetch = window.fetch.bind(window);
+  let сеансПотерян = false;
+  window.fetch = async function(url, opts){
+    const resp = await штатныйFetch(url, opts);
+    const адрес = String(typeof url === 'string' ? url : (url && url.url) || '');
+    if (resp.status === 401 && адрес.indexOf('/api/') === 0
+        && адрес.indexOf('/api/auth/') !== 0 && !сеансПотерян){
+      сеансПотерян = true;
+      показатьВход('Сеанс завершён — войдите заново');
+    }
+    return resp;
+  };
+  /* --------------------------------------------------------------------------
+     2. Экран входа
+     -------------------------------------------------------------------------- */
+
+  function поле(id){ return document.getElementById(id); }
+
+  function ошибка(текст){
+    const el = поле('portalLoginError');
+    if (!el) return;
+    el.textContent = текст || '';
+    el.style.display = текст ? '' : 'none';
+  }
+
+  /** Включает штатную форму демо (в прототипе она была заблокирована). */
+  function включитьФормуВхода(){
+    const card = document.querySelector('#loginScreen .login-card');
+    if (!card) return;
+
+    ['loginEmail', 'loginPassword'].forEach(id => {
+      const el = поле(id);
+      if (!el) return;
+      el.disabled = false;
+      el.addEventListener('keydown', e => { if (e.key === 'Enter') window.doLogin(); });
+    });
+    const email = поле('loginEmail');
+    if (email) email.placeholder = 'client@roga-kopyta.kz';
+
+    const btn = card.querySelector('button.btn.primary');
+    if (btn){
+      btn.disabled = false;
+      btn.style.opacity = '';
+      btn.style.cursor = 'pointer';
+      btn.removeAttribute('title');
+      btn.onclick = () => window.doLogin();
+    }
+
+    // убираем всё, что относилось к демо-доступу
+    card.querySelectorAll('.hint').forEach(el => el.remove());
+    const divider = card.querySelector('.login-divider');
+    if (divider) divider.remove();
+    const list = поле('demoUserList');
+    if (list) list.remove();
+    document.querySelectorAll('.demo-flag').forEach(el => el.remove());
+
+    if (!поле('portalLoginError')){
+      const err = document.createElement('div');
+      err.id = 'portalLoginError';
+      err.style.cssText = 'display:none;margin-top:10px;padding:8px 10px;border-radius:6px;'
+        + 'background:#fdecea;color:#c0392b;font-size:13px;text-align:center;';
+      card.appendChild(err);
+    }
+  }
+
+  function показатьВход(текст){
+    if (PORTAL.forgetAll) PORTAL.forgetAll();
+    PORTAL.session = null;
+    PORTAL.user = null;
+    PORTAL.depositorCode = '';
+    const shell = поле('appShell');
+    if (shell) shell.style.display = 'none';
+    поле('loginScreen')?.classList.add('active');
+    const pwd = поле('loginPassword');
+    if (pwd) pwd.value = '';
+    ошибка(текст);
+  }
+
+  /* --------------------------------------------------------------------------
+     3. Вход и выход
+     -------------------------------------------------------------------------- */
+
+  window.doLogin = async function(){
+    const login = (поле('loginEmail')?.value || '').trim();
+    const password = поле('loginPassword')?.value || '';
+    if (!login || !password){ ошибка('Введите логин и пароль'); return; }
+    ошибка('');
+    try {
+      const сеанс = await api('POST', '/api/auth/login', {login: login, password: password});
+      await войтиВПортал(сеанс);
+    } catch (e){
+      ошибка(e.message || 'Не удалось войти');
+    }
+  };
+
+  // Демо-вход выбором пользователя из списка больше не существует.
+  window.quickLogin = function(){};
+  window.renderDemoUsers = function(){};
+
+  window.logout = async function(){
+    try { await api('POST', '/api/auth/logout'); } catch (e) {}
+    сеансПотерян = false;
+    const email = поле('loginEmail');
+    if (email) email.value = '';
+    показатьВход('');
+  };
+
+  /** Собирает объект пользователя в том виде, в каком его ждёт интерфейс демо. */
+  function пользовательДляИнтерфейса(сеанс, me){
+    const скрытые = [];
+    if (me.hideTransfersTab) скрытые.push('transfers');
+    if (me.hideBillingTab) скрытые.push('billing');
+    return {
+      role: сеанс.roleCode,
+      login: сеанс.login,
+      full_name: сеанс.fullName,
+      position: me.position || '—',
+      organization: me.organization || '—',
+      phone: me.phone || '',
+      lastLogin: me.lastLogin || '',
+      manager: подписьРежима(сеанс),
+      hiddenTabs: скрытые,
+      hideServicesTab: me.hideServicesTab === true,
+      canCreateReceipts: me.canCreateReceipts !== false,
+      canCreateOrders: me.canCreateOrders !== false,
+      canCreateTransfers: me.canCreateTransfers !== false,
+      canUploadSkuExcel: me.canUploadSkuExcel !== false,
+      canUploadPackagingExcel: me.canUploadSkuExcel !== false,
+      defaultDepositor: сеанс.depositorId
+    };
+  }
+
+  function подписьРежима(сеанс){
+    const имена = (сеанс.depositors || []).map(d => d.orgName).join(', ');
+    switch (сеанс.roleCode){
+      case 'manager':   return 'Режим менеджера: доступны поклажедатели — ' + (имена || 'нет');
+      case 'admin':     return 'Режим администратора: управление пользователями и доступами';
+      case 'developer': return 'Режим разработчика: настройка структуры документов и полей';
+      case 'staff':     return 'Режим кладовщика: доступны склады, на которые выдан доступ';
+      default:          return 'Организация: ' + (имена || '—');
+    }
+  }
+
+  async function войтиВПортал(сеанс){
+    if (PORTAL.forgetAll) PORTAL.forgetAll();
+    PORTAL.session = сеанс;
+    const me = await api('GET', '/api/me');
+    PORTAL.user = me;
+
+    const user = пользовательДляИнтерфейса(сеанс, me);
+    currentUser = user;
+    currentUserRole = user.role;
+
+    сеансПотерян = false;
+    поле('loginScreen')?.classList.remove('active');
+    const shell = поле('appShell');
+    if (shell) shell.style.display = '';
+    ошибка('');
+    const pwd = поле('loginPassword');
+    if (pwd) pwd.value = '';
+
+    if (typeof applyUserTabVisibility === 'function') applyUserTabVisibility(user);
+    if (typeof applyUserCreatePermissions === 'function') applyUserCreatePermissions(user);
+
+    const админ = user.role === 'admin' || user.role === 'developer';
+    const показать = (id, видно) => { const el = поле(id); if (el) el.style.display = видно ? '' : 'none'; };
+    показать('adminTabBtn', админ);
+    показать('devSettingsTabBtn', user.role === 'developer');
+    ['refSubBtnOrderTypes','refSubBtnDocTypes','refSubBtnDepositorsDir',
+     'refSubBtnWarehousesDir','refSubBtnUsers'].forEach(id => показать(id, админ));
+
+    const managerLine = поле('managerLine');
+    if (managerLine) managerLine.textContent = user.manager;
+    if (typeof renderProfile === 'function') renderProfile(user);
+
+    применитьПоклажедателя();
+
+    lastMainView = 'orders';
+    if (typeof showTab === 'function') showTab('orders');
+
+    // §6.2: пароль выдал администратор — сначала свой пароль, данных пока нет
+    if (сеанс.mustChangePassword && typeof window.portalOpenPasswordChange === 'function'){
+      window.portalOpenPasswordChange('forced');
+      return;
+    }
+
+    // §6.4: если доступен не один поклажедатель и выбор не сделан — сначала выбор
+    if (сеанс.needsDepositorChoice){
+      поле('depositorSwitcher')?.classList.add('active');
+      if (typeof notify === 'function') notify('Выберите поклажедателя, с которым работаете');
+    } else {
+      PORTAL.reloadAll();
+      if (typeof notify === 'function') notify('Вы вошли как ' + user.full_name);
+    }
+  }
+
+  /* --------------------------------------------------------------------------
+     4. Переключатель поклажедателей
+     -------------------------------------------------------------------------- */
+
+  function текущийПоклажедатель(){
+    const s = PORTAL.session;
+    if (!s || !s.depositorId) return null;
+    return (s.depositors || []).find(d => d.depositorId === s.depositorId) || null;
+  }
+
+  /** Заголовок с названием организации и состояние переключателя. */
+  function применитьПоклажедателя(){
+    const s = PORTAL.session || {depositors: []};
+    const текущий = текущийПоклажедатель();
+    PORTAL.depositorCode = текущий ? текущий.code : '';
+    PORTAL.depositorName = текущий ? текущий.orgName : '';
+
+    const org = поле('tabsOrg');
+    if (org){
+      org.textContent = текущий ? текущий.orgName : 'Выберите поклажедателя';
+      org.classList.toggle('switchable', (s.depositors || []).length > 1);
+    }
+    window.renderDepositorSwitcher();
+  }
+
+  window.renderDepositorSwitcher = function(){
+    const el = поле('depositorSwitcher');
+    if (!el) return;
+    const s = PORTAL.session || {depositors: []};
+    const выбран = s.depositorId;
+    el.innerHTML = '<div class="ks-title">Переключить поклажедателя</div>'
+      + (s.depositors || []).map(d =>
+          '<div class="ks-item ' + (d.depositorId === выбран ? 'current' : '') + '"'
+          + ' onclick="portalSelectDepositor(\'' + d.depositorId + '\')">'
+          + '<span>' + d.orgName + '</span>'
+          + (d.depositorId === выбран ? '<span>✓</span>' : '') + '</div>').join('');
+  };
+
+  window.toggleDepositorSwitcher = function(){
+    const s = PORTAL.session;
+    if (!s || (s.depositors || []).length <= 1) return;
+    window.renderDepositorSwitcher();
+    поле('depositorSwitcher')?.classList.toggle('active');
+  };
+
+  window.portalSelectDepositor = async function(id){
+    try {
+      const сеанс = await api('POST', '/api/auth/depositor', {depositorId: id});
+      if (PORTAL.forgetAll) PORTAL.forgetAll();
+      PORTAL.session = сеанс;
+      поле('depositorSwitcher')?.classList.remove('active');
+      применитьПоклажедателя();
+      PORTAL.reloadAll();
+      if (typeof notify === 'function') notify('Выбран поклажедатель: ' + PORTAL.depositorName);
+    } catch (e){
+      if (typeof notify === 'function') notify('Не удалось переключить: ' + e.message);
+    }
+  };
+  // в прототипе у кладовщика был свой переключатель — теперь он общий
+  window.selectDepositor = window.portalSelectDepositor;
+  window.setStaffDepositorFilter = window.portalSelectDepositor;
+
+  /* --------------------------------------------------------------------------
+     5. Старт страницы
+     -------------------------------------------------------------------------- */
+
+  async function install(){
+    включитьФормуВхода();
+    // Обновление страницы не должно выбрасывать из портала: если сессия
+    // ещё жива, сервер её узнает и экран входа даже не мелькнёт.
+    try {
+      const сеанс = await api('GET', '/api/auth/session');
+      await войтиВПортал(сеанс);
+    } catch (e){
+      показатьВход('');
+    }
+  }
+
+  if (document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', install);
+  } else {
+    install();
+  }
+})();
+</script>
+"""
+
+
+PATCH_ADMIN = r"""
+<!-- ============== ЭТАП 5б: смена пароля и справочник «Пользователи» ==============
+     Используется то, что уже есть в прототипе: кнопка «Сменить пароль» в личном
+     кабинете, справочник «Пользователи» в режиме администрирования и карточка
+     пользователя. Окно смены пароля сделано в стиле остальных окон портала.
+================================================================================ -->
+<script>
+(function(){
+  'use strict';
+
+  const PORTAL = window.PORTAL;
+  if (!PORTAL) return;
+
+  async function api(method, path, body){
+    const resp = await fetch(path, {
+      method: method,
+      headers: {'Content-Type':'application/json', 'Accept':'application/json'},
+      body: body === undefined ? undefined : JSON.stringify(body)
+    });
+    if (resp.status === 204) return null;
+    const text = await resp.text();
+    const data = text ? JSON.parse(text) : null;
+    if (!resp.ok){
+      const e = new Error(PORTAL.текстОшибки(resp.status, data));
+      e.status = resp.status;
+      throw e;
+    }
+    return data;
+  }
+
+  const экран = id => document.getElementById(id);
+  const экранировать = v => String(v === null || v === undefined ? '' : v)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+  /* ======================================================================
+     1. Окно смены пароля
+     ====================================================================== */
+
+  // Два режима: обычная смена из личного кабинета и обязательная — когда
+  // пароль выдал администратор. В обязательном режиме окно не закрывается:
+  // до смены пароля сервер всё равно не отдаёт данных.
+  let обязательная = false;
+
+  function создатьОкно(){
+    if (экран('pwOverlay')) return;
+    const окно = document.createElement('div');
+    окно.className = 'col-overlay';
+    окно.id = 'pwOverlay';
+    окно.style.cssText = 'align-items:center;justify-content:center;';
+    окно.onclick = e => { if (e.target === окно && !обязательная) закрыть(); };
+    окно.innerHTML = ''
+      + '<div class="col-panel" id="pwPanel" style="width:460px;box-shadow:0 8px 32px rgba(0,0,0,.24);'
+      + 'border-radius:10px;">'
+      + '  <h3 id="pwTitle" style="font-size:17px;">Смена пароля</h3>'
+      + '  <div class="hint" id="pwHint">Придумайте пароль, который отвечает требованиям ниже.</div>'
+      + '  <div class="kv" style="margin-top:12px;"><label>Текущий пароль</label>'
+      + '    <input type="password" class="kv-input kv-input-editable" id="pwCurrent" autocomplete="current-password"></div>'
+      + '  <div class="kv" style="margin-top:12px;"><label>Новый пароль</label>'
+      + '    <input type="password" class="kv-input kv-input-editable" id="pwNew" autocomplete="new-password"></div>'
+      + '  <div class="kv" style="margin-top:12px;"><label>Новый пароль ещё раз</label>'
+      + '    <input type="password" class="kv-input kv-input-editable" id="pwRepeat" autocomplete="new-password"></div>'
+      + '  <div id="pwRules" style="margin-top:12px;padding:10px 12px;background:var(--bg);'
+      + 'border-radius:6px;font-size:12.5px;line-height:1.9;">'
+      + '    <div style="color:var(--muted);margin-bottom:2px;">Требования к паролю:</div>'
+      + '    <div data-pw-rule="length"><span class="pw-mark">○</span> не короче 8 символов</div>'
+      + '    <div data-pw-rule="case"><span class="pw-mark">○</span> латинские буквы: '
+      + 'и заглавные, и строчные</div>'
+      + '    <div data-pw-rule="extra"><span class="pw-mark">○</span> цифра или знак '
+      + '(например - _ . ! #)</div>'
+      + '  </div>'
+      + '  <div id="pwError" style="display:none;margin-top:12px;padding:8px 10px;border-radius:6px;'
+      + 'background:#fdecea;color:#c0392b;font-size:13px;"></div>'
+      + '  <div class="actions" style="margin-top:18px;display:flex;gap:8px;">'
+      + '    <button class="btn primary" id="pwSave">Сменить пароль</button>'
+      + '    <button class="btn ghost" id="pwCancel">Отмена</button>'
+      + '  </div>'
+      + '</div>';
+    document.body.appendChild(окно);
+    экран('pwSave').onclick = сохранить;
+    экран('pwCancel').onclick = закрыть;
+    ['pwCurrent','pwNew','pwRepeat'].forEach(id => {
+      экран(id).addEventListener('keydown', e => { if (e.key === 'Enter') сохранить(); });
+    });
+    экран('pwNew').addEventListener('input', отметитьТребования);
+    отметитьТребования();
+  }
+
+  /**
+   * Те же правила, что и на сервере, — здесь только чтобы человек видел,
+   * чего не хватает, ещё до нажатия кнопки. Решение всё равно за сервером.
+   */
+  function выполненные(пароль){
+    const цифраИлиЗнак = /[0-9]/.test(пароль) || /[^0-9A-Za-zА-Яа-яЁё]/.test(пароль);
+    return {
+      length: пароль.length >= 8,
+      case: /[a-z]/.test(пароль) && /[A-Z]/.test(пароль),
+      extra: цифраИлиЗнак
+    };
+  }
+
+  function отметитьТребования(){
+    const поле = экран('pwNew');
+    const пароль = поле ? поле.value : '';
+    const готово = выполненные(пароль);
+    const список = экран('pwRules');
+    if (!список) return;
+    список.querySelectorAll('[data-pw-rule]').forEach(строка => {
+      const ok = готово[строка.getAttribute('data-pw-rule')] === true;
+      строка.style.color = пароль && ok ? '#1e7a3c' : 'inherit';
+      const метка = строка.querySelector('.pw-mark');
+      if (метка) метка.textContent = пароль && ok ? '✓' : '○';
+    });
+  }
+
+  function ошибка(текст){
+    const el = экран('pwError');
+    if (!el) return;
+    el.textContent = текст || '';
+    el.style.display = текст ? '' : 'none';
+  }
+
+  function закрыть(){
+    if (обязательная) return;
+    экран('pwOverlay')?.classList.remove('active');
+    ['pwCurrent','pwNew','pwRepeat'].forEach(id => { const el = экран(id); if (el) el.value = ''; });
+    ошибка('');
+  }
+
+  /** Открыть окно. principal === 'forced' — обязательная смена после входа. */
+  window.portalOpenPasswordChange = function(режим){
+    создатьОкно();
+    обязательная = режим === 'forced';
+    экран('pwTitle').textContent = обязательная ? 'Задайте свой пароль' : 'Смена пароля';
+    экран('pwHint').textContent = обязательная
+      ? 'Пароль выдал администратор портала — работать можно только со своим. '
+        + 'Введите выданный пароль и придумайте новый по требованиям ниже.'
+      : 'Придумайте пароль, который отвечает требованиям ниже.';
+    экран('pwCancel').style.display = обязательная ? 'none' : '';
+    ошибка('');
+    экран('pwOverlay').classList.add('active');
+    setTimeout(() => экран('pwCurrent').focus(), 50);
+  };
+
+  async function сохранить(){
+    const кнопка = экран('pwSave');
+    if (кнопка.disabled) return;          // второй клик, пока идёт первый запрос
+    const текущий = экран('pwCurrent').value;
+    const новый = экран('pwNew').value;
+    const повтор = экран('pwRepeat').value;
+    if (!текущий || !новый){ ошибка('Заполните все поля'); return; }
+    if (новый !== повтор){ ошибка('Новый пароль и его повтор не совпадают'); return; }
+    // Проверка пароля на сервере по своей природе небыстрая — хеш считается
+    // медленно намеренно. Показываем, что запрос идёт, и не даём кликать дважды.
+    const подпись = кнопка.textContent;
+    кнопка.disabled = true;
+    кнопка.textContent = 'Проверяем…';
+    ошибка('');
+    try {
+      await api('POST', '/api/me/password', {currentPassword: текущий, newPassword: новый});
+      const былаОбязательная = обязательная;
+      обязательная = false;
+      закрыть();
+      if (typeof notify === 'function') notify('Пароль изменён');
+      if (былаОбязательная){
+        // до смены пароля данные не загружались — делаем это теперь
+        if (PORTAL.session) PORTAL.session.mustChangePassword = false;
+        PORTAL.reloadAll();
+      }
+    } catch (e){
+      // единственная причина отказа 403 на этом адресе — не тот текущий пароль
+      ошибка(e.status === 403 ? 'Текущий пароль указан неверно' : e.message);
+    } finally {
+      кнопка.disabled = false;
+      кнопка.textContent = подпись;
+    }
+  }
+
+  /** Кнопка «Сменить пароль» в личном кабинете — та же, что была в прототипе. */
+  function подключитьКнопкуВКабинете(){
+    const штатный = window.renderProfile;
+    if (typeof штатный !== 'function') return;
+    window.renderProfile = function(user){
+      штатный(user);
+      const host = экран('profileContent');
+      if (!host) return;
+      [...host.querySelectorAll('button')]
+        .filter(b => b.textContent.trim().indexOf('Сменить пароль') === 0)
+        .forEach(b => { b.onclick = () => window.portalOpenPasswordChange(); });
+    };
+  }
+
+  /* ======================================================================
+     2. Справочник «Пользователи» из базы портала
+     ====================================================================== */
+
+  const админ = {пользователи: [], роли: [], поклажедатели: [], ошибка: null};
+
+  async function загрузитьПользователей(){
+    try {
+      const [список, роли, поклажедатели] = await Promise.all([
+        api('GET', '/api/admin/users'),
+        api('GET', '/api/admin/roles'),
+        api('GET', '/api/admin/depositors')
+      ]);
+      админ.пользователи = список;
+      админ.роли = роли;
+      админ.поклажедатели = поклажедатели;
+      админ.ошибка = null;
+    } catch (e){
+      админ.пользователи = [];
+      // 403 — обычное дело: раздел видит только администратор
+      админ.ошибка = e.status === 403 ? null : e.message;
+    }
+    отрисоватьСписок();
+  }
+
+  function отрисоватьСписок(){
+    const body = экран('adminUsersBody');
+    if (!body) return;
+    if (админ.ошибка){
+      body.innerHTML = '<tr><td colspan="6" style="color:#c0392b;">Не удалось получить список: '
+        + экранировать(админ.ошибка) + '</td></tr>';
+      return;
+    }
+    if (!админ.пользователи.length){
+      body.innerHTML = '<tr><td colspan="6" style="color:var(--muted);">Нет данных</td></tr>';
+      return;
+    }
+    body.innerHTML = админ.пользователи.map(u => {
+      const статус = u.isActive
+        ? '<span class="badge ok"><span class="dot"></span>Активен</span>'
+        : '<span class="badge err"><span class="dot"></span>Заблокирован</span>';
+      const пароль = u.mustChangePassword
+        ? ' <span class="badge warn" title="Пароль выдан администратором и будет сменён при входе">'
+          + '<span class="dot"></span>Сменит пароль</span>'
+        : '';
+      return '<tr onclick="portalOpenAdminUser(\'' + u.userId + '\')">'
+        + '<td><strong>' + экранировать(u.fullName) + '</strong></td>'
+        + '<td>' + экранировать(u.roleName || u.roleCode) + '</td>'
+        + '<td>' + экранировать(u.scope) + '</td>'
+        + '<td>' + экранировать(u.login) + '</td>'
+        + '<td>' + экранировать(u.depositorCodes || '—') + '</td>'
+        + '<td>' + статус + пароль + '</td>'
+        + '</tr>';
+    }).join('');
+  }
+
+  const галочка = (id, подпись, включено) =>
+    '<label style="display:flex;align-items:center;gap:8px;font-size:13.5px;margin-bottom:12px;">'
+    + '<input type="checkbox" id="' + id + '"' + (включено ? ' checked' : '') + '> ' + подпись + '</label>';
+
+  const строкаДанных = (подпись, значение) =>
+    '<div class="kv"><label>' + подпись + '</label><div>' + экранировать(значение || '—') + '</div></div>';
+
+  const полеВвода = (id, подпись, значение, подсказка) =>
+    '<div class="kv"><label>' + подпись + '</label><div>'
+    + '<input type="text" class="kv-input kv-input-editable" id="' + id + '"'
+    + ' value="' + экранировать(значение || '') + '"'
+    + (подсказка ? ' placeholder="' + экранировать(подсказка) + '"' : '') + '></div></div>';
+
+  const полеРоли = (выбрана) =>
+    '<div class="kv"><label>Роль на портале</label><div>'
+    + '<select class="kv-input kv-input-editable" id="auRole">'
+    + админ.роли.map(r => '<option value="' + r.code + '"'
+        + (r.code === выбрана ? ' selected' : '') + '>' + экранировать(r.name) + '</option>').join('')
+    + '</select></div></div>';
+
+  /**
+   * Галочки доступных поклажедателей. Для складского сотрудника их не
+   * показываем: ему доступ выдаётся по складам, это отдельный экран.
+   */
+  function блокДоступов(выданные){
+    const выбрано = new Set(выданные || []);
+    return '<div class="section-title">Доступные поклажедатели</div>'
+      + '<div class="table-card" style="padding:18px 20px;" id="auDepositors">'
+      + '  <div class="hint" style="margin:-4px 0 10px;">Поклажедателю обычно отмечают '
+      + 'одного — свою организацию. Менеджеру — тех клиентов, с которыми он работает.</div>'
+      + (админ.поклажедатели.length
+          ? админ.поклажедатели.map(d =>
+              '<label style="display:flex;align-items:center;gap:8px;font-size:13.5px;'
+              + 'padding:8px 0;border-bottom:1px solid var(--line);">'
+              + '<input type="checkbox" data-depositor-id="' + d.depositorId + '"'
+              + (выбрано.has(d.depositorId) ? ' checked' : '') + '> '
+              + экранировать(d.orgName) + ' <span style="color:var(--muted);">· '
+              + экранировать(d.code) + '</span></label>').join('')
+          : '<div style="color:var(--muted);font-size:13.5px;">Поклажедатели ещё не заведены</div>')
+      + '</div>';
+  }
+
+  function отмеченныеПоклажедатели(){
+    return [...document.querySelectorAll('#auDepositors input[data-depositor-id]:checked')]
+      .map(cb => cb.getAttribute('data-depositor-id'));
+  }
+
+  /**
+   * Карточка пользователя. Одна и та же форма работает на правку и на
+   * создание: при создании `userId` не передан, доступен ввод логина
+   * и пароля, а блоки «последний вход» и «пароль» выглядят иначе.
+   */
+  window.portalOpenAdminUser = async function(userId){
+    const u = userId ? админ.пользователи.find(x => x.userId === userId) : null;
+    if (userId && !u) return;
+    const новый = !u;
+    const el = экран('adminUserEditContent');
+    if (!el) return;
+    const свой = !новый && PORTAL.session && PORTAL.session.login === u.login;
+    const толькоЧтение = currentUserRole === 'developer';
+
+    // Какие поклажедатели уже выданы — спрашиваем отдельно, в списке их нет
+    let выданные = [];
+    if (!новый){
+      try { выданные = await api('GET', '/api/admin/users/' + encodeURIComponent(u.userId) + '/depositors'); }
+      catch (e){ выданные = []; }
+    }
+
+    el.innerHTML = ''
+      + '<div class="detail-head">'
+      + '  <div><h2>' + (новый ? 'Новый пользователь' : экранировать(u.fullName)) + '</h2>'
+      + '    <div class="meta">' + (новый
+            ? 'Заполните данные и выдайте пароль — при первом входе портал попросит сменить его'
+            : экранировать(u.userPosition || '—') + ' · ' + экранировать(u.organization || '—')) + '</div></div>'
+      + (новый ? '' : ''
+      + '  <div><label style="display:flex;align-items:center;gap:8px;font-size:13.5px;cursor:pointer;">'
+      + '    <input type="checkbox" id="userIsActive"' + (u.isActive ? ' checked' : '')
+      +      (свой ? ' disabled title="Свою учётную запись заблокировать нельзя"' : '') + '>'
+      + '    <span class="badge ' + (u.isActive ? 'ok' : 'err') + '" id="userIsActiveBadge">'
+      + '<span class="dot"></span>' + (u.isActive ? 'Активен' : 'Заблокирован') + '</span>'
+      + '  </label></div>')
+      + '</div>'
+
+      + '<div class="section-title" style="margin-top:0;">Данные пользователя</div>'
+      + '<div class="detail-head"><div class="kv-grid" '
+      + 'style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));width:100%;">'
+      + полеВвода('auFullName', 'ФИО', новый ? '' : u.fullName, 'Иванов Иван Иванович')
+      + полеВвода('auLogin', 'Email / логин', новый ? '' : u.login, 'i.ivanov@company.kz')
+      + полеВвода('auPosition', 'Должность', новый ? '' : u.userPosition, 'Логист')
+      + полеВвода('auOrganization', 'Организация', новый ? '' : u.organization, 'ТОО «Рога и Копыта»')
+      + полеВвода('auPhone', 'Телефон', новый ? '' : u.phone, '+7 701 000 00 00')
+      + полеРоли(новый ? 'depositor' : u.roleCode)
+      + (новый ? '' : строкаДанных('Последний вход',
+            u.lastLoginAt ? ruДатаВремя(u.lastLoginAt) : 'ни разу'))
+      + (новый ? '' : строкаДанных('Пароль задан',
+            u.passwordChangedAt ? ruДатаВремя(u.passwordChangedAt) : '—'))
+      + '</div></div>'
+      + (свой ? '<div class="hint" style="margin:-6px 0 14px;">Это ваша учётная запись: '
+          + 'роль и блокировку для себя менять нельзя.</div>' : '')
+
+      + блокДоступов(выданные)
+
+      + '<div class="section-title">Пароль</div>'
+      + '<div class="table-card" style="padding:18px 20px;">'
+      + '  <div style="font-size:13.5px;color:var(--muted);margin-bottom:12px;">'
+      + (новый
+          ? 'Придумайте пароль или оставьте поле пустым — портал сгенерирует его сам и покажет.'
+          : 'Администратор не видит пароль пользователя. Можно выдать новый — портал '
+            + 'потребует сменить его при первом входе.') + '</div>'
+      + '  <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">'
+      + '    <div class="kv" style="margin:0;min-width:260px;"><label>'
+      + (новый ? 'Пароль' : 'Новый пароль') + '</label>'
+      + '      <input type="text" class="kv-input kv-input-editable" id="adminNewPassword" '
+      + 'placeholder="латинские буквы разного регистра + цифра или знак"></div>'
+      + '    <button class="btn" id="adminGenPassword" type="button">Придумать</button>'
+      + (новый ? '' : '    <button class="btn primary" id="adminSetPassword" type="button">'
+          + 'Задать пароль</button>')
+      + '  </div>'
+      + '  <div id="adminPasswordMsg" style="display:none;margin-top:12px;font-size:13px;"></div>'
+      + '</div>'
+
+      + (новый ? '' : ''
+      + '<div class="section-title">Видимость пунктов меню</div>'
+      + '<div class="table-card" style="padding:18px 20px;">'
+      + галочка('menuVisServicesTab', 'Показывать вкладку «Услуги» в документах', !u.hideServicesTab)
+      + галочка('menuVisBilling', 'Показывать раздел «Биллинг»', !u.hideBillingTab)
+      + галочка('menuVisTransfers', 'Показывать раздел «Перемещения»', !u.hideTransfersTab)
+      + галочка('menuVisCreateReceipts', 'Разрешить создание Поступлений', u.canCreateReceipts)
+      + галочка('menuVisCreateOrders', 'Разрешить создание заказов на отгрузку', u.canCreateOrders)
+      + галочка('menuVisCreateTransfers', 'Разрешить создание Перемещений', u.canCreateTransfers)
+      + галочка('menuVisUploadSku', 'Разрешить загрузку номенклатуры из Excel', u.canUploadSkuExcel)
+      + галочка('menuVisUploadPackaging', 'Разрешить загрузку упаковок из Excel', u.canUploadPackagingExcel)
+      + галочка('menuVisEditTransport', 'Разрешить правку транспортного раздела', u.canEditTransport)
+      + '</div>')
+
+      + '<div class="actions" style="margin-top:18px;display:flex;gap:8px;">'
+      + '  <button class="btn primary" id="adminSaveUser" type="button">'
+      + (новый ? 'Создать пользователя' : 'Сохранить') + '</button>'
+      + '  <button class="btn ghost" id="adminCancelUser" type="button">Отмена</button>'
+      + '</div>';
+
+    if (!новый){
+      const бейдж = экран('userIsActiveBadge');
+      экран('userIsActive').onchange = function(){
+        бейдж.className = 'badge ' + (this.checked ? 'ok' : 'err');
+        бейдж.innerHTML = '<span class="dot"></span>' + (this.checked ? 'Активен' : 'Заблокирован');
+      };
+      экран('adminSetPassword').onclick = () => задатьПароль(u);
+      // роль своей учётной записи не меняем — иначе можно потерять доступ
+      if (свой) экран('auRole').disabled = true;
+    }
+    экран('adminGenPassword').onclick = () => { экран('adminNewPassword').value = придумать(); };
+    экран('adminSaveUser').onclick = () => новый ? создатьПользователя() : сохранитьКарточку(u);
+    экран('adminCancelUser').onclick = () => { showTab('references'); showReferencesSub('users'); };
+
+    if (толькоЧтение){
+      el.insertAdjacentHTML('afterbegin', '<div style="background:#eef2ff;border:1px solid #c7d2fe;'
+        + 'color:#3730a3;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:13px;">'
+        + '👁 Режим просмотра — менять пользователей вправе только администратор.</div>');
+      el.querySelectorAll('input, select, textarea').forEach(e => e.disabled = true);
+      ['adminSetPassword','adminSaveUser','adminGenPassword'].forEach(id => {
+        const b = экран(id);
+        if (b) b.style.display = 'none';
+      });
+    }
+    showView('admin-user-edit');
+  };
+
+  function ruДатаВремя(iso){
+    const d = new Date(iso);
+    return isNaN(d) ? String(iso)
+      : d.toLocaleString('ru-RU', {day:'2-digit', month:'2-digit', year:'numeric',
+                                   hour:'2-digit', minute:'2-digit'});
+  }
+
+  /** Пароль из слогов и цифр: читается вслух и переносится без ошибок. */
+  function придумать(){
+    const согласные = 'бвгдкмнпрстфх', гласные = 'аеиоуя';
+    let слово = '';
+    for (let i = 0; i < 4; i++){
+      слово += согласные[Math.floor(Math.random() * согласные.length)]
+             + гласные[Math.floor(Math.random() * гласные.length)];
+    }
+    const латиница = 'kmnprst', гл = 'aeiou';
+    let вторая = '';
+    for (let i = 0; i < 3; i++){
+      вторая += латиница[Math.floor(Math.random() * латиница.length)]
+              + гл[Math.floor(Math.random() * гл.length)];
+    }
+    return вторая.charAt(0).toUpperCase() + вторая.slice(1) + '-'
+      + Math.floor(1000 + Math.random() * 9000);   // Kinuta-4100: регистр, знак, цифры
+  }
+
+  function сообщение(текст, успех){
+    const el = экран('adminPasswordMsg');
+    if (!el) return;
+    el.textContent = текст;
+    el.style.color = успех ? '#1e7a3c' : '#c0392b';
+    el.style.display = текст ? '' : 'none';
+  }
+
+  async function задатьПароль(u){
+    const пароль = (экран('adminNewPassword').value || '').trim();
+    if (!пароль){ сообщение('Введите или придумайте пароль', false); return; }
+    try {
+      await api('POST', '/api/admin/users/' + encodeURIComponent(u.userId) + '/password',
+                {newPassword: пароль});
+      сообщение('Пароль задан: ' + пароль + ' — передайте его пользователю, при первом входе '
+        + 'портал попросит сменить', true);
+      await загрузитьПользователей();
+    } catch (e){
+      сообщение(e.message, false);
+    }
+  }
+
+  const значение = id => (экран(id)?.value || '').trim();
+
+  function анкета(){
+    return {
+      login: значение('auLogin'),
+      fullName: значение('auFullName'),
+      roleCode: экран('auRole') ? экран('auRole').value : 'depositor',
+      position: значение('auPosition'),
+      organization: значение('auOrganization'),
+      phone: значение('auPhone'),
+      depositorIds: отмеченныеПоклажедатели()
+    };
+  }
+
+  async function создатьПользователя(){
+    const кнопка = экран('adminSaveUser');
+    if (кнопка.disabled) return;
+    const данные = анкета();
+    if (!данные.login || !данные.fullName){
+      сообщение('Заполните ФИО и логин', false);
+      return;
+    }
+    данные.password = (экран('adminNewPassword').value || '').trim();
+    кнопка.disabled = true;
+    const подпись = кнопка.textContent;
+    кнопка.textContent = 'Создаём…';
+    try {
+      const ответ = await api('POST', '/api/admin/users', данные);
+      await загрузитьПользователей();
+      if (typeof notify === 'function') notify('Пользователь создан: ' + данные.fullName);
+      // открываем уже созданного — там же задаётся видимость разделов,
+      // и пароль показываем в его карточке: записать его можно только сейчас
+      if (ответ.userId) await window.portalOpenAdminUser(ответ.userId);
+      сообщение('Пароль: ' + ответ.password + ' — передайте его пользователю, при первом '
+        + 'входе портал попросит сменить', true);
+    } catch (e){
+      сообщение(e.message, false);
+    } finally {
+      if (экран('adminSaveUser')){
+        экран('adminSaveUser').disabled = false;
+        экран('adminSaveUser').textContent = подпись;
+      }
+    }
+  }
+
+  async function сохранитьКарточку(u){
+    const вкл = id => экран(id)?.checked === true;
+    const кнопка = экран('adminSaveUser');
+    if (кнопка.disabled) return;
+    кнопка.disabled = true;
+    const подпись = кнопка.textContent;
+    кнопка.textContent = 'Сохраняем…';
+    try {
+      // сначала анкета, роль и доступы, затем видимость разделов
+      await api('PUT', '/api/admin/users/' + encodeURIComponent(u.userId) + '/profile', анкета());
+      админ.пользователи = await api('PUT', '/api/admin/users/' + encodeURIComponent(u.userId), {
+        isActive: вкл('userIsActive'),
+        hideServicesTab: !вкл('menuVisServicesTab'),
+        hideBillingTab: !вкл('menuVisBilling'),
+        hideTransfersTab: !вкл('menuVisTransfers'),
+        canCreateReceipts: вкл('menuVisCreateReceipts'),
+        canCreateOrders: вкл('menuVisCreateOrders'),
+        canCreateTransfers: вкл('menuVisCreateTransfers'),
+        canUploadSkuExcel: вкл('menuVisUploadSku'),
+        canUploadPackagingExcel: вкл('menuVisUploadPackaging'),
+        canEditTransport: вкл('menuVisEditTransport')
+      });
+      отрисоватьСписок();
+      if (typeof notify === 'function') notify('Изменения сохранены: ' + u.fullName);
+      // если администратор правил себя — применяем настройки сразу
+      if (PORTAL.session && PORTAL.session.login === u.login){
+        const me = await api('GET', '/api/me');
+        PORTAL.user = me;
+        if (typeof currentUser !== 'undefined' && currentUser){
+          currentUser.hiddenTabs = [];
+          if (me.hideTransfersTab) currentUser.hiddenTabs.push('transfers');
+          if (me.hideBillingTab) currentUser.hiddenTabs.push('billing');
+          currentUser.hideServicesTab = me.hideServicesTab === true;
+          currentUser.canCreateReceipts = me.canCreateReceipts !== false;
+          currentUser.canCreateOrders = me.canCreateOrders !== false;
+          currentUser.canCreateTransfers = me.canCreateTransfers !== false;
+          currentUser.canUploadSkuExcel = me.canUploadSkuExcel !== false;
+          currentUser.canUploadPackagingExcel = me.canUploadSkuExcel !== false;
+          applyUserTabVisibility(currentUser);
+          applyUserCreatePermissions(currentUser);
+        }
+      }
+      showTab('references');
+      showReferencesSub('users');
+    } catch (e){
+      сообщение(e.message, false);
+      if (typeof notify === 'function') notify('Не удалось сохранить: ' + e.message);
+    } finally {
+      if (экран('adminSaveUser')){
+        экран('adminSaveUser').disabled = false;
+        экран('adminSaveUser').textContent = подпись;
+      }
+    }
+  }
+
+  /* ======================================================================
+     3. Установка
+     ====================================================================== */
+
+  function install(){
+    подключитьКнопкуВКабинете();
+    window.renderAdminUsers = отрисоватьСписок;
+    const создать = document.querySelector('#usersRefActions .btn.primary');
+    if (создать) создать.onclick = () => window.portalOpenAdminUser(null);
+    PORTAL.onLogin(загрузитьПользователей);
+  }
+
+  if (document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', install);
+  } else {
+    install();
+  }
+})();
+</script>
+"""
+
+
+PATCH_ACCESS = r"""
+<!-- ============== ЭТАП 5в: экраны доступов режима администрирования ==============
+     Три экрана прототипа начинают работать от базы портала:
+       «Доступы»              — какие поклажедатели доступны менеджеру,
+       «Доступы сотрудников»  — на каких складах работает кладовщик,
+       «Склады поклажедателей»— где поклажедатель хранит товар.
+     Все три открываются на том же экране карточки, что и пользователь.
+================================================================================ -->
+<script>
+(function(){
+  'use strict';
+
+  const PORTAL = window.PORTAL;
+  if (!PORTAL) return;
+
+  async function api(method, path, body){
+    const resp = await fetch(path, {
+      method: method,
+      headers: {'Content-Type':'application/json', 'Accept':'application/json'},
+      body: body === undefined ? undefined : JSON.stringify(body)
+    });
+    if (resp.status === 204) return null;
+    const text = await resp.text();
+    const data = text ? JSON.parse(text) : null;
+    if (!resp.ok){
+      const e = new Error(PORTAL.текстОшибки(resp.status, data));
+      e.status = resp.status;
+      throw e;
+    }
+    return data;
+  }
+
+  const экран = id => document.getElementById(id);
+  const экранировать = v => String(v === null || v === undefined ? '' : v)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+  const данные = {пользователи: [], поклажедатели: [], склады: [], доступыПоклажедателей: []};
+
+  async function загрузить(){
+    try {
+      const [пользователи, поклажедатели, склады, доступы] = await Promise.all([
+        api('GET', '/api/admin/users'),
+        api('GET', '/api/admin/depositors'),
+        api('GET', '/api/admin/warehouses'),
+        api('GET', '/api/admin/depositor-access')
+      ]);
+      данные.пользователи = пользователи;
+      данные.поклажедатели = поклажедатели;
+      данные.склады = склады;
+      данные.доступыПоклажедателей = доступы;
+    } catch (e){
+      // 403 — раздел доступен только администратору, это нормально
+      данные.пользователи = [];
+      данные.доступыПоклажедателей = [];
+    }
+    отрисоватьДоступыМенеджеров();
+    отрисоватьДоступыСотрудников();
+    отрисоватьСкладыПоклажедателей();
+  }
+
+  /** Общий блок галочек: один список, одно правило разметки. */
+  function галочки(элементы, выбранные, атрибут, подпись, пояснение){
+    const выбрано = new Set(выбранные || []);
+    if (!элементы.length){
+      return '<div style="color:var(--muted);font-size:13.5px;">Список пуст</div>';
+    }
+    return элементы.map(x =>
+      '<label style="display:flex;align-items:center;gap:8px;font-size:13.5px;'
+      + 'padding:9px 0;border-bottom:1px solid var(--line);">'
+      + '<input type="checkbox" ' + атрибут + '="' + экранировать(x.id) + '"'
+      + (выбрано.has(x.id) ? ' checked' : '') + '> ' + экранировать(подпись(x))
+      + (пояснение && пояснение(x)
+          ? ' <span style="color:var(--muted);">· ' + экранировать(пояснение(x)) + '</span>'
+          : '')
+      + '</label>').join('');
+  }
+
+  function отмеченные(атрибут){
+    return [...document.querySelectorAll('#adminUserEditContent input[' + атрибут + ']:checked')]
+      .map(cb => cb.getAttribute(атрибут));
+  }
+
+  function кнопки(подраздел, обработчик){
+    const el = экран('adminUserEditContent');
+    el.querySelector('[data-save]').onclick = обработчик;
+    el.querySelector('[data-cancel]').onclick = () => {
+      showView('admin');
+      showAdminSub(подраздел);
+    };
+  }
+
+  const действия = ''
+    + '<div class="actions" style="margin-top:18px;display:flex;gap:8px;">'
+    + '  <button class="btn primary" type="button" data-save>Сохранить</button>'
+    + '  <button class="btn ghost" type="button" data-cancel>Отмена</button>'
+    + '</div>';
+
+  const толькоЧтение = () => currentUserRole === 'developer';
+
+  function запретитьПравку(){
+    if (!толькоЧтение()) return;
+    const el = экран('adminUserEditContent');
+    el.insertAdjacentHTML('afterbegin', '<div style="background:#eef2ff;border:1px solid #c7d2fe;'
+      + 'color:#3730a3;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:13px;">'
+      + '👁 Режим просмотра — менять доступы вправе только администратор.</div>');
+    el.querySelectorAll('input').forEach(e => e.disabled = true);
+    const кнопка = el.querySelector('[data-save]');
+    if (кнопка) кнопка.style.display = 'none';
+  }
+
+  /* ======================================================================
+     1. «Доступы» — поклажедатели менеджера
+     ====================================================================== */
+
+  function менеджеры(){
+    return данные.пользователи.filter(u => u.roleCode === 'manager');
+  }
+
+  function отрисоватьДоступыМенеджеров(){
+    const body = экран('adminAccessBody');
+    if (!body) return;
+    const список = менеджеры();
+    body.innerHTML = список.length
+      ? список.map(u => '<tr onclick="portalOpenManagerAccess(\'' + u.userId + '\')">'
+          + '<td><strong>' + экранировать(u.fullName) + '</strong>'
+          + '<div style="color:var(--muted);font-size:12.5px;">' + экранировать(u.login) + '</div></td>'
+          + '<td>' + экранировать(u.scope) + '</td></tr>').join('')
+      : '<tr><td colspan="2" style="color:var(--muted);">Менеджеры не заведены</td></tr>';
+  }
+
+  window.portalOpenManagerAccess = async function(userId){
+    const u = данные.пользователи.find(x => x.userId === userId);
+    if (!u) return;
+    let выданные = [];
+    try { выданные = await api('GET', '/api/admin/users/' + encodeURIComponent(userId) + '/depositors'); }
+    catch (e){ выданные = []; }
+
+    экран('adminUserEditContent').innerHTML = ''
+      + '<div class="detail-head"><div>'
+      + '  <h2>Доступы менеджера — ' + экранировать(u.fullName) + '</h2>'
+      + '  <div class="meta">' + экранировать(u.userPosition || '—') + ' · '
+      +      экранировать(u.login) + '</div></div></div>'
+      + '<div class="section-title" style="margin-top:0;">Поклажедатели, с которыми работает менеджер</div>'
+      + '<div class="table-card" style="padding:18px 20px;">'
+      + '  <div class="hint" style="margin:-4px 0 10px;">Менеджер видит только отмеченных. '
+      + 'Если доступен не один, портал при входе спросит, с кем он работает.</div>'
+      + галочки(данные.поклажедатели.map(d => ({id: d.depositorId, name: d.orgName, code: d.code})),
+                выданные, 'data-depositor-id', x => x.name, x => x.code)
+      + '</div>'
+      + действия;
+
+    кнопки('access', async () => {
+      try {
+        await api('PUT', '/api/admin/users/' + encodeURIComponent(userId) + '/depositors',
+                  {depositorIds: отмеченные('data-depositor-id')});
+        await загрузить();
+        if (typeof notify === 'function') notify('Доступы обновлены: ' + u.fullName);
+        showView('admin');
+        showAdminSub('access');
+      } catch (e){
+        if (typeof notify === 'function') notify('Не удалось сохранить: ' + e.message);
+      }
+    });
+    запретитьПравку();
+    showView('admin-user-edit');
+  };
+
+  /* ======================================================================
+     2. «Доступы сотрудников» — склады кладовщика
+     ====================================================================== */
+
+  function кладовщики(){
+    return данные.пользователи.filter(u => u.roleCode === 'staff');
+  }
+
+  function отрисоватьДоступыСотрудников(){
+    const body = экран('adminStaffAccessBody');
+    if (!body) return;
+    const список = кладовщики();
+    body.innerHTML = список.length
+      ? список.map(u => '<tr onclick="portalOpenStaffAccess(\'' + u.userId + '\')">'
+          + '<td><strong>' + экранировать(u.fullName) + '</strong>'
+          + '<div style="color:var(--muted);font-size:12.5px;">' + экранировать(u.login) + '</div></td>'
+          + '<td>' + экранировать(u.scope) + '</td>'
+          + '<td>' + экранировать(u.depositorCodes || 'по складам') + '</td></tr>').join('')
+      : '<tr><td colspan="3" style="color:var(--muted);">Складские сотрудники не заведены</td></tr>';
+  }
+
+  window.portalOpenStaffAccess = async function(userId){
+    const u = данные.пользователи.find(x => x.userId === userId);
+    if (!u) return;
+    let выданные = [];
+    try { выданные = await api('GET', '/api/admin/users/' + encodeURIComponent(userId) + '/warehouses'); }
+    catch (e){ выданные = []; }
+
+    экран('adminUserEditContent').innerHTML = ''
+      + '<div class="detail-head"><div>'
+      + '  <h2>Доступы сотрудника — ' + экранировать(u.fullName) + '</h2>'
+      + '  <div class="meta">' + экранировать(u.userPosition || '—') + ' · '
+      +      экранировать(u.login) + '</div></div></div>'
+      + '<div class="section-title" style="margin-top:0;">Склады, на которых работает сотрудник</div>'
+      + '<div class="table-card" style="padding:18px 20px;">'
+      + '  <div class="hint" style="margin:-4px 0 10px;">Поклажедатели сотруднику не назначаются '
+      + 'отдельно: он видит тех, чей товар лежит на его складах.</div>'
+      + галочки(данные.склады.map(w => ({id: w.warehouseId, name: w.name, address: w.address})),
+                выданные, 'data-warehouse-id', x => x.name, x => x.address)
+      + '</div>'
+      + действия;
+
+    кнопки('staff-access', async () => {
+      try {
+        await api('PUT', '/api/admin/users/' + encodeURIComponent(userId) + '/warehouses',
+                  {warehouseIds: отмеченные('data-warehouse-id')});
+        await загрузить();
+        if (typeof notify === 'function') notify('Склады сотрудника обновлены: ' + u.fullName);
+        showView('admin');
+        showAdminSub('staff-access');
+      } catch (e){
+        if (typeof notify === 'function') notify('Не удалось сохранить: ' + e.message);
+      }
+    });
+    запретитьПравку();
+    showView('admin-user-edit');
+  };
+
+  /* ======================================================================
+     3. «Склады поклажедателей»
+     ====================================================================== */
+
+  function отрисоватьСкладыПоклажедателей(){
+    const body = экран('adminDepositorAccessBody');
+    if (!body) return;
+    const список = данные.доступыПоклажедателей;
+    body.innerHTML = список.length
+      ? список.map(d => '<tr onclick="portalOpenDepositorWarehouses(\'' + d.depositorId + '\')">'
+          + '<td><strong>' + экранировать(d.orgName) + '</strong>'
+          + '<div style="color:var(--muted);font-size:12.5px;">' + экранировать(d.code) + '</div></td>'
+          + '<td>' + (d.warehouses
+              ? экранировать(d.warehouses)
+              : '<span style="color:var(--muted);">все склады</span>') + '</td>'
+          + '<td></td></tr>').join('')
+      : '<tr><td colspan="3" style="color:var(--muted);">Поклажедатели не заведены</td></tr>';
+  }
+
+  window.portalOpenDepositorWarehouses = async function(depositorId){
+    const d = данные.доступыПоклажедателей.find(x => x.depositorId === depositorId);
+    if (!d) return;
+    let выданные = [];
+    try {
+      выданные = await api('GET', '/api/admin/depositors/'
+                + encodeURIComponent(depositorId) + '/warehouses');
+    } catch (e){ выданные = []; }
+
+    экран('adminUserEditContent').innerHTML = ''
+      + '<div class="detail-head"><div>'
+      + '  <h2>Доступные склады — ' + экранировать(d.orgName) + '</h2>'
+      + '  <div class="meta">Код поклажедателя: ' + экранировать(d.code) + '</div></div></div>'
+      + '<div class="section-title" style="margin-top:0;">Склады, на которых поклажедатель хранит товар</div>'
+      + '<div class="table-card" style="padding:18px 20px;">'
+      + '  <div class="hint" style="margin:-4px 0 10px;">Отмеченные склады поклажедатель видит '
+      + 'в документах. Если не отмечен ни один — доступны все: так забытая настройка '
+      + 'не оставит клиента без складов.</div>'
+      + галочки(данные.склады.map(w => ({id: w.warehouseId, name: w.name, address: w.address})),
+                выданные, 'data-warehouse-id', x => x.name, x => x.address)
+      + '</div>'
+      + действия;
+
+    кнопки('depositor-access', async () => {
+      try {
+        данные.доступыПоклажедателей = await api('PUT', '/api/admin/depositors/'
+                + encodeURIComponent(depositorId) + '/warehouses',
+                {warehouseIds: отмеченные('data-warehouse-id')});
+        отрисоватьСкладыПоклажедателей();
+        if (typeof notify === 'function') notify('Доступные склады обновлены: ' + d.orgName);
+        // если правили текущего поклажедателя — обновляем списки складов в документах
+        if (PORTAL.session && PORTAL.session.depositorId === depositorId){
+          PORTAL.reloadAll();
+        }
+        showView('admin');
+        showAdminSub('depositor-access');
+      } catch (e){
+        if (typeof notify === 'function') notify('Не удалось сохранить: ' + e.message);
+      }
+    });
+    запретитьПравку();
+    showView('admin-user-edit');
+  };
+
+  /* ======================================================================
+     4. Установка
+     ====================================================================== */
+
+  function install(){
+    window.renderAdminAccess = отрисоватьДоступыМенеджеров;
+    window.renderAdminStaffAccess = отрисоватьДоступыСотрудников;
+    window.renderAdminDepositorAccess = отрисоватьСкладыПоклажедателей;
+    // старые демо-обработчики строк больше не нужны
+    window.openAdminAccessEdit = () => {};
+    window.openAdminStaffAccessEdit = () => {};
+    window.openAdminDepositorAccessEdit = window.portalOpenDepositorWarehouses;
+    window.setStaffWarehouseFilter = window.setStaffWarehouseFilter || (() => {});
+    PORTAL.onLogin(загрузить);
   }
 
   if (document.readyState === 'loading'){
@@ -1602,7 +2868,7 @@ def main():
     html = open(SRC, encoding='utf-8').read()
     if '</body>' not in html:
         sys.exit('не найден </body>')
-    out = html.replace('</body>', PATCH + PATCH_DOCS + PATCH_CATALOG + PATCH_CARD + PATCH_SKU + PATCH_DRAFT + '\n</body>', 1)
+    out = html.replace('</body>', PATCH + PATCH_DOCS + PATCH_CATALOG + PATCH_CARD + PATCH_SKU + PATCH_DRAFT + PATCH_AUTH + PATCH_ADMIN + PATCH_ACCESS + '\n</body>', 1)
     import os
     os.makedirs(os.path.dirname(DST), exist_ok=True)
     open(DST, 'w', encoding='utf-8').write(out)

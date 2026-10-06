@@ -1,138 +1,253 @@
 ### Запросы к API портала
 #
 # Файл для HTTP-клиента IntelliJ (есть в версии Ultimate). В Community
-# проще проверять через браузер — адреса ниже открываются как есть,
-# потому что в dev-режиме поклажедатель указывается параметром.
+# проще проверять через сам портал: http://localhost:8080/index.html —
+# там те же запросы уходят из интерфейса.
+#
+# С этапа 5 поклажедатель и пользователь берутся из сессии: ни параметра
+# depositorCode, ни заголовка X-User-Login больше нет. Сначала вход —
+# дальше все запросы работают по cookie сессии.
 
 @host = http://localhost:8080
 
-### Какие вообще есть поклажедатели (коды и UUID)
-GET {{host}}/api/dev/depositors
+### ---- Вход в портал ----
+# Пароль всех демо-пользователей: Portal123!
 
-### Какие есть пользователи (логины для X-User-Login)
-GET {{host}}/api/dev/users
+### Вход поклажедателем (у него один поклажедатель — выбирается сразу)
+POST {{host}}/api/auth/login
+Content-Type: application/json
 
-### Запасы по коду поклажедателя — 9 строк
-GET {{host}}/api/stock?depositorCode=D-001
+{"login": "client@roga-kopyta.kz", "password": "Portal123!"}
 
-### Только склад Алматы — 8 строк
-GET {{host}}/api/stock?depositorCode=D-001&warehouseId=WH-ALA
+### Вход менеджером (доступны два поклажедателя — выбор обязателен)
+POST {{host}}/api/auth/login
+Content-Type: application/json
 
-### Поиск по названию — 3 строки
-GET {{host}}/api/stock?depositorCode=D-001&search=рога
+{"login": "n.nazarbayev@ahlers.com", "password": "Portal123!"}
 
-### Другой поклажедатель — 4 строки, молочная продукция
-GET {{host}}/api/stock?depositorCode=D-002
+### Неверный пароль — 401, текст одинаковый для всех случаев
+POST {{host}}/api/auth/login
+Content-Type: application/json
 
-### Без поклажедателя — ошибка 400
+{"login": "client@roga-kopyta.kz", "password": "неверный"}
+
+### Текущий сеанс: кто вошёл и какие поклажедатели доступны
+GET {{host}}/api/auth/session
+
+### Выбор поклажедателя (depositorId — из ответа выше)
+POST {{host}}/api/auth/depositor
+Content-Type: application/json
+
+{"depositorId": "ПОДСТАВИТЬ-UUID-ИЗ-session"}
+
+### Чужой поклажедатель — 403
+POST {{host}}/api/auth/depositor
+Content-Type: application/json
+
+{"depositorId": "00000000-0000-0000-0000-000000000000"}
+
+### Кто я, что мне разрешено и что скрыто в интерфейсе (§6.3)
+GET {{host}}/api/me
+
+### Выход
+POST {{host}}/api/auth/logout
+
+### Без входа — 401
 GET {{host}}/api/stock
 
-### Чужой поклажедатель при известном пользователе — ошибка 403
-GET {{host}}/api/stock?depositorCode=D-002
-X-User-Login: client@roga-kopyta.kz
+### ---- Запасы ----
 
-### Свой поклажедатель при известном пользователе — работает
-GET {{host}}/api/stock?depositorCode=D-001
-X-User-Login: client@roga-kopyta.kz
-
-### Вариант с UUID в заголовке (так будет работать продакшн-клиент)
+### Все запасы поклажедателя из сессии
 GET {{host}}/api/stock
-X-Depositor-Id: ПОДСТАВИТЬ-UUID-ИЗ-/api/dev/depositors
+
+### Только склад Алматы
+GET {{host}}/api/stock?warehouseId=WH-ALA
+
+### Поиск по названию
+GET {{host}}/api/stock?search=рога
+
+### Партии одного товара (экран «Запасы» → «Детализация»)
+GET {{host}}/api/stock/details?skuCode=RK-ROG-01
 
 ### ---- Документы ----
 
 ### Поступления
-GET {{host}}/api/receipts?depositorCode=D-001
+GET {{host}}/api/receipts
 
 ### Поступления: только принятые
-GET {{host}}/api/receipts?depositorCode=D-001&status=received
+GET {{host}}/api/receipts?status=received
 
 ### Поступления: поиск по поставщику
-GET {{host}}/api/receipts?depositorCode=D-001&search=козлов
+GET {{host}}/api/receipts?search=козлов
 
 ### Заказы на отгрузку
-GET {{host}}/api/orders?depositorCode=D-001
+GET {{host}}/api/orders
 
 ### Перемещения
-GET {{host}}/api/transfers?depositorCode=D-001
+GET {{host}}/api/transfers
 
 ### Карточка документа (docId взять из списка выше)
-GET {{host}}/api/receipts/ПОДСТАВИТЬ-DOC-ID?depositorCode=D-001
+GET {{host}}/api/receipts/ПОДСТАВИТЬ-DOC-ID
 
 ### Состав документа
-GET {{host}}/api/receipts/ПОДСТАВИТЬ-DOC-ID/lines?depositorCode=D-001
+GET {{host}}/api/receipts/ПОДСТАВИТЬ-DOC-ID/lines
 
 ### Детализация строки 1 по партиям
-GET {{host}}/api/receipts/ПОДСТАВИТЬ-DOC-ID/line-details?lineNumber=1&depositorCode=D-001
+GET {{host}}/api/receipts/ПОДСТАВИТЬ-DOC-ID/line-details?lineNumber=1
 
 ### ---- Справочники и биллинг ----
 
 ### Номенклатура
-GET {{host}}/api/sku?depositorCode=D-001
+GET {{host}}/api/sku
 
 ### Номенклатура: поиск и фильтр группы
-GET {{host}}/api/sku?depositorCode=D-001&search=рога
-GET {{host}}/api/sku?depositorCode=D-001&group=Мясная продукция
+GET {{host}}/api/sku?search=рога
+GET {{host}}/api/sku?group=Мясная продукция
 
 ### Поставщики / грузополучатели / склады
-GET {{host}}/api/suppliers?depositorCode=D-001
-GET {{host}}/api/consignees?depositorCode=D-001
-GET {{host}}/api/warehouses?depositorCode=D-001
+GET {{host}}/api/suppliers
+GET {{host}}/api/consignees
+GET {{host}}/api/warehouses
 
 ### Биллинг
-GET {{host}}/api/service-tariffs?depositorCode=D-001
-GET {{host}}/api/invoices?depositorCode=D-001
+GET {{host}}/api/service-tariffs
+GET {{host}}/api/invoices
 
-### Партии одного товара (экран «Запасы» → «Детализация»)
-GET {{host}}/api/stock/details?skuCode=RK-ROG-01&depositorCode=D-001
-
-### ---- Черновики документов (этап 7) ----
-# Во всех запросах нужен X-User-Login: запись фиксирует автора (§11).
+### ---- Черновики документов ----
+# Автора записи сервер берёт из сессии (§11) — передавать его не нужно.
 
 ### Создать черновик прихода
-POST {{host}}/api/receipts?depositorCode=D-001
-X-User-Login: client@roga-kopyta.kz
+POST {{host}}/api/receipts
 Content-Type: application/json
 
 {"warehouse_id": "WH-ALA", "eta_date": "2026-11-05"}
 
 ### Изменить шапку (docId из ответа выше)
-PUT {{host}}/api/receipts/ПОДСТАВИТЬ-DOC-ID?depositorCode=D-001
-X-User-Login: client@roga-kopyta.kz
+PUT {{host}}/api/receipts/ПОДСТАВИТЬ-DOC-ID
 Content-Type: application/json
 
 {"erp_number": "ERP-2026-5555", "comment": "Поставка по договору"}
 
 ### Добавить строку состава (sku_id взять из /api/sku)
-POST {{host}}/api/receipts/ПОДСТАВИТЬ-DOC-ID/lines?depositorCode=D-001
-X-User-Login: client@roga-kopyta.kz
+POST {{host}}/api/receipts/ПОДСТАВИТЬ-DOC-ID/lines
 Content-Type: application/json
 
 {"sku_id": "ПОДСТАВИТЬ-SKU-ID", "expected_qty": 120, "price": 2500, "currency_id": 1}
 
 ### Удалить строки 1 и 2
-DELETE {{host}}/api/receipts/ПОДСТАВИТЬ-DOC-ID/lines?lineNumbers=1,2&depositorCode=D-001
-X-User-Login: client@roga-kopyta.kz
+DELETE {{host}}/api/receipts/ПОДСТАВИТЬ-DOC-ID/lines?lineNumbers=1,2
 
 ### Проверить готовность к отправке, не отправляя
-GET {{host}}/api/receipts/ПОДСТАВИТЬ-DOC-ID/validate?depositorCode=D-001
-X-User-Login: client@roga-kopyta.kz
+GET {{host}}/api/receipts/ПОДСТАВИТЬ-DOC-ID/validate
 
 ### Подтвердить (отправка в WMS пока заглушена)
-POST {{host}}/api/receipts/ПОДСТАВИТЬ-DOC-ID/confirm?depositorCode=D-001
-X-User-Login: client@roga-kopyta.kz
+POST {{host}}/api/receipts/ПОДСТАВИТЬ-DOC-ID/confirm
 
 ### Транспорт — только в статусе, где это разрешено
-PUT {{host}}/api/receipts/ПОДСТАВИТЬ-DOC-ID/transport?depositorCode=D-001
-X-User-Login: client@roga-kopyta.kz
+PUT {{host}}/api/receipts/ПОДСТАВИТЬ-DOC-ID/transport
 Content-Type: application/json
 
 {"carrier": "ТОО «КазТранс»", "car_number": "777 AAA 02", "driver_name": "Петров С.И."}
 
 ### Удалить черновик
-DELETE {{host}}/api/receipts/ПОДСТАВИТЬ-DOC-ID?depositorCode=D-001
-X-User-Login: client@roga-kopyta.kz
+DELETE {{host}}/api/receipts/ПОДСТАВИТЬ-DOC-ID
 
-### Кто я и что мне разрешено
-GET {{host}}/api/me?depositorCode=D-001
-X-User-Login: client@roga-kopyta.kz
+### ---- Смена пароля ----
+
+### Свой пароль (нужен текущий)
+POST {{host}}/api/me/password
+Content-Type: application/json
+
+{"currentPassword": "Portal123!", "newPassword": "Novyy-parol-2026"}
+
+### ---- Администрирование (роль admin или developer) ----
+# Учётка администратора: логин admin, первый пароль Nachalo-2026!
+# При первом входе портал потребует задать свой пароль.
+
+### Вход администратором
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{"login": "admin", "password": "Nachalo-2026!"}
+
+### Справочник «Пользователи»
+GET {{host}}/api/admin/users
+
+### Карточка пользователя: блокировка и видимость разделов (§6.3)
+PUT {{host}}/api/admin/users/ПОДСТАВИТЬ-USER-ID
+Content-Type: application/json
+
+{"isActive": true, "hideTransfersTab": false, "hideBillingTab": false,
+ "hideServicesTab": false, "canCreateReceipts": true, "canCreateOrders": true,
+ "canCreateTransfers": true, "canUploadSkuExcel": true,
+ "canUploadPackagingExcel": true, "canEditTransport": true}
+
+### Задать пользователю пароль (портал потребует сменить его при входе)
+POST {{host}}/api/admin/users/ПОДСТАВИТЬ-USER-ID/password
+Content-Type: application/json
+
+{"newPassword": "Vydannyy-2026"}
+
+### Роли и все поклажедатели портала — списки для карточки пользователя
+GET {{host}}/api/admin/roles
+GET {{host}}/api/admin/depositors
+
+### Создать пользователя (пароль можно не присылать — портал придумает и вернёт)
+POST {{host}}/api/admin/users
+Content-Type: application/json
+
+{"login": "p.petrov@ahlers.com", "fullName": "Петров Пётр Петрович",
+ "roleCode": "manager", "position": "Менеджер", "organization": "Ahlers Logistics",
+ "phone": "+7 701 000 00 00", "depositorIds": ["ПОДСТАВИТЬ-UUID"]}
+
+### Анкета, роль, логин и доступы к поклажедателям
+PUT {{host}}/api/admin/users/ПОДСТАВИТЬ-USER-ID/profile
+Content-Type: application/json
+
+{"login": "p.petrov@ahlers.com", "fullName": "Петров Пётр Петрович",
+ "roleCode": "manager", "position": "Менеджер", "organization": "Ahlers Logistics",
+ "phone": "+7 701 000 00 00", "depositorIds": ["ПОДСТАВИТЬ-UUID"]}
+
+### Какие поклажедатели выданы пользователю
+GET {{host}}/api/admin/users/ПОДСТАВИТЬ-USER-ID/depositors
+
+### Занятый логин — 409, неизвестная роль — 400
+POST {{host}}/api/admin/users
+Content-Type: application/json
+
+{"login": "admin", "fullName": "Дубль", "roleCode": "admin"}
+
+### ---- Доступы (режим администрирования) ----
+
+### Все склады портала — для галочек
+GET {{host}}/api/admin/warehouses
+
+### Поклажедатели менеджера: посмотреть и заменить набор
+GET {{host}}/api/admin/users/ПОДСТАВИТЬ-USER-ID/depositors
+PUT {{host}}/api/admin/users/ПОДСТАВИТЬ-USER-ID/depositors
+Content-Type: application/json
+
+{"depositorIds": ["ПОДСТАВИТЬ-UUID"]}
+
+### Склады кладовщика
+GET {{host}}/api/admin/users/ПОДСТАВИТЬ-USER-ID/warehouses
+PUT {{host}}/api/admin/users/ПОДСТАВИТЬ-USER-ID/warehouses
+Content-Type: application/json
+
+{"warehouseIds": ["WH-ALA"]}
+
+### Поклажедатели со списком своих складов
+GET {{host}}/api/admin/depositor-access
+
+### Склады поклажедателя. Пустой список = ограничений нет, доступны все
+GET {{host}}/api/admin/depositors/ПОДСТАВИТЬ-UUID/warehouses
+PUT {{host}}/api/admin/depositors/ПОДСТАВИТЬ-UUID/warehouses
+Content-Type: application/json
+
+{"warehouseIds": ["WH-ALA"]}
+
+### Проверка: склады в документах после настройки сузились
+GET {{host}}/api/warehouses
+
+### Не администратору раздел недоступен — 403
+GET {{host}}/api/admin/users

@@ -45,14 +45,30 @@
       <scope>runtime</scope>
     </dependency>
 
-    <!-- Миграции схемы. Пока отключены в application.yml: схема создана вручную -->
+    <!-- Миграции схемы: применяются при старте приложения (см. application.yml).
+
+         ВАЖНО, почему именно стартер, а не flyway-core напрямую.
+         В Spring Boot 4 автоконфигурация разложена по отдельным модулям:
+         сама библиотека Flyway на classpath ничего не включает, нужен ещё
+         модуль spring-boot-flyway. Без него миграции не выполняются молча,
+         без единой ошибки в логе — мы на это уже наступили. Стартер
+         подтягивает и библиотеку, и модуль автоконфигурации. -->
     <dependency>
-      <groupId>org.flywaydb</groupId>
-      <artifactId>flyway-core</artifactId>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-flyway</artifactId>
     </dependency>
+    <!-- Поддержка диалекта PostgreSQL для Flyway -->
     <dependency>
       <groupId>org.flywaydb</groupId>
       <artifactId>flyway-database-postgresql</artifactId>
+    </dependency>
+
+    <!-- Хеширование паролей (BCrypt). Берём только криптографическую часть
+         Spring Security: вход, сессия и проверка прав реализованы в портале,
+         и тащить ради этого весь каркас безопасности не требуется. -->
+    <dependency>
+      <groupId>org.springframework.security</groupId>
+      <artifactId>spring-security-crypto</artifactId>
     </dependency>
 
     <!-- Тесты -->
