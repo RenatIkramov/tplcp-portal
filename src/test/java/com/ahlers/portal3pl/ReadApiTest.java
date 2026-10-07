@@ -192,28 +192,28 @@ class ReadApiTest extends PortalTestBase {
     @Test
     void skuAndFilters() {
         signIn();
-        assertEquals(8, catalog.list(CatalogType.SKU, null, null, null).size());
-        assertEquals(3, catalog.list(CatalogType.SKU, "рога", null, null).size());
-        assertEquals(2, catalog.list(CatalogType.SKU, null, "Мясная продукция", null).size());
+        assertEquals(8, catalog.list(CatalogType.SKU, null, null, null, false).size());
+        assertEquals(3, catalog.list(CatalogType.SKU, "рога", null, null, false).size());
+        assertEquals(2, catalog.list(CatalogType.SKU, null, "Мясная продукция", null, false).size());
 
         signInAs(OTHER_USER, OTHER_DEPOSITOR);
-        assertEquals(4, catalog.list(CatalogType.SKU, null, null, null).size());
+        assertEquals(4, catalog.list(CatalogType.SKU, null, null, null, false).size());
     }
 
     @Test
     void catalogsAndBilling() {
         signIn();
-        assertEquals(2, catalog.list(CatalogType.SUPPLIERS, null, null, null).size());
-        assertEquals(3, catalog.list(CatalogType.CONSIGNEES, null, null, null).size());
-        assertEquals(2, catalog.list(CatalogType.WAREHOUSES, null, null, null).size());
-        assertEquals(7, catalog.list(CatalogType.SERVICE_TARIFFS, null, null, null).size());
+        assertEquals(2, catalog.list(CatalogType.SUPPLIERS, null, null, null, false).size());
+        assertEquals(3, catalog.list(CatalogType.CONSIGNEES, null, null, null, false).size());
+        assertEquals(2, catalog.list(CatalogType.WAREHOUSES, null, null, null, false).size());
+        assertEquals(7, catalog.list(CatalogType.SERVICE_TARIFFS, null, null, null, false).size());
 
-        List<Map<String, Object>> invoices = catalog.list(CatalogType.INVOICES, null, null, null);
+        List<Map<String, Object>> invoices = catalog.list(CatalogType.INVOICES, null, null, null, false);
         assertEquals(4, invoices.size());
         assertNotNull(invoices.getFirst().get("amountWithVat"), "сумма с НДС рассчитана в представлении");
 
         signInAs(OTHER_USER, OTHER_DEPOSITOR);
-        assertEquals(0, catalog.list(CatalogType.INVOICES, null, null, null).size());
+        assertEquals(0, catalog.list(CatalogType.INVOICES, null, null, null, false).size());
     }
 
     // ---------- вспомогательное ----------

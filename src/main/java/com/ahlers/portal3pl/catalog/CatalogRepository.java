@@ -20,11 +20,16 @@ public class CatalogRepository {
         this.jdbc = jdbc;
     }
 
-    public List<Map<String, Object>> list(CatalogType type, String search, String group, String itemType) {
+    public List<Map<String, Object>> list(CatalogType type, String search, String group, String itemType,
+                                          boolean withArchived) {
         String searchCondition = type.searchColumns().stream()
                 .map(c -> "COALESCE(" + c + "::text,'') ILIKE :search::text")
                 .collect(Collectors.joining(" OR "));
 
+        // Архивные записи по умолчанию не показываем: в документах их выбрать
+        // нельзя, и в рабочем списке они только мешают. Экран может попросить
+        // их отдельно — флажком «показать архив».
+        String archive = type.hasArchive() ? "AND (:withArchived::boolean OR is_active)" : "";
         String extra = type == CatalogType.SKU
                 ? """
                   AND (:group::text IS NULL OR item_group_name = :group::text)
@@ -36,14 +41,18 @@ public class CatalogRepository {
                 SELECT * FROM dbo.%s
                 WHERE (:search::text IS NULL OR (%s))
                 %s
+                %s
                 ORDER BY %s
-                """.formatted(type.view(), searchCondition, extra, type.orderBy());
+                """.formatted(type.view(), searchCondition, extra, archive, type.orderBy());
 
         var spec = jdbc.sql(sql)
                 .param("search", blank(search) ? null : "%" + search.trim() + "%");
         if (type == CatalogType.SKU) {
             spec = spec.param("group", blank(group) ? null : group)
                        .param("itemType", blank(itemType) ? null : itemType);
+        }
+        if (type.hasArchive()) {
+            spec = spec.param("withArchived", withArchived);
         }
         return SqlRows.toCamelCase(spec.query().listOfRows());
     }

@@ -16,6 +16,8 @@ import java.util.List;
 public enum CatalogType {
 
     SKU("sku", "v_sku_full", List.of("code", "item_code", "name"), "code"),
+    PACKAGING("packaging", "v_product_packaging",
+            List.of("sku_code", "sku_name", "packaging_code", "barcode"), "sku_code, coefficient"),
     SUPPLIERS("suppliers", "v_suppliers", List.of("code", "name", "bin"), "name"),
     CONSIGNEES("consignees", "v_consignees", List.of("code", "name", "bin"), "name"),
     WAREHOUSES("warehouses", "v_warehouses", List.of("code", "name", "address"), "name"),
@@ -54,5 +56,14 @@ public enum CatalogType {
 
     public String orderBy() {
         return orderBy;
+    }
+
+    /**
+     * Есть ли у справочника архив (колонка is_active). Склады, поклажедатели,
+     * тарифы и счета архивом не управляются из портала, поэтому условие
+     * по is_active к ним не добавляется — колонки просто нет.
+     */
+    public boolean hasArchive() {
+        return this == SKU || this == SUPPLIERS || this == CONSIGNEES;
     }
 }

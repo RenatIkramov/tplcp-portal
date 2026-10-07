@@ -12,7 +12,8 @@ import java.util.Map;
 /**
  * Справочники и списки биллинга:
  * <p>
- *   GET /api/sku?search=рога&group=Сырьё
+ *   GET /api/sku?search=рога&group=Сырьё&withArchived=true
+ *   GET /api/packaging
  *   GET /api/suppliers
  *   GET /api/consignees
  *   GET /api/warehouses
@@ -21,7 +22,7 @@ import java.util.Map;
  *   GET /api/invoices
  */
 @RestController
-@RequestMapping("/api/{catalog:sku|suppliers|consignees|warehouses|depositors|service-tariffs|invoices}")
+@RequestMapping("/api/{catalog:sku|packaging|suppliers|consignees|warehouses|depositors|service-tariffs|invoices}")
 public class CatalogController {
 
     private final CatalogService service;
@@ -35,7 +36,8 @@ public class CatalogController {
             @PathVariable String catalog,
             @RequestParam(required = false) String search,
             @RequestParam(required = false) String group,
-            @RequestParam(required = false) String itemType) {
-        return service.list(CatalogType.ofPath(catalog), search, group, itemType);
+            @RequestParam(required = false) String itemType,
+            @RequestParam(required = false, defaultValue = "false") boolean withArchived) {
+        return service.list(CatalogType.ofPath(catalog), search, group, itemType, withArchived);
     }
 }
