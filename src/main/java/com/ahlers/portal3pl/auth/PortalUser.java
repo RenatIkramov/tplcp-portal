@@ -22,8 +22,4 @@ public record PortalUser(
     public PortalUser withOwnPassword() {
         return new PortalUser(userId, login, fullName, roleCode, active, false);
     }
-    public boolean isOperatorStaff() {
-        return "manager".equals(roleCode) || "admin".equals(roleCode)
-                || "staff".equals(roleCode) || "developer".equals(roleCode);
-    }
 }
