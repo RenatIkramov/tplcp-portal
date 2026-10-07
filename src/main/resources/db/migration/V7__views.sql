@@ -1,0 +1,485 @@
+-- V7__views.sql
+-- Заготовки: перечислены колонки, которые должно вернуть каждое представление
+-- (взяты из демо). SELECT-часть пишется вручную.
+
+-- v_sku_full: 64 колонок
+--   sku_id                         uuid               SKU ID
+--   depositor_name                 varchar(255)       Depositor Name
+--   item_code                      varchar(100)       Item Code
+--   code                           varchar(100)       Commercial Code
+--   name                           varchar(255)       Item Name
+--   has_packaging                  boolean            Uses Packaging
+--   barcode                        varchar(100)       Barcode
+--   uom_name                       varchar(50)        Unit of Measure
+--   order_unit_name                varchar(255)       Order Unit
+--   length                         numeric(12,3)      Length
+--   width                          numeric(12,3)      Width
+--   height                         numeric(12,3)      Height
+--   volume                         numeric(12,3)      Volume
+--   weight_gross                   numeric(12,3)      Gross Weight
+--   manufacturer                   varchar(100)       Manufacturer
+--   country_origin                 varchar(100)       Country of Origin
+--   brand                          varchar(100)       Brand
+--   is_fragile                     boolean            Is Fragile
+--   is_serial_tracked              boolean            Is Serial Tracked
+--   batch_tracking                 varchar(100)       Is Batch Tracked
+--   expiry_tracking                varchar(100)       Is Expiry Tracked
+--   item_full_name                 text               Full Item Name
+--   weight_net                     numeric(12,3)      Net Weight
+--   max_storage_temp               numeric(12,3)      Max Storage Temperature
+--   min_storage_temp               numeric(12,3)      Min Storage Temperature
+--   max_humidity                   numeric(12,3)      Max Humidity
+--   min_humidity                   numeric(12,3)      Min Humidity
+--   min_days_for_receipt           numeric(12,3)      Min Days For Receipt
+--   min_days_for_reservation       numeric(12,3)      Min Days For Reservation
+--   shelf_life_days                numeric(12,3)      Shelf Life (Days)
+--   color                          varchar(100)       Color
+--   size                           varchar(100)       Size
+--   abc_class                      varchar(100)       ABC Class
+--   xyz_class                      varchar(100)       XYZ Class
+--   guid                           uuid               GUID
+--   hs_code                        varchar(100)       HS Code
+--   enstru_code                    varchar(100)       ENSTRU Code
+--   cost                           numeric(14,2)      Cost
+--   comment                        text               Comment
+--   is_kit                         boolean            Is Kit
+--   is_marking_required            boolean            Is Marking Required
+--   is_excise                      boolean            Is Excise
+--   is_controlled                  boolean            Is Controlled
+--   is_wms_active                  boolean            Is WMS Active
+--   created_by                     varchar(100)       Created By
+--   created_at                     timestamp          Created At
+--   updated_by                     varchar(100)       Updated By
+--   updated_at                     timestamp          Updated At
+--   custom_attr1                   varchar(100)       Custom Attribute 1
+--   custom_attr2                   varchar(100)       Custom Attribute 2
+--   custom_attr3                   varchar(100)       Custom Attribute 3
+--   custom_attr4                   varchar(100)       Custom Attribute 4
+--   custom_attr5                   varchar(100)       Custom Attribute 5
+--   custom_attr6                   varchar(100)       Custom Attribute 6
+--   custom_attr7                   varchar(100)       Custom Attribute 7
+--   custom_attr8                   varchar(100)       Custom Attribute 8
+--   custom_attr9                   varchar(100)       Custom Attribute 9
+--   custom_attr10                  varchar(100)       Custom Attribute 10
+--   item_group_name                varchar(100)       Item Group
+--   item_type_name                 varchar(100)       Item Type
+--   hazard_class_name              varchar(100)       Hazard Class
+--   hazard_group_name              varchar(100)       Hazard Group
+--   currency_code                  varchar(3)         Currency Code
+--   status_name                    varchar(100)       Status
+-- CREATE VIEW v_sku_full AS SELECT ... ;
+
+-- v_stock_lines: 21 колонок
+--   depositor_id                   uuid               Depositor ID
+--   sku_id                         uuid               SKU ID
+--   sku_code                       varchar(50)        SKU Commercial Code
+--   sku_name                       varchar(255)       SKU Name
+--   warehouse_id                   varchar(20)        Warehouse ID
+--   unit_name                      varchar(50)        Unit Name
+--   quantity                       numeric(14,3)      Quantity On Hand
+--   reserved_qty                   numeric(14,3)      Reserved Quantity
+--   blocked_qty                    numeric(14,3)      Blocked Quantity
+--   available_qty                  numeric(14,3)      Available Quantity
+--   incoming_qty                   numeric(14,3)      Incoming Quantity
+--   custom_field_1                 varchar(255)       Custom Field 1
+--   custom_field_2                 varchar(255)       Custom Field 2
+--   custom_field_3                 varchar(255)       Custom Field 3
+--   custom_field_4                 varchar(255)       Custom Field 4
+--   custom_field_5                 varchar(255)       Custom Field 5
+--   custom_field_6                 varchar(255)       Custom Field 6
+--   custom_field_7                 varchar(255)       Custom Field 7
+--   custom_field_8                 varchar(255)       Custom Field 8
+--   custom_field_9                 varchar(255)       Custom Field 9
+--   custom_field_10                varchar(255)       Custom Field 10
+-- CREATE VIEW v_stock_lines AS SELECT ... ;
+
+-- v_stock_details: 22 колонок
+--   depositor_id                   uuid               Depositor ID
+--   sku_id                         uuid               SKU ID
+--   sku_code                       varchar(50)        SKU Commercial Code
+--   sku_name                       varchar(255)       SKU Name
+--   warehouse_id                   varchar(20)        Warehouse ID
+--   batch_number                   varchar(50)        Batch Number
+--   series_number                  varchar(50)        Series Number
+--   expiry_date                    date               Expiry Date
+--   quality                        varchar(20)        Quality
+--   block_reason                   varchar(50)        Block Reason
+--   unit_name                      varchar(50)        Unit Name
+--   quantity                       numeric(14,3)      Quantity On Hand
+--   custom_field_1                 varchar(255)       Custom Field 1
+--   custom_field_2                 varchar(255)       Custom Field 2
+--   custom_field_3                 varchar(255)       Custom Field 3
+--   custom_field_4                 varchar(255)       Custom Field 4
+--   custom_field_5                 varchar(255)       Custom Field 5
+--   custom_field_6                 varchar(255)       Custom Field 6
+--   custom_field_7                 varchar(255)       Custom Field 7
+--   custom_field_8                 varchar(255)       Custom Field 8
+--   custom_field_9                 varchar(255)       Custom Field 9
+--   custom_field_10                varchar(255)       Custom Field 10
+-- CREATE VIEW v_stock_details AS SELECT ... ;
+
+-- v_stock_available: 8 колонок
+--   depositor_id                   uuid               Depositor ID
+--   sku_id                         uuid               SKU ID
+--   warehouse_id                   varchar(20)        Warehouse ID
+--   quantity_total                 numeric(14,3)      Total Quantity
+--   reserved_total                 numeric(14,3)      Total Reserved
+--   blocked_total                  numeric(14,3)      Total Blocked
+--   available_total                numeric(14,3)      Total Available
+--   incoming_total                 numeric(14,3)      Total Incoming
+-- CREATE VIEW v_stock_available AS SELECT ... ;
+
+-- v_user_access: 8 колонок
+--   user_id                        uuid               User ID
+--   login                          varchar(150)       Login
+--   full_name                      varchar(150)       Full Name
+--   role_name                      varchar(100)       Role
+--   depositor_id                   uuid               Accessible Depositor ID
+--   depositor_name                 varchar(255)       Depositor Name
+--   warehouse_id                   varchar(20)        Accessible Warehouse ID
+--   warehouse_name                 varchar(100)       Warehouse Name
+-- CREATE VIEW v_user_access AS SELECT ... ;
+
+-- v_receipts: 46 колонок
+--   document_no                    varchar(30)        Document No
+--   depositor_name                 varchar(255)       Depositor Name
+--   doc_number                     varchar(30)        Document Number (WMS)
+--   erp_number                     varchar(30)        Document Number (ERP)
+--   author_name                    varchar(150)       Author Name
+--   status_name                    varchar(100)       Status
+--   doc_date                       date               Document Date
+--   warehouse_name                 varchar(100)       Warehouse Name
+--   trip                           varchar(30)        Trip Number
+--   comment                        text               Comment
+--   doc_type_name                  varchar(100)       Receipt Document Type
+--   supplier_name                  varchar(255)       Supplier Name
+--   accompanying_doc_number        varchar(50)        Accompanying Document Number
+--   invoice_number                 varchar(50)        Invoice Number
+--   gtd                            varchar(50)        Customs Declaration Number
+--   eta_date                       date               Expected Arrival Date
+--   arrival_date                   date               Arrival Date
+--   receiving_end_date             date               Receiving End Date
+--   line_count                     int                Line Count
+--   total_pieces                   numeric(14,3)      Total Pieces
+--   cargo_places                   int                Cargo Places
+--   pallet_count                   int                Pallet Count
+--   weight_kg                      numeric(12,3)      Weight
+--   volume_m3                      numeric(12,5)      Volume
+--   carrier                        varchar(255)       Carrier
+--   transport_type                 varchar(50)        Transport Type
+--   transport_brand                varchar(100)       Transport Brand
+--   car_number                     varchar(20)        Car Number
+--   trailer_number                 varchar(20)        Trailer Number
+--   tech_passport_number           varchar(50)        Technical Passport Number
+--   container_number               varchar(20)        Container Number
+--   seal_number                    varchar(20)        Seal Number
+--   driver_name                    varchar(150)       Driver Name
+--   driver_phone                   varchar(30)        Driver Phone
+--   driver_id_number               varchar(30)        Driver ID Number
+--   driver_inn                     varchar(20)        Driver INN
+--   custom_field_1                 varchar(255)       Custom Field 1
+--   custom_field_2                 varchar(255)       Custom Field 2
+--   custom_field_3                 varchar(255)       Custom Field 3
+--   custom_field_4                 varchar(255)       Custom Field 4
+--   custom_field_5                 varchar(255)       Custom Field 5
+--   custom_field_6                 varchar(255)       Custom Field 6
+--   custom_field_7                 varchar(255)       Custom Field 7
+--   custom_field_8                 varchar(255)       Custom Field 8
+--   custom_field_9                 varchar(255)       Custom Field 9
+--   custom_field_10                varchar(255)       Custom Field 10
+-- CREATE VIEW v_receipts AS SELECT ... ;
+
+-- v_orders: 45 колонок
+--   document_no                    varchar(30)        Document No
+--   depositor_name                 varchar(255)       Depositor Name
+--   doc_number                     varchar(30)        Document Number (WMS)
+--   erp_number                     varchar(30)        Document Number (ERP)
+--   author_name                    varchar(150)       Author Name
+--   status_name                    varchar(100)       Status
+--   doc_date                       date               Document Date
+--   warehouse_name                 varchar(100)       Warehouse Name
+--   trip                           varchar(30)        Trip Number
+--   comment                        text               Comment
+--   order_type_name                varchar(100)       Order Type
+--   consignee_name                 varchar(255)       Consignee Name
+--   delivery_point_address         varchar(255)       Delivery Address
+--   consignee_contact              varchar(255)       Consignee Contact
+--   planned_ship_date              date               Planned Ship Date
+--   ship_date                      date               Ship Date
+--   line_count                     int                Line Count
+--   total_pieces                   numeric(14,3)      Total Pieces
+--   cargo_places                   int                Cargo Places
+--   pallet_count                   int                Pallet Count
+--   weight_kg                      numeric(12,3)      Weight
+--   volume_m3                      numeric(12,5)      Volume
+--   carrier                        varchar(255)       Carrier
+--   transport_type                 varchar(50)        Transport Type
+--   transport_brand                varchar(100)       Transport Brand
+--   car_number                     varchar(20)        Car Number
+--   trailer_number                 varchar(20)        Trailer Number
+--   tech_passport_number           varchar(50)        Technical Passport Number
+--   container_number               varchar(20)        Container Number
+--   seal_number                    varchar(20)        Seal Number
+--   driver_name                    varchar(150)       Driver Name
+--   driver_phone                   varchar(30)        Driver Phone
+--   driver_id_number               varchar(30)        Driver ID Number
+--   driver_inn                     varchar(20)        Driver INN
+--   delivery_date                  date               Delivery Date
+--   custom_field_1                 varchar(255)       Custom Field 1
+--   custom_field_2                 varchar(255)       Custom Field 2
+--   custom_field_3                 varchar(255)       Custom Field 3
+--   custom_field_4                 varchar(255)       Custom Field 4
+--   custom_field_5                 varchar(255)       Custom Field 5
+--   custom_field_6                 varchar(255)       Custom Field 6
+--   custom_field_7                 varchar(255)       Custom Field 7
+--   custom_field_8                 varchar(255)       Custom Field 8
+--   custom_field_9                 varchar(255)       Custom Field 9
+--   custom_field_10                varchar(255)       Custom Field 10
+-- CREATE VIEW v_orders AS SELECT ... ;
+
+-- v_transfers: 42 колонок
+--   document_no                    varchar(30)        Document No
+--   depositor_name                 varchar(255)       Depositor Name
+--   doc_number                     varchar(30)        Document Number (WMS)
+--   erp_number                     varchar(30)        Document Number (ERP)
+--   author_name                    varchar(150)       Author Name
+--   status_name                    varchar(100)       Status
+--   doc_date                       date               Document Date
+--   warehouse_name                 varchar(100)       Warehouse Name
+--   trip                           varchar(30)        Trip Number
+--   comment                        text               Comment
+--   from_warehouse_name            varchar(100)       From Warehouse Name
+--   to_warehouse_name              varchar(100)       To Warehouse Name
+--   ship_date                      date               Ship Date
+--   received_date                  date               Received Date
+--   line_count                     int                Line Count
+--   total_pieces                   numeric(14,3)      Total Pieces
+--   cargo_places                   int                Cargo Places
+--   pallet_count                   int                Pallet Count
+--   weight_kg                      numeric(12,3)      Weight
+--   volume_m3                      numeric(12,5)      Volume
+--   carrier                        varchar(255)       Carrier
+--   transport_type                 varchar(50)        Transport Type
+--   transport_brand                varchar(100)       Transport Brand
+--   car_number                     varchar(20)        Car Number
+--   trailer_number                 varchar(20)        Trailer Number
+--   tech_passport_number           varchar(50)        Technical Passport Number
+--   container_number               varchar(20)        Container Number
+--   seal_number                    varchar(20)        Seal Number
+--   driver_name                    varchar(150)       Driver Name
+--   driver_phone                   varchar(30)        Driver Phone
+--   driver_id_number               varchar(30)        Driver ID Number
+--   driver_inn                     varchar(20)        Driver INN
+--   custom_field_1                 varchar(255)       Custom Field 1
+--   custom_field_2                 varchar(255)       Custom Field 2
+--   custom_field_3                 varchar(255)       Custom Field 3
+--   custom_field_4                 varchar(255)       Custom Field 4
+--   custom_field_5                 varchar(255)       Custom Field 5
+--   custom_field_6                 varchar(255)       Custom Field 6
+--   custom_field_7                 varchar(255)       Custom Field 7
+--   custom_field_8                 varchar(255)       Custom Field 8
+--   custom_field_9                 varchar(255)       Custom Field 9
+--   custom_field_10                varchar(255)       Custom Field 10
+-- CREATE VIEW v_transfers AS SELECT ... ;
+
+-- v_receipt_lines: 14 колонок
+--   doc_id                         uuid               Document ID
+--   line_number                    smallint           Line Number
+--   sku_id                         uuid               SKU ID
+--   sku_code                       varchar(50)        SKU Commercial Code
+--   sku_name                       varchar(255)       SKU Name
+--   unit_name                      varchar(50)        Unit
+--   expected_qty                   numeric(14,3)      Expected Quantity
+--   expected_qty_wms               numeric(14,3)      Expected Quantity (WMS)
+--   accepted_qty                   numeric(14,3)      Accepted Quantity
+--   defect_qty                     numeric(14,3)      Defect Quantity
+--   price                          numeric(14,2)      Price
+--   sum                            numeric(14,2)      Sum
+--   currency_code                  varchar(3)         Currency Code
+--   line_comment                   text               Line Comment
+-- CREATE VIEW v_receipt_lines AS SELECT ... ;
+
+-- v_receipt_line_details: 18 колонок
+--   doc_id                         uuid               Document ID
+--   line_number                    smallint           Line Number
+--   sku_id                         uuid               SKU ID
+--   quality                        varchar(20)        Quality
+--   batch_number                   varchar(50)        Batch Number
+--   series_number                  varchar(50)        Series Number
+--   expiry_date                    date               Expiry Date
+--   accepted_qty                   numeric(14,3)      Accepted Quantity (this batch)
+--   custom_field_1                 varchar(255)       Custom Field 1
+--   custom_field_2                 varchar(255)       Custom Field 2
+--   custom_field_3                 varchar(255)       Custom Field 3
+--   custom_field_4                 varchar(255)       Custom Field 4
+--   custom_field_5                 varchar(255)       Custom Field 5
+--   custom_field_6                 varchar(255)       Custom Field 6
+--   custom_field_7                 varchar(255)       Custom Field 7
+--   custom_field_8                 varchar(255)       Custom Field 8
+--   custom_field_9                 varchar(255)       Custom Field 9
+--   custom_field_10                varchar(255)       Custom Field 10
+-- CREATE VIEW v_receipt_line_details AS SELECT ... ;
+
+-- v_order_lines: 14 колонок
+--   doc_id                         uuid               Document ID
+--   line_number                    smallint           Line Number
+--   sku_id                         uuid               SKU ID
+--   sku_code                       varchar(50)        SKU Commercial Code
+--   sku_name                       varchar(255)       SKU Name
+--   unit_name                      varchar(50)        Unit
+--   ordered_qty                    numeric(14,3)      Ordered Quantity
+--   ordered_qty_wms                numeric(14,3)      Ordered Quantity (WMS)
+--   picked_qty                     numeric(14,3)      Picked Quantity
+--   weight_kg                      numeric(12,3)      Weight
+--   price                          numeric(14,2)      Price
+--   sum                            numeric(14,2)      Sum
+--   currency_code                  varchar(3)         Currency Code
+--   line_comment                   text               Line Comment
+-- CREATE VIEW v_order_lines AS SELECT ... ;
+
+-- v_order_line_details: 18 колонок
+--   doc_id                         uuid               Document ID
+--   line_number                    smallint           Line Number
+--   sku_id                         uuid               SKU ID
+--   quality                        varchar(20)        Quality
+--   batch_number                   varchar(50)        Batch Number
+--   series_number                  varchar(50)        Series Number
+--   expiry_date                    date               Expiry Date
+--   picked_qty                     numeric(14,3)      Picked Quantity (this batch)
+--   custom_field_1                 varchar(255)       Custom Field 1
+--   custom_field_2                 varchar(255)       Custom Field 2
+--   custom_field_3                 varchar(255)       Custom Field 3
+--   custom_field_4                 varchar(255)       Custom Field 4
+--   custom_field_5                 varchar(255)       Custom Field 5
+--   custom_field_6                 varchar(255)       Custom Field 6
+--   custom_field_7                 varchar(255)       Custom Field 7
+--   custom_field_8                 varchar(255)       Custom Field 8
+--   custom_field_9                 varchar(255)       Custom Field 9
+--   custom_field_10                varchar(255)       Custom Field 10
+-- CREATE VIEW v_order_line_details AS SELECT ... ;
+
+-- v_transfer_lines: 9 колонок
+--   doc_id                         uuid               Document ID
+--   line_number                    smallint           Line Number
+--   sku_id                         uuid               SKU ID
+--   sku_code                       varchar(50)        SKU Commercial Code
+--   sku_name                       varchar(255)       SKU Name
+--   unit_name                      varchar(50)        Unit
+--   qty                            numeric(14,3)      Quantity
+--   qty_wms                        numeric(14,3)      Quantity (WMS)
+--   line_comment                   text               Line Comment
+-- CREATE VIEW v_transfer_lines AS SELECT ... ;
+
+-- v_transfer_line_details: 18 колонок
+--   doc_id                         uuid               Document ID
+--   line_number                    smallint           Line Number
+--   sku_id                         uuid               SKU ID
+--   quality                        varchar(20)        Quality
+--   batch_number                   varchar(50)        Batch Number
+--   series_number                  varchar(50)        Series Number
+--   expiry_date                    date               Expiry Date
+--   qty                            numeric(14,3)      Quantity (this batch)
+--   custom_field_1                 varchar(255)       Custom Field 1
+--   custom_field_2                 varchar(255)       Custom Field 2
+--   custom_field_3                 varchar(255)       Custom Field 3
+--   custom_field_4                 varchar(255)       Custom Field 4
+--   custom_field_5                 varchar(255)       Custom Field 5
+--   custom_field_6                 varchar(255)       Custom Field 6
+--   custom_field_7                 varchar(255)       Custom Field 7
+--   custom_field_8                 varchar(255)       Custom Field 8
+--   custom_field_9                 varchar(255)       Custom Field 9
+--   custom_field_10                varchar(255)       Custom Field 10
+-- CREATE VIEW v_transfer_line_details AS SELECT ... ;
+
+-- v_users: 9 колонок
+--   user_id                        uuid               User ID
+--   login                          varchar(150)       Login (Email)
+--   full_name                      varchar(150)       Full Name
+--   role_name                      varchar(100)       Role
+--   position                       varchar(150)       Position
+--   organization                   varchar(255)       Organization
+--   phone                          varchar(30)        Phone
+--   is_active                      boolean            Is Active
+--   last_login_at                  timestamp          Last Login At
+-- CREATE VIEW v_users AS SELECT ... ;
+
+-- v_suppliers: 9 колонок
+--   supplier_id                    uuid               Supplier ID
+--   depositor_name                 varchar(255)       Depositor Name
+--   code                           varchar(20)        Code
+--   name                           varchar(255)       Name
+--   bin                            varchar(12)        BIN
+--   legal_address                  varchar(255)       Legal Address
+--   contact_name                   varchar(150)       Contact Person
+--   contact_phone                  varchar(30)        Contact Phone
+--   contact_email                  varchar(150)       Contact Email
+-- CREATE VIEW v_suppliers AS SELECT ... ;
+
+-- v_consignees: 9 колонок
+--   consignee_id                   uuid               Consignee ID
+--   depositor_name                 varchar(255)       Depositor Name
+--   code                           varchar(20)        Code
+--   name                           varchar(255)       Name
+--   bin                            varchar(12)        BIN
+--   legal_address                  varchar(255)       Legal Address
+--   contact_name                   varchar(150)       Contact Person
+--   contact_phone                  varchar(30)        Contact Phone
+--   contact_email                  varchar(150)       Contact Email
+-- CREATE VIEW v_consignees AS SELECT ... ;
+
+-- v_warehouses: 7 колонок
+--   warehouse_id                   varchar(20)        Warehouse ID
+--   code                           varchar(20)        Code
+--   name                           varchar(100)       Name
+--   address                        varchar(255)       Address
+--   responsible                    varchar(150)       Responsible Person
+--   phone                          varchar(30)        Phone
+--   email                          varchar(150)       Email
+-- CREATE VIEW v_warehouses AS SELECT ... ;
+
+-- v_depositors: 9 колонок
+--   depositor_id                   uuid               Depositor ID
+--   code                           varchar(20)        Code
+--   org_name                       varchar(255)       Organization Name
+--   bin                            varchar(12)        BIN
+--   legal_address                  varchar(255)       Legal Address
+--   phone                          varchar(30)        Phone
+--   email                          varchar(150)       Email
+--   contract_number                varchar(50)        Contract Number
+--   contract_valid_until           date               Contract Valid Until
+-- CREATE VIEW v_depositors AS SELECT ... ;
+
+-- v_service_tariffs: 6 колонок
+--   depositor_id                   uuid               Depositor ID
+--   depositor_name                 varchar(255)       Depositor Name
+--   service                        varchar(255)       Service
+--   rate                           numeric(14,2)      Rate
+--   unit                           varchar(100)       Unit
+--   frequency                      varchar(50)        Frequency
+-- CREATE VIEW v_service_tariffs AS SELECT ... ;
+
+-- v_invoices: 10 колонок
+--   depositor_id                   uuid               Depositor ID
+--   depositor_name                 varchar(255)       Depositor Name
+--   invoice_number                 varchar(30)        Invoice Number
+--   period_from                    date               Period From
+--   period_to                      date               Period To
+--   issue_date                     date               Issue Date
+--   amount_no_vat                  numeric(14,2)      Amount, No VAT
+--   amount_vat                     numeric(14,2)      Amount, VAT Included
+--   status_name                    varchar(100)       Status
+--   pdf_file                       varchar(255)       PDF File Path
+-- CREATE VIEW v_invoices AS SELECT ... ;
+
+-- v_document_photos: 10 колонок
+--   depositor_id                   uuid               Depositor ID
+--   doc_id                         uuid               Document ID
+--   doc_kind                       varchar(20)        Document Kind
+--   photo_id                       bigint             Photo ID
+--   file_name                      varchar(255)       Original File Name
+--   caption                        varchar(255)       Caption
+--   source                         varchar(20)        Source
+--   uploaded_by_name               varchar(150)       Uploaded By
+--   uploaded_at                    timestamp          Uploaded At
+--   sort_order                     smallint           Sort Order
+-- CREATE VIEW v_document_photos AS SELECT ... ;
