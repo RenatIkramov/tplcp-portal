@@ -112,6 +112,28 @@ public class ColumnService {
             }
         }
 
+        // Прикреплённую колонку убрать нельзя (V36): без кода и
+        // наименования список товаров бесполезен. Запрет есть и в базе,
+        // но оттуда приходит исключение Postgres, а экрану нужен код 409
+        // и человеческий текст.
+        List<String> pinned = jdbc.sql("""
+                        SELECT COALESCE(t.value, c.text_key) AS label
+                        FROM dbo.table_column c
+                        LEFT JOIN dbo.ui_texts(:locale::text) t ON t.text_key = c.text_key
+                        WHERE c.table_key = :table::varchar AND c.is_pinned
+                          AND NOT (c.column_id = ANY (:cols::text[]))
+                        ORDER BY c.sort_order
+                        """)
+                .param("locale", locales.localeOf(user.login()))
+                .param("table", tableKey)
+                .param("cols", unique.toArray(String[]::new))
+                .query(String.class)
+                .list();
+        if (!pinned.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Эти колонки убрать нельзя: " + String.join(", ", pinned));
+        }
+
         jdbc.sql("SELECT dbo.user_columns_save(:user::uuid, :table::text, :cols::text[])")
                 .param("user", user.userId())
                 .param("table", tableKey)
@@ -178,6 +200,9 @@ public class ColumnService {
         users.requireAdmin(actor);
         requireTable(tableKey);
         requireColumn(tableKey, columnId);
+        if (!available) {
+            requireNotLocked(tableKey, columnId);
+        }
         jdbc.sql("""
                         SELECT dbo.admin_depositor_column_save(
                                  :dep::uuid, :table::text, :col::text,
@@ -352,6 +377,40 @@ public class ColumnService {
         if (!known) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND,
                     "Колонки «" + columnId + "» в таблице «" + tableKey + "» нет");
+        }
+    }
+
+    /**
+     * Поле, которое нельзя скрыть от поклажедателя.
+     *
+     * <p>Признаков два, и путать их нельзя (V36):
+     * {@code is_locked} — поклажедателю скрыть нельзя (этот экран);
+     * {@code is_pinned} — из своей таблицы убрать нельзя (окно
+     * ⚙ Колонки). Служебные поля товара нескрываемы для клиента,
+     * но в личной таблице человек их убирает свободно.
+     *
+     * <p>Запрет стоит и в базе, но там он поднимает исключение
+     * Postgres, а экрану нужен внятный код и текст. Поэтому проверяем
+     * здесь, а запрет в базе остаётся последней линией: до неё доберётся
+     * всё, что обойдёт этот метод.
+     */
+    private void requireNotLocked(String tableKey, String columnId) {
+        Map<String, Object> row = jdbc.sql("""
+                        SELECT c.is_locked, COALESCE(t.value, c.text_key) AS label
+                        FROM dbo.table_column c
+                        LEFT JOIN dbo.ui_texts('ru') t ON t.text_key = c.text_key
+                        WHERE c.table_key = :key::varchar AND c.column_id = :col::varchar
+                        """)
+                .param("key", tableKey)
+                .param("col", columnId)
+                .query()
+                .listOfRows()
+                .stream()
+                .findFirst()
+                .orElse(Map.of());
+        if (Boolean.TRUE.equals(row.get("is_locked"))) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Поле «" + row.get("label") + "» нельзя скрыть от поклажедателя");
         }
     }
 

@@ -159,18 +159,20 @@ class PasswordTest extends PortalTestBase {
         PortalUser admin = portalAdmin();
         String id = userId(USER);
 
+        // «Показать раздел перемещения» в карточке человека больше нет:
+        // с V35 это настройка поклажедателя (см. ColumnDirectoryTest).
         admins.save(admin, id, new AdminUserService.Settings(
-                true, true, false, false, true, true, false, true, true, false));
+                true, true, false, true, true, false, true, true, false));
         Map<String, Object> after = row(admins.users(admin), USER);
-        assertEquals(true, after.get("hideTransfersTab"));
+        assertEquals(true, after.get("hideBillingTab"));
         assertEquals(false, after.get("canCreateTransfers"));
         assertEquals(false, after.get("canEditTransport"));
 
         // возвращаем как было, чтобы не ломать остальные тесты
         admins.save(admin, id, new AdminUserService.Settings(
-                true, false, false, false, true, true, true, true, true, true));
+                true, false, false, true, true, true, true, true, true));
         Map<String, Object> restored = row(admins.users(admin), USER);
-        assertEquals(false, restored.get("hideTransfersTab"));
+        assertEquals(false, restored.get("hideBillingTab"));
         assertEquals(true, restored.get("canEditTransport"));
     }
 
@@ -180,7 +182,7 @@ class PasswordTest extends PortalTestBase {
         PortalUser admin = portalAdmin();
         String ownId = userId(ADMIN);
         expectRejection(409, () -> admins.save(admin, ownId, new AdminUserService.Settings(
-                false, false, false, false, true, true, true, true, true, true)));
+                false, false, false, true, true, true, true, true, true)));
     }
 
     private Map<String, Object> row(List<Map<String, Object>> items, String login) {

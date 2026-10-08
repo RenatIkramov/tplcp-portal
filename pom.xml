@@ -132,6 +132,18 @@
       <artifactId>spring-security-crypto</artifactId>
     </dependency>
 
+    <!-- Чтение и запись .xlsx (шаблон номенклатуры, импорт).
+
+         Версию задаём сами: родительский pom Spring Boot эту библиотеку
+         не управляет. POI тянет за собой xmlbeans, commons-compress
+         и log4j-api — сканер уязвимостей их увидит, поэтому держим
+         версию свежей и обновляем вместе с остальными. -->
+    <dependency>
+      <groupId>org.apache.poi</groupId>
+      <artifactId>poi-ooxml</artifactId>
+      <version>5.5.1</version>
+    </dependency>
+
     <!-- Тесты -->
     <dependency>
       <groupId>org.springframework.boot</groupId>

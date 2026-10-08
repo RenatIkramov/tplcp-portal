@@ -1,7 +1,9 @@
 package com.ahlers.portal3pl;
 
+import com.ahlers.portal3pl.admin.DepositorSettingsService;
 import com.ahlers.portal3pl.auth.PortalUser;
 import com.ahlers.portal3pl.columns.ColumnService;
+import com.ahlers.portal3pl.config.CurrentUser;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,6 +32,12 @@ class ColumnDirectoryTest extends PortalTestBase {
     @Autowired
     ColumnService columns;
 
+    @Autowired
+    DepositorSettingsService depositorSettings;
+
+    @Autowired
+    CurrentUser current;
+
     /**
      * Уборка идёт теми же путями, какими работает приложение, а не прямыми
      * DELETE. Причина не в красоте: depositor_table_column и
@@ -45,6 +53,9 @@ class ColumnDirectoryTest extends PortalTestBase {
             String id = depositorId(ADMIN, code);
             columns.resetDepositorColumns(admin, id, null);
             columns.saveFieldLabel(admin, id, "sku", "code", null);
+            // настройки разделов тоже возвращаем: скрытый раздел дожил бы
+            // до следующего теста и уронил бы его
+            depositorSettings.save(admin, id, new DepositorSettingsService.Settings(false));
         }
         new TransactionTemplate(txManager).executeWithoutResult(tx ->
                 jdbc.sql("DELETE FROM dbo.user_table_column WHERE user_id IN"
@@ -283,15 +294,6 @@ class ColumnDirectoryTest extends PortalTestBase {
         assertEquals("Status", en);
     }
 
-    private void localeOf(PortalUser user, String code) {
-        new TransactionTemplate(txManager).executeWithoutResult(tx ->
-                jdbc.sql("SELECT dbo.user_set_locale(:id::uuid, :code::text)")
-                        .param("id", user.userId())
-                        .param("code", code)
-                        .query()
-                        .listOfRows());
-    }
-
     /**
      * Подпись колонки из раскладки.
      * <p>
@@ -428,5 +430,167 @@ class ColumnDirectoryTest extends PortalTestBase {
         expectRejection(403, () -> columns.fieldLabels(client, depositorId));
         expectRejection(403, () ->
                 columns.saveFieldLabel(client, depositorId, "sku", "code", "Своё"));
+    }
+
+    /* ============== Видимость полей для поклажедателя (V35) ============== */
+
+    @Test
+    void everyProductColumnBelongsToATabOfTheCard() {
+        PortalUser admin = portalAdmin();
+        signInAs(ADMIN, DEPOSITOR);
+        localeOf(admin, "ru");
+        List<Map<String, Object>> sku =
+                columns.depositorColumns(admin, depositorId(ADMIN, DEPOSITOR), "sku");
+
+        // Экран настройки разложен по вкладкам карточки товара. Колонка
+        // без вкладки нигде не показалась бы — и администратор не смог бы
+        // её настроить, не понимая, почему её нет.
+        assertTrue(sku.stream().noneMatch(r -> r.get("groupKey") == null),
+                "у каждой колонки товара есть вкладка");
+        assertEquals(8, sku.stream().map(r -> r.get("groupKey")).distinct().count(),
+                "вкладок восемь — как в карточке, без упаковок");
+        assertTrue(sku.stream().anyMatch(r ->
+                        "Основная информация".equals(r.get("groupLabel"))),
+                "подпись вкладки приходит переведённой, а не ключом");
+    }
+
+    @Test
+    void requiredProductFieldsCannotBeHidden() {
+        PortalUser admin = portalAdmin();
+        signInAs(ADMIN, DEPOSITOR);
+        String depositorId = depositorId(ADMIN, DEPOSITOR);
+
+        // Ровно те три, что проверяет сервер при записи товара. Спрятать
+        // их значило бы оставить клиента с карточкой, в которой товар
+        // нельзя сохранить.
+        for (String column : new String[]{"code", "name", "unit"}) {
+            expectRejection(409, () -> columns.saveDepositorColumn(
+                    admin, depositorId, "sku", column, false, true));
+        }
+    }
+
+    @Test
+    void requiredFieldsStayVisibleEvenInThePersonalPicker() {
+        signIn();
+        PortalUser user = authService.authenticate(USER, USER_PASSWORD);
+        // Личный выбор колонок обязательные не отключает: список товаров
+        // без кода и наименования бесполезен. Убрать их из набора нельзя —
+        // поэтому в выборе они есть, даже когда человек оставил одну колонку.
+        columns.saveMine(user, "sku", List.of("code", "name", "unit", "hsCode"));
+        List<Map<String, Object>> sku = columns.layout(user, "sku");
+        for (String column : new String[]{"code", "name", "unit"}) {
+            assertTrue(sku.stream().anyMatch(r -> column.equals(r.get("columnId"))
+                            && Boolean.TRUE.equals(r.get("isVisible"))),
+                    "обязательная колонка осталась видимой: " + column);
+            assertTrue(sku.stream().anyMatch(r -> column.equals(r.get("columnId"))
+                            && Boolean.TRUE.equals(r.get("isPinned"))),
+                    "и помечена как прикреплённая: " + column);
+        }
+    }
+
+    @Test
+    void systemFieldsAreNotHiddenFromTheClientButAreNotPinnedEither() {
+        PortalUser admin = portalAdmin();
+        signInAs(ADMIN, DEPOSITOR);
+        String depositorId = depositorId(ADMIN, DEPOSITOR);
+
+        // Два разных «нельзя скрыть» (V36): клиенту — нельзя,
+        // себе в таблицу — можно. Иначе «кто создал» и «когда изменено»
+        // навсегда повисли бы в списке товаров у каждого человека.
+        for (String column : new String[]{"createdBy", "updatedAt", "group"}) {
+            expectRejection(409, () -> columns.saveDepositorColumn(
+                    admin, depositorId, "sku", column, false, true));
+        }
+
+        signIn();
+        PortalUser user = authService.authenticate(USER, USER_PASSWORD);
+        List<Map<String, Object>> sku = columns.layout(user, "sku");
+        assertTrue(sku.stream().anyMatch(r -> "createdBy".equals(r.get("columnId"))
+                        && !Boolean.TRUE.equals(r.get("isPinned"))),
+                "служебное поле не прикреплено к таблице");
+    }
+
+    @Test
+    void pinnedColumnCannotBeRemovedFromYourOwnTable() {
+        signIn();
+        PortalUser user = authService.authenticate(USER, USER_PASSWORD);
+        // Серая галочка в окне ⚙ Колонки — удобство; запрет стоит в базе.
+        expectRejection(409, () -> columns.saveMine(user, "sku", List.of("hsCode")));
+    }
+
+    @Test
+    void statusAndWmsFlagLiveWithTheSystemFields() {
+        PortalUser admin = portalAdmin();
+        signInAs(ADMIN, DEPOSITOR);
+        localeOf(admin, "ru");
+        List<Map<String, Object>> sku =
+                columns.depositorColumns(admin, depositorId(ADMIN, DEPOSITOR), "sku");
+        // Оба ставит обмен с WMS, а не человек: в основной информации
+        // и в признаках они выглядели как заполняемые вручную.
+        for (String column : new String[]{"statusProduct", "isWmsActive"}) {
+            assertTrue(sku.stream().anyMatch(r -> column.equals(r.get("columnId"))
+                            && "sku.text.system_information".equals(r.get("groupKey"))),
+                    "поле на вкладке служебной информации: " + column);
+        }
+    }
+
+    @Test
+    void fieldHiddenFromDepositorDisappearsFromTheLayout() {
+        PortalUser admin = portalAdmin();
+        signInAs(ADMIN, DEPOSITOR);
+        columns.saveDepositorColumn(admin, depositorId(ADMIN, DEPOSITOR),
+                "sku", "brand", false, true);
+
+        signIn();
+        PortalUser user = authService.authenticate(USER, USER_PASSWORD);
+        List<Map<String, Object>> sku = columns.layout(user, "sku");
+        // Запрещённой колонки нет вовсе, а не «есть, но скрыта»: иначе
+        // пользователь включил бы её себе в окне выбора колонок.
+        assertTrue(sku.stream().noneMatch(r -> "brand".equals(r.get("columnId"))),
+                "запрещённое поле не приходит пользователю даже скрытым");
+    }
+
+    @Test
+    void transfersSectionIsSettledPerDepositorNotPerPerson() {
+        PortalUser admin = portalAdmin();
+        signInAs(ADMIN, DEPOSITOR);
+        String depositorId = depositorId(ADMIN, DEPOSITOR);
+
+        assertFalse(Boolean.TRUE.equals(
+                        depositorSettings.settings(admin, depositorId).get("hideTransfersTab")),
+                "по умолчанию раздел виден");
+
+        depositorSettings.save(admin, depositorId,
+                new DepositorSettingsService.Settings(true));
+        assertTrue(Boolean.TRUE.equals(
+                        depositorSettings.settings(admin, depositorId).get("hideTransfersTab")),
+                "настройка сохранилась");
+
+        // И действует на всех пользователей клиента, а не на одного:
+        // настройка переехала с человека на организацию (V35).
+        signIn();
+        assertTrue(Boolean.TRUE.equals(current.settings().get("hideTransfersTab")),
+                "пользователь этого клиента раздела не видит");
+    }
+
+    @Test
+    void onlyAdminChangesDepositorSections() {
+        signIn();
+        PortalUser client = authService.authenticate(USER, USER_PASSWORD);
+        String depositorId = depositorId(USER, DEPOSITOR);
+        expectRejection(403, () -> depositorSettings.settings(client, depositorId));
+        expectRejection(403, () -> depositorSettings.save(client, depositorId,
+                new DepositorSettingsService.Settings(true)));
+    }
+
+    @Test
+    void unknownDepositorIsRejectedRatherThanSilentlyIgnored() {
+        PortalUser admin = portalAdmin();
+        signInAs(ADMIN, DEPOSITOR);
+        // Опечатка в идентификаторе давала бы пустые настройки вместо
+        // отказа, и администратор решил бы, что сохранил.
+        expectRejection(404, () -> depositorSettings.settings(
+                admin, "00000000-0000-0000-0000-000000000000"));
+        expectRejection(400, () -> depositorSettings.settings(admin, "  "));
     }
 }

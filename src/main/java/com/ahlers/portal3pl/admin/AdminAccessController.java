@@ -19,10 +19,13 @@ import java.util.Map;
 public class AdminAccessController {
 
     private final AdminAccessService access;
+    private final DepositorSettingsService settings;
     private final SessionUser session;
 
-    public AdminAccessController(AdminAccessService access, SessionUser session) {
+    public AdminAccessController(AdminAccessService access,
+                                 DepositorSettingsService settings, SessionUser session) {
         this.access = access;
+        this.settings = settings;
         this.session = session;
     }
 
@@ -65,6 +68,27 @@ public class AdminAccessController {
                                                       @RequestBody Warehouses body,
                                                       HttpServletRequest request) {
         return access.saveWarehousesOfDepositor(actor(request), depositorId, body.warehouseIds());
+    }
+
+    /* ---- настройки поклажедателя ---- */
+
+    /**
+     * Настройки, которые действуют на всех пользователей клиента.
+     * Прежде «Показать раздел перемещения» стояло у каждого человека
+     * отдельно; с V35 это настройка клиента.
+     */
+    @GetMapping("/depositors/{depositorId}/settings")
+    public Map<String, Object> settingsOfDepositor(@PathVariable String depositorId,
+                                                   HttpServletRequest request) {
+        return settings.settings(actor(request), depositorId);
+    }
+
+    @PutMapping("/depositors/{depositorId}/settings")
+    public Map<String, Object> saveSettingsOfDepositor(
+            @PathVariable String depositorId,
+            @RequestBody DepositorSettingsService.Settings body,
+            HttpServletRequest request) {
+        return settings.save(actor(request), depositorId, body);
     }
 
     private PortalUser actor(HttpServletRequest request) {

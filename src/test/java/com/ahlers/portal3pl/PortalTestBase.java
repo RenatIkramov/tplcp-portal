@@ -140,6 +140,17 @@ public abstract class PortalTestBase {
                         .single());
     }
 
+    /** Наименование организации поклажедателя — той же функцией доступов. */
+    protected String depositorOrgName(String login, String code) {
+        return new TransactionTemplate(txManager).execute(tx ->
+                jdbc.sql("SELECT org_name FROM dbo.depositors_for_user(:login::text)"
+                                + " WHERE code = :code")
+                        .param("login", login)
+                        .param("code", code)
+                        .query(String.class)
+                        .single());
+    }
+
     protected void signIn() {
         signInAs(USER, DEPOSITOR);
     }
@@ -154,6 +165,23 @@ public abstract class PortalTestBase {
         ResponseStatusException e = assertThrows(ResponseStatusException.class, action::run);
         assertEquals(httpStatus, e.getStatusCode().value(),
                 "ожидался код " + httpStatus + ", получено: " + e.getReason());
+    }
+
+    /**
+     * Задаёт пользователю язык.
+     *
+     * <p>Вызывать обязательно перед любой проверкой подписи — колонки,
+     * поля, сообщения. Пока язык у пользователя не выбран, действует язык
+     * портала, а он английский: проверка ждала бы «Коммерческий код»,
+     * а получила бы «Commercial code». На этом мы уже дважды спотыкались.
+     */
+    protected void localeOf(PortalUser user, String code) {
+        new TransactionTemplate(txManager).executeWithoutResult(tx ->
+                jdbc.sql("SELECT dbo.user_set_locale(:id::uuid, :code::text)")
+                        .param("id", user.userId())
+                        .param("code", code)
+                        .query()
+                        .listOfRows());
     }
 
     /**

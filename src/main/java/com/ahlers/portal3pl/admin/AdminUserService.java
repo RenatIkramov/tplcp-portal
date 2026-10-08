@@ -40,7 +40,7 @@ public class AdminUserService {
     /** Карточка пользователя: блокировка и галочки видимости разделов (§6.3). */
     public record Settings(
             Boolean isActive,
-            Boolean hideTransfersTab, Boolean hideBillingTab, Boolean hideServicesTab,
+            Boolean hideBillingTab, Boolean hideServicesTab,
             Boolean canCreateReceipts, Boolean canCreateOrders, Boolean canCreateTransfers,
             Boolean canUploadSkuExcel, Boolean canUploadPackagingExcel,
             Boolean canEditTransport) {
@@ -61,13 +61,12 @@ public class AdminUserService {
 
         jdbc.sql("""
                         SELECT dbo.admin_save_user(:id::uuid, :active,
-                               :hideTransfers, :hideBilling, :hideServices,
+                               :hideBilling, :hideServices,
                                :createReceipts, :createOrders, :createTransfers,
                                :uploadSku, :uploadPackaging, :editTransport)
                         """)
                 .param("id", userId)
                 .param("active", orDefault(s.isActive(), true))
-                .param("hideTransfers", orDefault(s.hideTransfersTab(), false))
                 .param("hideBilling", orDefault(s.hideBillingTab(), false))
                 .param("hideServices", orDefault(s.hideServicesTab(), false))
                 .param("createReceipts", orDefault(s.canCreateReceipts(), true))
