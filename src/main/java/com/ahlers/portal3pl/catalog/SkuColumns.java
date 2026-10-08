@@ -73,7 +73,12 @@ public final class SkuColumns {
             Map.entry("custom_attr2", "varchar"),
             Map.entry("custom_attr3", "varchar"),
             Map.entry("custom_attr4", "varchar"),
-            Map.entry("custom_attr5", "varchar"));
+            Map.entry("custom_attr5", "varchar"),
+            Map.entry("custom_attr6", "varchar"),
+            Map.entry("custom_attr7", "varchar"),
+            Map.entry("custom_attr8", "varchar"),
+            Map.entry("custom_attr9", "varchar"),
+            Map.entry("custom_attr10", "varchar"));
 
     /** Колонки упаковки. */
     public static final Map<String, String> PACKAGING = Map.of(

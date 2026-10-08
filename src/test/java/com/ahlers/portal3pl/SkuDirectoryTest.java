@@ -99,6 +99,27 @@ class SkuDirectoryTest extends PortalTestBase {
     }
 
     @Test
+    void allTenCustomAttributesAreSaved() {
+        // В базе и в карточке доп. параметров десять. Правимых полей
+        // было пять, и 6–10 выглядели правимыми, а молча не сохранялись:
+        // лишние ключи отбрасываются фильтром допустимых колонок.
+        signIn();
+        String id = (String) sku.createSku(Map.of(
+                "code", PREFIX + "ATTR", "name", "Десять параметров", "uom_id", 1)).get("skuId");
+
+        Map<String, Object> values = new java.util.HashMap<>();
+        for (int i = 1; i <= 10; i++) {
+            values.put("custom_attr" + i, "значение " + i);
+        }
+        Map<String, Object> card = sku.updateSku(id, values);
+
+        for (int i = 1; i <= 10; i++) {
+            assertEquals("значение " + i, card.get("customAttr" + i),
+                    "доп. параметр " + i + " должен сохраняться");
+        }
+    }
+
+    @Test
     void archivedItemLeavesWorkingList() {
         signIn();
         String id = (String) sku.createSku(Map.of(

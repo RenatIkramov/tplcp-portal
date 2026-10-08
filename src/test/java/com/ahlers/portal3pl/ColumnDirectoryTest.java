@@ -83,7 +83,8 @@ class ColumnDirectoryTest extends PortalTestBase {
         int total = tables.stream()
                 .mapToInt(t -> ((Number) t.get("columnCount")).intValue())
                 .sum();
-        assertEquals(204, total, "колонок всего 204 — столько же, сколько ключей подписей");
+        assertEquals(257, total,
+                "колонок столько же, сколько в прототипе: 204 из V29 плюс 53 из V34");
     }
 
     @Test
@@ -93,6 +94,33 @@ class ColumnDirectoryTest extends PortalTestBase {
         List<Map<String, Object>> layout = columns.layout(user, TABLE);
         assertEquals(33, layout.size(), "в выдаче все колонки — и скрытые тоже, для окна выбора");
         assertEquals(14, shown(layout).size(), "по умолчанию показываются четырнадцать");
+    }
+
+    @Test
+    void customFieldsAreOfferedButHidden() {
+        // §8.1.2: доп. поля открываются именно в окне «⚙ Колонки».
+        // При засеве каталога (V29) они туда не попали, потому что
+        // прототип создаёт их выражением, а не литералом, — и исчезли
+        // с экрана совсем. Закрыто в V34.
+        signIn();
+        PortalUser user = authService.authenticate(USER, USER_PASSWORD);
+        // подпись проверяется ниже, поэтому язык задаём явно: без этого
+        // действует портальный, а он английский (см. labelOf)
+        localeOf(user, "ru");
+        List<Map<String, Object>> sku = columns.layout(user, "sku");
+        assertEquals(62, sku.size(), "у товара 62 колонки, включая десять доп. параметров");
+        assertEquals(10, sku.stream()
+                .filter(r -> String.valueOf(r.get("columnId")).startsWith("customAttr"))
+                .count());
+        assertTrue(sku.stream()
+                        .filter(r -> String.valueOf(r.get("columnId")).startsWith("customAttr"))
+                        .noneMatch(r -> Boolean.TRUE.equals(r.get("isVisible"))),
+                "по умолчанию они скрыты: десять лишних колонок испортили бы таблицу всем");
+        assertEquals("Доп. параметр 1",
+                labelOf(sku, "customAttr1"));
+
+        assertEquals(15, columns.layout(user, "receiptLineDetail").size(),
+                "в деталях строки поступления 5 колонок плюс десять доп. полей");
     }
 
     @Test
@@ -264,6 +292,14 @@ class ColumnDirectoryTest extends PortalTestBase {
                         .listOfRows());
     }
 
+    /**
+     * Подпись колонки из раскладки.
+     * <p>
+     * Прежде чем сверять её с русским текстом, задайте язык через
+     * {@link #localeOf}: уборка после теста сбрасывает язык пользователя,
+     * и по умолчанию действует язык портала — английский. На этом уже
+     * дважды спотыкались.
+     */
     private static String labelOf(List<Map<String, Object>> layout, String columnId) {
         return layout.stream()
                 .filter(r -> columnId.equals(r.get("columnId")))
