@@ -9,11 +9,31 @@ B2B self-service портал 3PL-оператора. Бэкенд на Spring B
 |---|---|
 | `src/main/java/com/ahlers/portal3pl/` | код приложения |
 | `src/main/resources/application.yml` | подключение к базе, dev-режим |
-| `src/main/resources/static/index.html` | портал (демо, подключённое к API) |
+| `src/main/resources/static/` | фронтенд: `index.html`, `css/`, `js/` |
 | `src/test/java/com/ahlers/portal3pl/` | тесты |
-| `V12…V16*.sql` | миграции базы (накатываются вручную) |
+| `src/main/resources/db/migration/` | миграции базы (Flyway) |
 | `requests.http` | примеры всех запросов к API |
-| `patch_demo.py` | накладывает подключение к API на исходный демо-файл |
+| `tools/` | два инструмента и архив, см. `tools/README.md` |
+
+### Фронтенд
+
+Обычные файлы, которые правятся руками. Сборки нет — её выбросили
+вместе со сборщиком `patch_demo.py` (лежит в `tools/attic/`).
+
+| Путь | Что это |
+|---|---|
+| `static/index.html` | разметка всех экранов, ~1 600 строк |
+| `static/css/portal.css` | оформление прототипа |
+| `static/js/i18n-fallback.js` | `T()`, `TRU()` и запасные русские подписи |
+| `static/js/prototype.js` | собственный код демо |
+| `static/js/portal/*.js` | наш код, по файлу на раздел |
+
+Скрипты подключены **обычными** `<script src>`, не модулями, и это
+не случайность: код прототипа держит состояние в лексических
+глобальных переменных (`const tableColumnState = …` на верхнем
+уровне), а у ES-модулей своя область видимости — переход на них
+сломал бы разом 635 обращений и 310 `onclick=` в разметке.
+Поэтому порядок подключения в `index.html` важен и менять его нельзя.
 
 Пакеты приложения:
 

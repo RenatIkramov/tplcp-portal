@@ -6,8 +6,8 @@ spring:
     # Подключаемся РОЛЬЮ ПРИЛОЖЕНИЯ portal_app, а не владельцем схемы.
     # Владелец обходит политики RLS — изоляция поклажедателей не сработает.
     url: jdbc:postgresql://localhost:5432/tplcp?currentSchema=dbo
-    username: portal_app
-    password: portal_app_dev
+    username: ${PORTAL_DB_USER:portal_app}
+    password: portal_app_dev #${PORTAL_DB_PASSWORD}
     hikari:
       maximum-pool-size: 10
 
@@ -35,8 +35,8 @@ spring:
     # Пароль здесь только для разработки; в эксплуатации задаётся
     # переменной окружения FLYWAY_DB_PASSWORD.
     url: jdbc:postgresql://localhost:5432/tplcp
-    user: postgres
-    password: ${FLYWAY_DB_PASSWORD:123}
+    user: ${FLYWAY_DB_USER:postgres}
+    password: 123 #${FLYWAY_DB_PASSWORD}
 
     # Схема до V20 накатана вручную. baseline говорит Flyway: «всё до
     # двадцатой версии уже есть», он заводит историю и начинает с V21.
