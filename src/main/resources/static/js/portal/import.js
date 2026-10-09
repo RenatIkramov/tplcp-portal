@@ -33,7 +33,7 @@
       if (v === null || v === undefined) return fallback;
       try { return JSON.parse(v); } catch (e){ return fallback; }
     };
-    const r = {
+    return {
       importId: response.importId,
       fileName: response.fileName,
       rowCount: response.rowCount || 0,
@@ -54,7 +54,6 @@
         issues: json(row.issuesJson, [])
       }))
     };
-    return r;
   }
 
   /* ================= Отбор строк ================= */
@@ -73,8 +72,7 @@
     if (state.showExisting) classes.push('existing');
     return rows.filter(r => {
       if (state.onlyErrors && r.isValid) return false;
-      if (classes.length && classes.indexOf(r.rowClass) < 0) return false;
-      return true;
+      return !classes.length || classes.indexOf(r.rowClass) >= 0;
     });
   }
 

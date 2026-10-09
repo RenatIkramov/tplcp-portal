@@ -25,7 +25,6 @@
     const view = document.getElementById('view-billing');
     if (!view || view.querySelector('#billingTabs')) return;
 
-    const node = id => document.getElementById(id);
     const kids = [...view.children];
     const ownerOf = {};
 

@@ -295,7 +295,7 @@
   };
 
   /** Дорисовываем карточку прототипа: кнопки в шапке и, в правке, поля ввода. */
-  function decorate(code){
+  function decorate(){
     const head = document.querySelector('#view-sku-detail .panel-head');
     if (head){
       let actions = head.querySelector('.actions');
@@ -648,7 +648,7 @@
     const origOpenSkuItem = window.openSkuItem;
     window.openSkuItem = function(code){
       origOpenSkuItem(code);
-      decorate(code);
+      decorate();
     };
     window.renderPackaging = renderPackagingFromApi;
 

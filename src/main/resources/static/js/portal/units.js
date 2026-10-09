@@ -181,8 +181,8 @@
   /* ================= Действия ================= */
 
   window.portalUnitField = function(el){
-    const v = el.value === '' ? null : el.value;
-    state.form.values[el.getAttribute('data-unit')] = v;
+    state.form.values[el.getAttribute('data-unit')] =
+        el.value === '' ? null : el.value;
   };
 
   window.portalUnitAdd = function(){

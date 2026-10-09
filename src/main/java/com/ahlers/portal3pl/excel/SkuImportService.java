@@ -892,11 +892,8 @@ public class SkuImportService {
                         """)
                 .param("imp", importId)
                 .param("class", creating ? "new" : "existing")
-                .query()
-                .listOfRows()
-                .stream()
-                .map(r -> ((Number) r.get("row_number")).intValue())
-                .toList();
+                .query(Integer.class)
+                .list();
     }
 
     /**

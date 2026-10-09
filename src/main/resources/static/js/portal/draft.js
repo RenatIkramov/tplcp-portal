@@ -45,7 +45,7 @@
     // Окно ввода строки ищет товар в массиве products — наполняем его
     // настоящей номенклатурой, чтобы поиск работал по данным базы.
     refs.skuByCode = {};
-    const list = sku.map(x => {
+    refs.skuList = sku.map(x => {
       refs.skuByCode[x.code] = x;
       return {
         skuId: x.skuId, code: x.code, name: x.name, unit: x.uomName || '',
@@ -58,7 +58,6 @@
                  customAttrs: Array.from({length:10}, () => '—')}
       };
     });
-    refs.skuList = list;
     fillProducts();
     refs.loaded = true;
     return refs;
