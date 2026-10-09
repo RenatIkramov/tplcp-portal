@@ -9,7 +9,9 @@
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   const say = m => { if (typeof notify === 'function') notify(m); };
 
-  const state = {locales: [], texts: {}, code: null, matrix: null};
+  // fromAccount — язык взят из учётной записи вошедшего, и портальный
+  // язык по умолчанию его больше не перебивает (см. install).
+  const state = {locales: [], texts: {}, code: null, matrix: null, fromAccount: false};
   PORTAL.i18n = state;
 
   async function api(method, url, body){
@@ -289,6 +291,21 @@
     }
   };
 
+  /**
+   * Выход из портала: язык возвращается к портальному.
+   *
+   * <p>Иначе форма входа осталась бы на языке ушедшего человека — на общем
+   * компьютере следующий увидел бы чужую настройку и решил, что портал
+   * так устроен.
+   */
+  PORTAL.resetLocale = () => {
+    state.fromAccount = false;
+    const initial = (state.locales.find(l => l.isDefault) || state.locales[0] || {}).code;
+    if (initial && initial !== state.code){
+      apply(initial).catch(() => {});
+    }
+  };
+
   /* ================= Ведение переводов ================= */
 
   // Ведение переводов — подвкладка администрирования, рядом с
@@ -439,14 +456,25 @@
     window.setLanguage = code => window.portalSetLanguage(code);
 
     buildSwitch().then(() => {
+      // Если человек успел войти, пока грузился список языков, язык его
+      // учётной записи уже применён — портальный по умолчанию его
+      // перебивать не должен. Иначе язык зависел бы от того, что пришло
+      // раньше, то есть от скорости сети.
+      if (state.fromAccount) return null;
       const initial = (state.locales.find(l => l.isDefault) || state.locales[0] || {}).code;
       return apply(initial);
     }).catch(() => {});
 
-    PORTAL.onLogin(() => {
+    // onSession, а не onLogin: язык и кнопка зависят от учётной записи,
+    // а не от выбранного поклажедателя. На onLogin администратор, которому
+    // доступны все клиенты, не получал ни того, ни другого до выбора.
+    PORTAL.onSession(() => {
       // язык из учётной записи: он мог отличаться от языка формы входа
-      if (PORTAL.session && PORTAL.session.locale && PORTAL.session.locale !== state.code){
-        apply(PORTAL.session.locale).catch(() => {});
+      if (PORTAL.session && PORTAL.session.locale){
+        state.fromAccount = true;
+        if (PORTAL.session.locale !== state.code){
+          apply(PORTAL.session.locale).catch(() => {});
+        }
       }
       if (['admin', 'developer'].includes(PORTAL.session && PORTAL.session.roleCode)){
         addAdminButton();

@@ -133,6 +133,8 @@
     sessionLost = false;
     const email = field('loginEmail');
     if (email) email.value = '';
+    // язык уходит вместе с человеком: форма входа — на языке портала
+    if (PORTAL.resetLocale) PORTAL.resetLocale();
     showLogin('');
   };
 
@@ -214,6 +216,12 @@
       window.portalOpenPasswordChange('forced');
       return;
     }
+
+    // Язык и кнопки по роли — до ветвления: они зависят от учётной записи,
+    // а не от выбранного клиента. Раньше это ехало вместе с данными
+    // в reloadAll, и администратор до выбора поклажедателя видел портал
+    // на языке формы входа (см. PORTAL.onSession).
+    PORTAL.reloadSession();
 
     // §6.4: если доступен не один поклажедатель и выбор не сделан — сначала выбор
     if (sess.needsDepositorChoice){

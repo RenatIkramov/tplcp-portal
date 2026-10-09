@@ -315,6 +315,8 @@
       return;
     }
     render();
+    PORTAL.setBack('adminUserEditBack', 'admin.button.back_to_depositor_access',
+        () => { showView('admin'); showAdminSub('depositor-access'); });
     showView('admin-user-edit');
   };
 

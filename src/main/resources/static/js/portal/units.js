@@ -39,7 +39,7 @@
     button.type = 'button';
     button.id = 'refSubBtnUnits';
     button.setAttribute('data-refsub', 'units');
-    button.textContent = T_('references.button.units');
+    PORTAL.label(button, 'references.button.units');
     button.onclick = () => showReferencesSub('units');
     // Рядом с упаковками: товар, его упаковки, его единицы измерения.
     const after = tabs.querySelector('[data-refsub="packaging"]');
@@ -50,10 +50,10 @@
     panel.className = 'admin-sub ref-sub';
     panel.id = 'ref-sub-units';
     panel.innerHTML = ''
-      + '<div class="panel-head"><h1>' + esc(T_('references.title.units')) + '</h1>'
+      + '<div class="panel-head"><h1>' + PORTAL.t('references.title.units') + '</h1>'
       + '<div class="actions" id="unitsActions"></div></div>'
       + '<div class="hint" style="margin:-6px 0 12px;">'
-      + esc(T_('references.hint.units')) + '</div>'
+      + PORTAL.t('references.hint.units') + '</div>'
       + '<div class="table-card"><table><thead><tr id="unitsHead"></tr></thead>'
       + '<tbody id="unitsBody"></tbody></table></div>';
     const near = document.getElementById('ref-sub-packaging');
@@ -113,49 +113,57 @@
     if (!body) return;
     const head = document.getElementById('unitsHead');
     if (head){
-      head.innerHTML = '<th>' + esc(T_('references.column.mkei_code')) + '</th>'
-        + '<th>' + esc(T_('references.column.unit_symbol')) + '</th>'
-        + '<th>' + T('references.column.name') + '</th><th class="num">' + T('partners.text.order') + '</th><th>' + T('portal.text.in_use') + '</th>'
+      head.innerHTML = '<th>' + PORTAL.t('references.column.mkei_code') + '</th>'
+        + '<th>' + PORTAL.t('references.column.unit_symbol') + '</th>'
+        + '<th>' + PORTAL.t('references.column.name') + '</th>'
+        + '<th class="num">' + PORTAL.t('partners.text.order') + '</th>'
+        + '<th>' + PORTAL.t('portal.text.in_use') + '</th>'
         + (state.canEdit ? '<th></th>' : '');
     }
 
     const row = r => {
       if (state.form && state.form.id === r.unitId){
-        return formRow(r.isActive ? T('portal.text.yes') : 'нет');
+        return formRow(r.isActive ? 'portal.text.yes' : 'portal.text.no');
       }
       return '<tr><td>' + esc(dash(r.mkeiCode)) + '</td>'
         + '<td><strong>' + esc(r.symbol) + '</strong></td>'
         + '<td>' + esc(r.name) + '</td>'
         + '<td class="num">' + esc(dash(r.sortOrder)) + '</td>'
-        + '<td>' + (r.isActive ? T('portal.text.yes') : '<span class="count">' + T('portal.text.disabled') + '</span>') + '</td>'
+        + '<td>' + (r.isActive ? PORTAL.t('portal.text.yes')
+            : '<span class="count">' + PORTAL.t('portal.text.disabled') + '</span>') + '</td>'
         + (state.canEdit ? '<td style="white-space:nowrap;">'
-            + button('portalUnitEdit', r.unitId, T('portal.text.edit2'))
-            + button('portalUnitToggle', r.unitId, r.isActive ? T('portal.text.disable') : T('portal.text.enable'))
-            + button('portalUnitDelete', r.unitId, T('common.button.delete'))
+            + button('portalUnitEdit', r.unitId, 'portal.text.edit2')
+            + button('portalUnitToggle', r.unitId,
+                r.isActive ? 'portal.text.disable' : 'portal.text.enable')
+            + button('portalUnitDelete', r.unitId, 'common.button.delete')
             + '</td>' : '')
         + '</tr>';
     };
 
     let html = state.rows.map(row).join('');
     if (state.form && state.form.id === null){
-      html += formRow(T('portal.text.yes'));
+      html += formRow('portal.text.yes');
     }
     body.innerHTML = html
-      || '<tr><td colspan="6" style="color:var(--muted);">' + T('partners.text.directory_is_empty') + '</td></tr>';
+      || '<tr><td colspan="6" style="color:var(--muted);">'
+         + PORTAL.t('partners.text.directory_is_empty') + '</td></tr>';
 
     const actions = document.getElementById('unitsActions');
     if (actions){
       actions.innerHTML = state.canEdit
-        ? '<button class="btn primary" type="button" id="unitsCreateBtn">' + T('admin.button.add') + '</button>'
+        ? '<button class="btn primary" type="button" id="unitsCreateBtn"'
+          + ' data-i18n="admin.button.add">' + T('admin.button.add') + '</button>'
         : '';
       const btn = document.getElementById('unitsCreateBtn');
       if (btn) btn.onclick = () => portalUnitAdd();
     }
   }
 
-  function button(fn, id, label){
-    return '<button class="btn ghost" type="button" onclick="' + fn + '(\'' + id + '\')">'
-      + esc(label) + '</button> ';
+  // Принимает КЛЮЧ текста, а не готовую подпись: иначе кнопка осталась бы
+  // на том языке, который был в момент отрисовки.
+  function button(fn, id, textKey){
+    return '<button class="btn ghost" type="button" data-i18n="' + textKey + '"'
+      + ' onclick="' + fn + '(\'' + id + '\')">' + esc(T(textKey)) + '</button> ';
   }
 
   // Длины те же, что у колонок базы: код МКЕИ — три знака,
@@ -163,7 +171,7 @@
   // не даёт набрать лишнее, чтобы отказ не приходил после «Сохранить».
   const MAX_LENGTH = {mkeiCode: 3, symbol: 10, name: 255};
 
-  function formRow(flag){
+  function formRow(flagKey){
     const v = state.form.values;
     const field = (col, num) => '<td><input class="kv-input" type="'
       + (num ? 'number' : 'text') + '" value="'
@@ -171,10 +179,12 @@
       + (MAX_LENGTH[col] ? ' maxlength="' + MAX_LENGTH[col] + '"' : '')
       + ' data-unit="' + col + '" oninput="portalUnitField(this)"></td>';
     return '<tr>' + field('mkeiCode') + field('symbol') + field('name')
-      + field('sortOrder', true) + '<td>' + esc(flag) + '</td>'
+      + field('sortOrder', true) + '<td>' + PORTAL.t(flagKey) + '</td>'
       + '<td style="white-space:nowrap;">'
-      + '<button class="btn primary" type="button" onclick="portalUnitSave()">' + T('portal.text.save') + '</button> '
-      + '<button class="btn ghost" type="button" onclick="portalUnitCancel()">' + T('common.button.cancel') + '</button>'
+      + '<button class="btn primary" type="button" data-i18n="portal.text.save"'
+      + ' onclick="portalUnitSave()">' + T('portal.text.save') + '</button> '
+      + '<button class="btn ghost" type="button" data-i18n="common.button.cancel"'
+      + ' onclick="portalUnitCancel()">' + T('common.button.cancel') + '</button>'
       + '</td></tr>';
   }
 

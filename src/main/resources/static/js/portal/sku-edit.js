@@ -566,9 +566,10 @@
     if (!filters || document.getElementById('skuShowArchived')) return;
     const box = document.createElement('div');
     box.className = 'fgroup';
-    box.innerHTML = '<label>' + T('sku.text.archive') + '</label><label style="font-size:13px; font-weight:500;">'
-      + '<input type="checkbox" id="skuShowArchived" onchange="portalSkuArchiveFilter()"/>'
-      + ' ' + T('portal.text.show_archived') + '</label>';
+    box.innerHTML = '<label>' + PORTAL.t('sku.text.archive')
+      + '</label><label style="font-size:13px; font-weight:500;">'
+      + '<input type="checkbox" id="skuShowArchived" onchange="portalSkuArchiveFilter()"/> '
+      + PORTAL.t('portal.text.show_archived') + '</label>';
     const spacer = filters.querySelector('.spacer');
     filters.insertBefore(box, spacer || null);
   }
@@ -638,7 +639,7 @@
     const btn = document.createElement('button');
     btn.id = 'skuCreateBtn';
     btn.className = 'btn primary';
-    btn.textContent = T('sku.button.create_item');
+    PORTAL.label(btn, 'sku.button.create_item');
     btn.onclick = () => window.portalSkuCreate();
     // первым в группе: создание — главное действие экрана, Excel рядом
     actions.insertBefore(btn, actions.firstChild);

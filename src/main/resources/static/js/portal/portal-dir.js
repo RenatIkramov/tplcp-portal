@@ -35,57 +35,57 @@
 
   const DIRS = {
     warehousesDir: {
-      title: T('sku.label.warehouse'), newTitle: T('portal.text.new_warehouse'),
+      titleKey: 'sku.label.warehouse', newTitleKey: 'portal.text.new_warehouse',
       list: '/api/admin/warehouse-directory', base: '/api/admin/warehouses',
       key: 'warehouseId', body: 'warehousesDirBody', count: 'warehousesDirCount',
       // идентификатор склада = его код в WMS, задаётся один раз при создании
-      idField: {col: 'warehouse_id', readCol: 'warehouseId', label: T('portal.label.wms_identifier')},
+      idField: {col: 'warehouse_id', readCol: 'warehouseId', labelKey: 'portal.label.wms_identifier'},
       fields: [
-        {col: 'code', label: T('references.column.code'), required: true},
-        {col: 'name', label: T('portal.label.warehouse_name'), required: true},
-        {col: 'address', label: T('portal.label.address')},
-        {col: 'responsible', label: T('portal.label.responsible_person')},
-        {col: 'phone', label: T('partners.label.phone')},
-        {col: 'email', label: T('common.column.email')}
+        {col: 'code', labelKey: 'references.column.code', required: true},
+        {col: 'name', labelKey: 'portal.label.warehouse_name', required: true},
+        {col: 'address', labelKey: 'portal.label.address'},
+        {col: 'responsible', labelKey: 'portal.label.responsible_person'},
+        {col: 'phone', labelKey: 'partners.label.phone'},
+        {col: 'email', labelKey: 'common.column.email'}
       ],
       columns: ['code', 'name', 'address', 'responsible', 'phone', 'email']
     },
     depositorsDir: {
-      title: T('admin.column.depositor'), newTitle: T('portal.text.new_depositor'),
+      titleKey: 'admin.column.depositor', newTitleKey: 'portal.text.new_depositor',
       list: '/api/admin/depositor-directory', base: '/api/admin/depositor-directory',
       key: 'depositorId', body: 'depositorsDirBody', count: 'depositorsDirCount',
       // поклажедателя портал принимает анкетой целиком, а не набором колонок
       asRecord: true,
       fields: [
-        {col: 'code', label: T('references.column.code'), required: true},
-        {col: 'orgName', label: T('portal.text.company_name'), required: true},
-        {col: 'bin', label: T('portal.text.company_bin')},
-        {col: 'legalAddress', label: T('portal.text.legal_address')},
-        {col: 'phone', label: T('partners.label.phone')},
-        {col: 'email', label: T('common.column.email')},
-        {col: 'contractNumber', label: T('portal.text.contract_number')},
-        {col: 'contractValidUntil', label: T('portal.label.contract_valid_until'), date: true}
+        {col: 'code', labelKey: 'references.column.code', required: true},
+        {col: 'orgName', labelKey: 'portal.text.company_name', required: true},
+        {col: 'bin', labelKey: 'portal.text.company_bin'},
+        {col: 'legalAddress', labelKey: 'portal.text.legal_address'},
+        {col: 'phone', labelKey: 'partners.label.phone'},
+        {col: 'email', labelKey: 'common.column.email'},
+        {col: 'contractNumber', labelKey: 'portal.text.contract_number'},
+        {col: 'contractValidUntil', labelKey: 'portal.label.contract_valid_until', date: true}
       ],
       columns: ['code', 'orgName', 'bin', 'legalAddress', 'phone', 'email',
                 'contractNumber', 'contractValidUntil']
     },
     operatorsDir: {
-      title: 'Организация оператора', newTitle: T('admin.title.new_organization'),
+      titleKey: 'admin.title.operator_organization', newTitleKey: 'admin.title.new_organization',
       list: '/api/admin/operator-directory', base: '/api/admin/operator-directory',
       key: 'operatorId', body: 'operatorsDirBody', count: 'operatorsDirCount',
       asRecord: true,
       fields: [
-        {col: 'code', label: T('admin.column.organization_code'), required: true},
-        {col: 'name', label: T('portal.text.company_name'), required: true},
-        {col: 'bin', label: T('portal.text.company_bin')},
-        {col: 'legalAddress', label: T('portal.text.legal_address')},
-        {col: 'bankName', label: T('admin.column.bank')},
-        {col: 'bankAccount', label: T('admin.column.bank_account')},
-        {col: 'phone', label: T('partners.label.phone')},
-        {col: 'email', label: T('common.column.email')},
+        {col: 'code', labelKey: 'admin.column.organization_code', required: true},
+        {col: 'name', labelKey: 'portal.text.company_name', required: true},
+        {col: 'bin', labelKey: 'portal.text.company_bin'},
+        {col: 'legalAddress', labelKey: 'portal.text.legal_address'},
+        {col: 'bankName', labelKey: 'admin.column.bank'},
+        {col: 'bankAccount', labelKey: 'admin.column.bank_account'},
+        {col: 'phone', labelKey: 'partners.label.phone'},
+        {col: 'email', labelKey: 'common.column.email'},
         // страницы портала — абзацы текста, им нужна не строка ввода
-        {col: 'aboutContent', label: T('admin.label.about_page'), long: true},
-        {col: 'contactsContent', label: T('admin.label.contacts_page'), long: true}
+        {col: 'aboutContent', labelKey: 'admin.label.about_page', long: true},
+        {col: 'contactsContent', labelKey: 'admin.label.contacts_page', long: true}
       ],
       columns: ['code', 'name', 'bin', 'bankName', 'bankAccount', 'phone', 'email']
     }
@@ -125,22 +125,22 @@
     const v = value(field);
     if (readOnly){
       if (field.long){
-        return '<div class="kv" style="grid-column:1/-1;"><label>' + esc(field.label)
+        return '<div class="kv" style="grid-column:1/-1;"><label>' + PORTAL.t(field.labelKey)
           + '</label><div style="white-space:pre-wrap;">' + esc(dash(v)) + '</div></div>';
       }
-      return '<div class="kv"><label>' + esc(field.label) + '</label><div>'
+      return '<div class="kv"><label>' + PORTAL.t(field.labelKey) + '</label><div>'
         + esc(field.date ? ruDate(v) : dash(v)) + '</div></div>';
     }
     // Содержимое страниц «О нас» и «Контакты» — это абзацы текста,
     // в одну строку ввода они не помещаются.
     if (field.long){
-      return '<div class="kv" style="grid-column:1/-1;"><label>' + esc(field.label)
+      return '<div class="kv" style="grid-column:1/-1;"><label>' + PORTAL.t(field.labelKey)
         + '</label><div><textarea class="kv-input" rows="6"'
         + ' style="width:100%; resize:vertical; font-family:inherit;"'
         + ' data-col="' + field.col + '" oninput="portalDirField(this)">'
         + esc(v === null || v === undefined ? '' : v) + '</textarea></div></div>';
     }
-    return '<div class="kv"><label>' + esc(field.label) + (field.required ? ' *' : '')
+    return '<div class="kv"><label>' + PORTAL.t(field.labelKey) + (field.required ? ' *' : '')
       + '</label><div style="min-width:320px;"><input class="kv-input" type="'
       + (field.date ? 'date' : 'text') + '" value="'
       + esc(v === null || v === undefined ? '' : (field.date ? String(v).slice(0, 10) : v))
@@ -153,8 +153,8 @@
     const editing = state.mode !== 'view';
     const archived = state.row && state.row.isActive === false;
     document.getElementById('portalDirTitle').innerHTML =
-        esc(state.mode === 'create' ? dir.newTitle
-            : (state.row && (state.row.name || state.row.orgName)) || dir.title)
+        esc(state.mode === 'create' ? T(dir.newTitleKey)
+            : (state.row && (state.row.name || state.row.orgName)) || T(dir.titleKey))
       + (archived ? ' <span class="count">' + T('partners.text.archived') + '</span>' : '');
 
     let actions = '';
@@ -355,7 +355,9 @@
 
   window.portalDirArchiveFilter = renderDir;
 
-  function decorateList(dirName, label){
+  // Принимает КЛЮЧ текста кнопки, а не готовую подпись: подпись,
+  // подставленная один раз, осталась бы на языке момента отрисовки.
+  function decorateList(dirName, labelKey){
     const head = document.querySelector('#ref-sub-' + dirName + ' .panel-head');
     if (!head || document.getElementById(dirName + 'CreateBtn')) return;
     let actions = head.querySelector('.actions');
@@ -367,9 +369,11 @@
     actions.insertAdjacentHTML('afterbegin',
         '<label style="font-size:13px; color:var(--muted); margin-right:12px;">'
       + '<input type="checkbox" id="' + dirName + 'ShowArchived"'
-      + ' onchange="portalDirArchiveFilter(\'' + dirName + '\')"/>' + ' ' + T('portal.text.show_archived') + '</label>'
+      + ' onchange="portalDirArchiveFilter(\'' + dirName + '\')"/> '
+      + PORTAL.t('portal.text.show_archived') + '</label>'
       + '<button class="btn primary" id="' + dirName + 'CreateBtn"'
-      + ' onclick="portalDirCreate(\'' + dirName + '\')">' + label + '</button>');
+      + ' data-i18n="' + labelKey + '"'
+      + ' onclick="portalDirCreate(\'' + dirName + '\')">' + esc(T(labelKey)) + '</button>');
   }
 
   /* ================= Типы заказов и документов ================= */
@@ -377,8 +381,8 @@
   // Это короткие перечисления, карточка им не нужна: правка идёт прямо
   // в строке списка — так быстрее и видно сразу все значения.
   const ENUMS = {
-    orderTypes: {path: 'order-types', body: 'orderTypesBody', title: T('portal.title.order_type')},
-    docTypes: {path: 'receipt-doc-types', body: 'docTypesBody', title: T('portal.title.document_type')}
+    orderTypes: {path: 'order-types', body: 'orderTypesBody', titleKey: 'portal.title.order_type'},
+    docTypes: {path: 'receipt-doc-types', body: 'docTypesBody', titleKey: 'portal.title.document_type'}
   };
   const enumState = {rows: {}, form: null};
   PORTAL.portalEnums = enumState;
@@ -449,8 +453,9 @@
           panel.appendChild(actions);
         }
         actions.insertAdjacentHTML('afterbegin',
-            '<button class="btn primary" id="' + name + 'CreateBtn" onclick="portalEnumAdd(\''
-            + name + '\')">' + T('admin.button.add') + '</button>');
+            '<button class="btn primary" id="' + name + 'CreateBtn"'
+            + ' data-i18n="admin.button.add" onclick="portalEnumAdd(\''
+            + name + '\')">' + esc(T('admin.button.add')) + '</button>');
       }
     }
   }
@@ -592,8 +597,8 @@
       if (!isAdmin()) return;
       ensureView();
       if (mayEdit()){
-        decorateList('warehousesDir', T('portal.button.create_warehouse'));
-        decorateList('depositorsDir', T('portal.button.create_depositor'));
+        decorateList('warehousesDir', 'portal.button.create_warehouse');
+        decorateList('depositorsDir', 'portal.button.create_depositor');
       }
       ensureOperatorSub();
       reload('warehousesDir').catch(() => {});

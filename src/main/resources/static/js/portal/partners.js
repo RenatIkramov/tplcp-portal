@@ -26,27 +26,36 @@
 
   /* Два справочника устроены одинаково, различия собраны здесь —
      как и на сервере (PartnerKind). */
+  /*
+     Здесь лежат КЛЮЧИ текстов, а не сами тексты. Это не придирка к стилю:
+     константы уровня модуля вычисляются один раз — когда браузер читает
+     файл, то есть до входа и до того, как применится язык учётной записи.
+     Подписи, посчитанные в этот момент, оставались на языке портала
+     по умолчанию (английском) навсегда, какой бы язык человек потом
+     ни выбрал. Отсюда и английские подписи в карточке поставщика
+     посреди русского портала.
+  */
   const KINDS = {
     suppliers: {
-      path: 'suppliers', key: 'supplierId', title: T('server.message.supplier'),
-      newTitle: T('partners.text.new_supplier'), body: 'suppliersBody', count: 'suppliersCount',
+      path: 'suppliers', key: 'supplierId', titleKey: 'server.message.supplier',
+      newTitleKey: 'partners.text.new_supplier', body: 'suppliersBody', count: 'suppliersCount',
       columns: 7, addresses: false
     },
     consignees: {
-      path: 'consignees', key: 'consigneeId', title: T('partners.title.consignee'),
-      newTitle: T('partners.text.new_consignee'), body: 'consigneesBody', count: 'consigneesCount',
+      path: 'consignees', key: 'consigneeId', titleKey: 'partners.title.consignee',
+      newTitleKey: 'partners.text.new_consignee', body: 'consigneesBody', count: 'consigneesCount',
       columns: 8, addresses: true
     }
   };
 
   const FIELDS = [
-    {col: 'code', label: T('references.column.code'), required: true},
-    {col: 'name', label: T('references.column.name'), required: true},
-    {col: 'bin', label: T('partners.label.bin')},
-    {col: 'legal_address', label: T('portal.text.legal_address')},
-    {col: 'contact_name', label: T('references.column.contact_person')},
-    {col: 'contact_phone', label: T('partners.label.phone')},
-    {col: 'contact_email', label: T('common.column.email')}
+    {col: 'code', labelKey: 'references.column.code', required: true},
+    {col: 'name', labelKey: 'references.column.name', required: true},
+    {col: 'bin', labelKey: 'partners.label.bin'},
+    {col: 'legal_address', labelKey: 'portal.text.legal_address'},
+    {col: 'contact_name', labelKey: 'references.column.contact_person'},
+    {col: 'contact_phone', labelKey: 'partners.label.phone'},
+    {col: 'contact_email', labelKey: 'common.column.email'}
   ];
 
   const camel = col => col.replace(/_([a-z])/g, (m, c) => c.toUpperCase());
@@ -93,12 +102,13 @@
         ? '<input class="kv-input" type="text" value="' + esc(v === null || v === undefined ? '' : v)
           + '" data-col="' + f.col + '" oninput="portalPartnerField(this)"/>'
         : esc(dash(v));
-      return '<div class="kv"><label>' + esc(f.label) + (f.required && editing ? ' *' : '')
+      return '<div class="kv"><label>' + PORTAL.t(f.labelKey)
+        + (f.required && editing ? ' *' : '')
         + '</label><div' + (editing ? ' style="min-width:320px;"' : '') + '>' + body + '</div></div>';
     }).join('');
     const hint = editing
       ? '<div style="color:var(--muted); font-size:12px; margin-top:12px;">'
-        + 'Поля со звёздочкой обязательны.</div>'
+        + PORTAL.t('common.hint.required_fields_marked') + '</div>'
       : '';
     return '<div class="kv-grid">' + rows + '</div>' + hint;
   }
@@ -106,7 +116,7 @@
   function addressesHtml(){
     if (!state.id){
       return '<div style="color:var(--muted); font-size:13px;">'
-        + 'Сначала сохраните карточку — адреса задаются уже для грузополучателя</div>';
+        + PORTAL.t('partners.hint.save_card_before_addresses') + '</div>';
     }
     const canEdit = mayEdit() && state.mode === 'view';
     const rows = state.addresses;
@@ -154,34 +164,43 @@
     state.addressForm.values[el.getAttribute('data-addr')] = el.value === '' ? null : el.value;
   };
 
+  /** Кнопка с подписью, которая переживёт смену языка. */
+  function btn(cls, call, textKey){
+    return '<button class="btn ' + cls + '" data-i18n="' + textKey + '"'
+      + ' onclick="' + call + '">' + esc(T(textKey)) + '</button>';
+  }
+
   function actionsHtml(){
     if (state.mode !== 'view'){
-      return '<button class="btn primary" onclick="portalPartnerSave()">' + T('portal.text.save') + '</button>'
-        + '<button class="btn ghost" onclick="portalPartnerCancel()">' + T('common.button.cancel') + '</button>';
+      return btn('primary', 'portalPartnerSave()', 'portal.text.save')
+        + btn('ghost', 'portalPartnerCancel()', 'common.button.cancel');
     }
     if (!mayEdit() || !state.id) return '';
     const archived = state.row && state.row.isActive === false;
-    return '<button class="btn primary" onclick="portalPartnerEdit()">' + T('sku.text.edit') + '</button>'
-      + '<button class="btn" onclick="portalPartnerArchive(' + (archived ? 'true' : 'false') + ')">'
-      + (archived ? T('sku.text.restore_from_archive') : T('portal.text.archive')) + '</button>'
-      + '<button class="btn ghost" onclick="portalPartnerDelete()">' + T('common.button.delete') + '</button>';
+    const archiveKey = archived ? 'sku.text.restore_from_archive' : 'portal.text.archive';
+    return btn('primary', 'portalPartnerEdit()', 'sku.text.edit')
+      + btn('', 'portalPartnerArchive(' + (archived ? 'true' : 'false') + ')', archiveKey)
+      + btn('ghost', 'portalPartnerDelete()', 'common.button.delete');
   }
 
   function render(){
     ensureView();
     const kind = KINDS[state.kind];
-    const name = state.mode === 'create' ? kind.newTitle : (state.row && state.row.name) || kind.title;
+    const name = state.mode === 'create' ? T(kind.newTitleKey)
+      : (state.row && state.row.name) || T(kind.titleKey);
     const archived = state.row && state.row.isActive === false;
     document.getElementById('partnerTitle').innerHTML =
         esc(name) + (archived ? ' <span class="count">' + T('partners.text.archived') + '</span>' : '');
     document.getElementById('partnerActions').innerHTML = actionsHtml();
 
-    const tabs = [{id: 'card', title: T('partners.title.card')}];
-    if (kind.addresses) tabs.push({id: 'addresses', title: T('partners.title.delivery_addresses')});
+    const tabs = [{id: 'card', titleKey: 'partners.title.card'}];
+    if (kind.addresses) tabs.push({id: 'addresses', titleKey: 'partners.title.delivery_addresses'});
     if (!tabs.some(t => t.id === state.tab)) state.tab = 'card';
     document.getElementById('partnerTabs').innerHTML = tabs.map(t =>
         '<button class="admin-subtab-btn ' + (t.id === state.tab ? 'active' : '') + '"'
-        + ' onclick="portalPartnerTab(\'' + t.id + '\')">' + t.title + '</button>').join('');
+        + ' data-i18n="' + t.titleKey + '"'
+        + ' onclick="portalPartnerTab(\'' + t.id + '\')">' + esc(T(t.titleKey))
+        + '</button>').join('');
 
     document.getElementById('partnerBody').innerHTML =
         state.tab === 'addresses' ? addressesHtml() : cardHtml();
@@ -419,13 +438,16 @@
       actions.className = 'actions';
       head.appendChild(actions);
     }
-    const label = kindName === 'suppliers' ? T('partners.button.create_supplier') : T('partners.button.create_consignee');
+    const labelKey = kindName === 'suppliers'
+      ? 'partners.button.create_supplier' : 'partners.button.create_consignee';
     actions.insertAdjacentHTML('afterbegin',
         '<label style="font-size:13px; color:var(--muted); margin-right:12px;">'
       + '<input type="checkbox" id="' + kindName + 'ShowArchived"'
-      + ' onchange="portalPartnerArchiveFilter(\'' + kindName + '\')"/>' + ' ' + T('portal.text.show_archived') + '</label>'
+      + ' onchange="portalPartnerArchiveFilter(\'' + kindName + '\')"/> '
+      + PORTAL.t('portal.text.show_archived') + '</label>'
       + '<button class="btn primary" id="' + kindName + 'CreateBtn"'
-      + ' onclick="portalPartnerCreate(\'' + kindName + '\')">' + label + '</button>');
+      + ' data-i18n="' + labelKey + '"'
+      + ' onclick="portalPartnerCreate(\'' + kindName + '\')">' + esc(T(labelKey)) + '</button>');
   }
 
   function install(){

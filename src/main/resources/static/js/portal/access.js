@@ -153,6 +153,9 @@
         if (typeof notify === 'function') notify('Не удалось сохранить: ' + e.message);
       }
     });
+    // возврат — в ту подвкладку, из которой открыли
+    PORTAL.setBack('adminUserEditBack', 'admin.button.back_to_manager_access',
+        () => { showView('admin'); showAdminSub('access'); });
     lockEditing();
     showView('admin-user-edit');
   };
@@ -211,6 +214,9 @@
         if (typeof notify === 'function') notify('Не удалось сохранить: ' + e.message);
       }
     });
+    // возврат — в ту подвкладку, из которой открыли
+    PORTAL.setBack('adminUserEditBack', 'admin.button.back_to_staff_access',
+        () => { showView('admin'); showAdminSub('staff-access'); });
     lockEditing();
     showView('admin-user-edit');
   };
@@ -274,6 +280,9 @@
         if (typeof notify === 'function') notify('Не удалось сохранить: ' + e.message);
       }
     });
+    // возврат — в ту подвкладку, из которой открыли
+    PORTAL.setBack('adminUserEditBack', 'admin.button.back_to_depositor_access',
+        () => { showView('admin'); showAdminSub('depositor-access'); });
     lockEditing();
     showView('admin-user-edit');
   };

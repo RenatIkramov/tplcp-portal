@@ -403,6 +403,9 @@
         if (b) b.style.display = 'none';
       });
     }
+    // карточку пользователя открывают из справочника пользователей
+    PORTAL.setBack('adminUserEditBack', 'admin.button.back_to_users',
+        () => { showTab('references'); showReferencesSub('users'); });
     showView('admin-user-edit');
   };
 
