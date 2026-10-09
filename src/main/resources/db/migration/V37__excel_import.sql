@@ -1,0 +1,320 @@
+-- V37__excel_import.sql
+-- Загрузка номенклатуры из Excel: разбор, проверка, экран результата.
+-- Шаг 2 из трёх (шаблон сделан, применение и журнал — следующим).
+--
+-- Почему результат разбора лежит в базе, а не в памяти приложения.
+-- Проверка и применение — два разных запроса, между ними человек смотрит
+-- на экран и думает. В памяти результат потерялся бы при перезапуске
+-- и не дал бы применить загрузку с другого компьютера. Плюс эти же
+-- записи нужны журналу (§8.5.6).
+--
+-- Состояние строки — это ДВА независимых признака, а не один список:
+--   row_class  — новая, существующая или неопознанная позиция;
+--   is_valid    — запишется строка или нет.
+-- Так устроен и экран: галочки «Только ошибки», «Новые»,
+-- «Существующие» фильтруют по этим двум признакам независимо, и новая
+-- позиция с незаполненным обязательным полем — это одновременно
+-- «новая» и «с ошибкой».
+--
+-- «Ошибка» значит «строка не будет записана», по любой причине:
+-- не заполнено обязательное поле, не найдено справочное значение,
+-- заполненное поле в портале отличается от файла, либо строка
+-- не меняет ни одного поля. Причина видна в excel_import_issue.
+SET search_path = dbo;
+
+-- =====================================================================
+-- 1. Загрузка
+-- =====================================================================
+CREATE TABLE IF NOT EXISTS excel_import (
+  import_id       uuid         PRIMARY KEY DEFAULT gen_random_uuid(),
+  depositor_id    uuid         NOT NULL REFERENCES depositor (depositor_id),
+  user_id         uuid         NOT NULL REFERENCES app_user (user_id),
+  kind            varchar(20)  NOT NULL,          -- пока только 'sku'
+  file_name       varchar(255) NOT NULL,
+  file_size       integer,
+  row_count       integer      NOT NULL DEFAULT 0,
+  to_create       integer      NOT NULL DEFAULT 0,
+  to_update       integer      NOT NULL DEFAULT 0,
+  error_count     integer      NOT NULL DEFAULT 0,
+  columns_used    jsonb        NOT NULL DEFAULT '[]'::jsonb,
+  columns_skipped jsonb        NOT NULL DEFAULT '[]'::jsonb,
+  status          varchar(20)  NOT NULL DEFAULT 'checked',
+  started_at      timestamptz  NOT NULL DEFAULT now(),
+  created_at      timestamptz,                    -- когда применили создание
+  updated_at      timestamptz                     -- когда применили обновление
+);
+COMMENT ON TABLE excel_import IS
+  'Попытка загрузки из Excel: сводка разбора. Строка на попытку, включая отменённые';
+COMMENT ON COLUMN excel_import.columns_used IS
+  'Колонки файла в порядке файла: [{"header":"...","columnId":"code"}]';
+COMMENT ON COLUMN excel_import.columns_skipped IS
+  'Заголовки, которые не удалось сопоставить ни с одним полем';
+COMMENT ON COLUMN excel_import.status IS
+  'checked | applied | cancelled';
+
+CREATE INDEX IF NOT EXISTS excel_import_depositor_ix
+  ON excel_import (depositor_id, started_at DESC);
+
+-- =====================================================================
+-- 2. Разобранные строки
+-- =====================================================================
+CREATE TABLE IF NOT EXISTS excel_import_row (
+  import_id    uuid        NOT NULL REFERENCES excel_import (import_id) ON DELETE CASCADE,
+  row_number   integer     NOT NULL,              -- номер строки, как его видит Excel
+  depositor_id uuid        NOT NULL REFERENCES depositor (depositor_id),
+  row_class    varchar(12) NOT NULL,              -- new | existing | unknown
+  is_valid     boolean     NOT NULL,
+  applied      boolean     NOT NULL DEFAULT false,
+  row_key      varchar(100),                      -- коммерческий код
+  sku_id       uuid,                              -- найденная позиция, если есть
+  cell_values  jsonb       NOT NULL DEFAULT '{}'::jsonb,
+  fill_fields  jsonb       NOT NULL DEFAULT '[]'::jsonb,
+  PRIMARY KEY (import_id, row_number)
+);
+COMMENT ON TABLE excel_import_row IS
+  'Строка файла после разбора: класс, годность и приведённые значения';
+COMMENT ON COLUMN excel_import_row.row_class IS
+  'new — позиции с таким кодом нет; existing — есть; unknown — код пуст или нечитаем, позицию не определить';
+COMMENT ON COLUMN excel_import_row.is_valid IS
+  'Запишется ли строка. false — причина в excel_import_issue';
+COMMENT ON COLUMN excel_import_row.fill_fields IS
+  'Поля, которые заполнятся у существующей позиции (они были пусты)';
+COMMENT ON COLUMN excel_import_row.cell_values IS
+  'Приведённые значения: поле базы -> значение. JSONB, потому что набор колонок'
+  ' в каждом файле свой, а читается и пишется это целиком (§12)';
+
+-- =====================================================================
+-- 3. Замечания по строке
+-- =====================================================================
+-- Строка на каждое замечание: у одной строки файла их бывает несколько,
+-- а человеку нужны все сразу — иначе он правит файл в десять заходов.
+CREATE TABLE IF NOT EXISTS excel_import_issue (
+  id           bigint      GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+  import_id    uuid        NOT NULL REFERENCES excel_import (import_id) ON DELETE CASCADE,
+  row_number   integer     NOT NULL,
+  depositor_id uuid        NOT NULL REFERENCES depositor (depositor_id),
+  column_id    varchar(40),                       -- в какой колонке, если применимо
+  kind         varchar(16) NOT NULL,              -- required | value | conflict | nothing | duplicate | archived
+  message      text        NOT NULL,
+  file_value   text,
+  portal_value text
+);
+COMMENT ON TABLE excel_import_issue IS
+  'Почему строка не запишется. column_id пуст, если замечание к строке целиком';
+COMMENT ON COLUMN excel_import_issue.kind IS
+  'required — не заполнено обязательное; value — значение не разобрано или не найдено;'
+  ' conflict — заполненное поле портала отличается; nothing — строка ничего не меняет;'
+  ' duplicate — код повторяется в файле; archived — позиция в архиве';
+
+CREATE INDEX IF NOT EXISTS excel_import_issue_row_ix
+  ON excel_import_issue (import_id, row_number);
+
+-- =====================================================================
+-- 4. Изоляция по поклажедателю
+-- =====================================================================
+-- depositor_id продублирован в дочерних таблицах намеренно: политика RLS
+-- должна проверяться по самой строке, без обращения к родителю. Иначе
+-- политика пустила бы чужую строку, если бы к родителю не было доступа.
+DO $$
+DECLARE t text;
+BEGIN
+  FOREACH t IN ARRAY ARRAY['excel_import', 'excel_import_row', 'excel_import_issue'] LOOP
+    EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
+    EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', t);
+    IF NOT EXISTS (SELECT 1 FROM pg_policies
+                    WHERE schemaname = 'dbo' AND tablename = t
+                      AND policyname = 'depositor_isolation') THEN
+      EXECUTE format($p$
+        CREATE POLICY depositor_isolation ON %I
+          USING (depositor_id = current_depositor_id())
+          WITH CHECK (depositor_id = current_depositor_id())
+      $p$, t);
+    END IF;
+  END LOOP;
+END $$;
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON excel_import       TO portal_app;
+GRANT SELECT, INSERT, UPDATE, DELETE ON excel_import_row   TO portal_app;
+GRANT SELECT, INSERT, UPDATE, DELETE ON excel_import_issue TO portal_app;
+GRANT USAGE, SELECT ON SEQUENCE excel_import_issue_id_seq  TO portal_app;
+
+-- =====================================================================
+-- 5. Чтение результата для экрана
+-- =====================================================================
+-- Одним запросом: строка плюс её замечания собранным массивом. Иначе
+-- экран делал бы запрос на строку, а строк до ста.
+CREATE OR REPLACE VIEW v_excel_import_rows AS
+SELECT
+  r.import_id,
+  r.row_number,
+  r.row_class,
+  r.is_valid,
+  r.applied,
+  r.row_key,
+  r.sku_id::text    AS sku_id,
+  r.cell_values,
+  r.fill_fields,
+  COALESCE((
+    SELECT jsonb_agg(jsonb_build_object(
+             'columnId',    i.column_id,
+             'kind',        i.kind,
+             'message',     i.message,
+             'fileValue',   i.file_value,
+             'portalValue', i.portal_value)
+           ORDER BY i.id)
+    FROM excel_import_issue i
+    WHERE i.import_id = r.import_id AND i.row_number = r.row_number
+  ), '[]'::jsonb) AS issues
+FROM excel_import_row r
+ORDER BY r.row_number;
+
+ALTER VIEW v_excel_import_rows SET (security_invoker = true);
+GRANT SELECT ON v_excel_import_rows TO portal_app;
+
+-- =====================================================================
+-- 6. Сводка: пересчёт счётчиков по разобранным строкам
+-- =====================================================================
+-- Счётчики держим в excel_import, но считает их база по строкам, а не
+-- приложение по своим переменным: иначе сводка и таблица могли бы
+-- разойтись, и человек увидел бы «Создать 61» над списком из 60 строк.
+CREATE OR REPLACE FUNCTION excel_import_recount(p_import_id uuid)
+RETURNS void
+LANGUAGE sql
+SET search_path = dbo
+AS $$
+  UPDATE excel_import i
+     SET row_count   = c.total,
+         to_create   = c.creatable,
+         to_update   = c.updatable,
+         error_count = c.errors
+    FROM (
+      SELECT count(*)::int AS total,
+             count(*) FILTER (WHERE row_class = 'new'
+                                AND is_valid AND NOT applied)::int AS creatable,
+             count(*) FILTER (WHERE row_class = 'existing'
+                                AND is_valid AND NOT applied)::int AS updatable,
+             count(*) FILTER (WHERE NOT is_valid)::int             AS errors
+      FROM excel_import_row
+      WHERE import_id = p_import_id
+    ) c
+   WHERE i.import_id = p_import_id;
+$$;
+GRANT EXECUTE ON FUNCTION excel_import_recount(uuid) TO portal_app;
+
+-- =====================================================================
+-- 7. Тексты экрана
+-- =====================================================================
+INSERT INTO ui_text_key (text_key, scope, element, owner, note) VALUES
+  ('sku.title.import_check',          'sku', 'title',   NULL, 'экран проверки загрузки'),
+  ('sku.tab.all_rows',                'sku', 'tab',     NULL, 'экран проверки загрузки'),
+  ('sku.tab.new_items',               'sku', 'tab',     NULL, 'экран проверки загрузки'),
+  ('sku.tab.existing_items',          'sku', 'tab',     NULL, 'экран проверки загрузки'),
+  ('sku.label.only_errors',           'sku', 'label',   NULL, 'галочка-фильтр'),
+  ('sku.label.show_new',              'sku', 'label',   NULL, 'галочка-фильтр'),
+  ('sku.label.show_existing',         'sku', 'label',   NULL, 'галочка-фильтр'),
+  ('sku.column.file_row',             'sku', 'column',  NULL, 'номер строки файла'),
+  ('sku.column.row_state',            'sku', 'column',  NULL, 'состояние строки'),
+  ('sku.text.state_create',           'sku', 'text',    NULL, 'состояние строки'),
+  ('sku.text.state_update',           'sku', 'text',    NULL, 'состояние строки'),
+  ('sku.text.state_error',            'sku', 'text',    NULL, 'состояние строки'),
+  ('sku.text.state_created',          'sku', 'text',    NULL, 'состояние строки после применения'),
+  ('sku.text.state_updated',          'sku', 'text',    NULL, 'состояние строки после применения'),
+  ('sku.text.count_create',           'sku', 'text',    NULL, 'сводка разбора'),
+  ('sku.text.count_update',           'sku', 'text',    NULL, 'сводка разбора'),
+  ('sku.text.count_errors',           'sku', 'text',    NULL, 'сводка разбора'),
+  ('sku.text.rows_in_file',           'sku', 'text',    NULL, 'сводка разбора'),
+  ('sku.text.columns_not_recognized', 'sku', 'text',    NULL, 'сводка разбора'),
+  ('sku.text.in_file',                'sku', 'text',    NULL, 'пара значений при расхождении'),
+  ('sku.text.in_portal',              'sku', 'text',    NULL, 'пара значений при расхождении'),
+  ('sku.text.will_fill',              'sku', 'text',    NULL, 'какие пустые поля заполнятся'),
+  ('sku.button.create_new_items',     'sku', 'button',  NULL, 'экран проверки загрузки'),
+  ('sku.button.update_existing_items','sku', 'button',  NULL, 'экран проверки загрузки'),
+  ('sku.button.back_to_items',        'sku', 'button',  NULL, 'экран проверки загрузки'),
+  ('sku.message.nothing_to_write',    'sku', 'message', NULL, 'нечего применять'),
+  ('sku.message.items_created',       'sku', 'message', NULL, 'итог применения'),
+  ('sku.message.items_updated',       'sku', 'message', NULL, 'итог применения')
+ON CONFLICT (text_key) DO UPDATE SET scope = excluded.scope,
+  element = excluded.element, note = excluded.note;
+
+INSERT INTO ui_text (text_key, locale_id, value)
+SELECT v.text_key, l.locale_id, v.value
+FROM (VALUES
+  ('sku.title.import_check',          'ru', 'Проверка загрузки'),
+  ('sku.title.import_check',          'en', 'Import check'),
+  ('sku.tab.all_rows',                'ru', 'Все строки'),
+  ('sku.tab.all_rows',                'en', 'All rows'),
+  ('sku.tab.new_items',               'ru', 'Новые позиции'),
+  ('sku.tab.new_items',               'en', 'New items'),
+  ('sku.tab.existing_items',          'ru', 'Существующие позиции'),
+  ('sku.tab.existing_items',          'en', 'Existing items'),
+  ('sku.label.only_errors',           'ru', 'Только ошибки'),
+  ('sku.label.only_errors',           'en', 'Errors only'),
+  ('sku.label.show_new',              'ru', 'Новые позиции'),
+  ('sku.label.show_new',              'en', 'New items'),
+  ('sku.label.show_existing',         'ru', 'Существующие позиции'),
+  ('sku.label.show_existing',         'en', 'Existing items'),
+  ('sku.column.file_row',             'ru', '№ строки'),
+  ('sku.column.file_row',             'en', 'Row'),
+  ('sku.column.row_state',            'ru', 'Состояние'),
+  ('sku.column.row_state',            'en', 'State'),
+  ('sku.text.state_create',           'ru', 'создать'),
+  ('sku.text.state_create',           'en', 'create'),
+  ('sku.text.state_update',           'ru', 'обновить'),
+  ('sku.text.state_update',           'en', 'update'),
+  ('sku.text.state_error',            'ru', 'ошибка'),
+  ('sku.text.state_error',            'en', 'error'),
+  ('sku.text.state_created',          'ru', 'создано'),
+  ('sku.text.state_created',          'en', 'created'),
+  ('sku.text.state_updated',          'ru', 'обновлено'),
+  ('sku.text.state_updated',          'en', 'updated'),
+  ('sku.text.count_create',           'ru', 'Создать'),
+  ('sku.text.count_create',           'en', 'To create'),
+  ('sku.text.count_update',           'ru', 'Обновить'),
+  ('sku.text.count_update',           'en', 'To update'),
+  ('sku.text.count_errors',           'ru', 'Ошибки'),
+  ('sku.text.count_errors',           'en', 'Errors'),
+  ('sku.text.rows_in_file',           'ru', 'строк в файле'),
+  ('sku.text.rows_in_file',           'en', 'rows in the file'),
+  ('sku.text.columns_not_recognized', 'ru', 'столбцов не распознано'),
+  ('sku.text.columns_not_recognized', 'en', 'columns not recognized'),
+  ('sku.text.in_file',                'ru', 'в файле'),
+  ('sku.text.in_file',                'en', 'in the file'),
+  ('sku.text.in_portal',              'ru', 'в портале'),
+  ('sku.text.in_portal',              'en', 'in the portal'),
+  ('sku.text.will_fill',              'ru', 'заполнятся пустые поля'),
+  ('sku.text.will_fill',              'en', 'empty fields to be filled'),
+  ('sku.button.create_new_items',     'ru', 'Создать новые позиции'),
+  ('sku.button.create_new_items',     'en', 'Create new items'),
+  ('sku.button.update_existing_items','ru', 'Обновить существующие позиции'),
+  ('sku.button.update_existing_items','en', 'Update existing items'),
+  ('sku.button.back_to_items',        'ru', '← Назад к товарам'),
+  ('sku.button.back_to_items',        'en', '← Back to items'),
+  ('sku.message.nothing_to_write',    'ru', 'Записывать нечего'),
+  ('sku.message.nothing_to_write',    'en', 'There is nothing to write'),
+  ('sku.message.items_created',       'ru', 'Создано позиций'),
+  ('sku.message.items_created',       'en', 'Items created'),
+  ('sku.message.items_updated',       'ru', 'Обновлено позиций'),
+  ('sku.message.items_updated',       'en', 'Items updated')
+) AS v(text_key, locale, value)
+JOIN dictionary_locale l ON l.code = v.locale
+ON CONFLICT (text_key, locale_id) DO UPDATE SET value = excluded.value;
+
+-- Запись появится следующим шагом; пока кнопки применения честно
+-- говорят, что загрузка ещё не выполняется. Молча ничего не делать —
+-- хуже: человек решит, что всё записалось.
+INSERT INTO ui_text_key (text_key, scope, element, owner, note) VALUES
+  ('sku.message.apply_not_ready', 'sku', 'message', NULL,
+   'применение загрузки ещё не сделано (шаг 3)')
+ON CONFLICT (text_key) DO UPDATE SET scope = excluded.scope,
+  element = excluded.element, note = excluded.note;
+
+INSERT INTO ui_text (text_key, locale_id, value)
+SELECT v.text_key, l.locale_id, v.value
+FROM (VALUES
+  ('sku.message.apply_not_ready', 'ru',
+   'Проверка готова, запись в справочник появится следующим шагом'),
+  ('sku.message.apply_not_ready', 'en',
+   'The check is ready; writing to the directory comes with the next step')
+) AS v(text_key, locale, value)
+JOIN dictionary_locale l ON l.code = v.locale
+ON CONFLICT (text_key, locale_id) DO UPDATE SET value = excluded.value;
