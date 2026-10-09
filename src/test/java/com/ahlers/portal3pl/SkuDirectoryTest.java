@@ -216,8 +216,32 @@ class SkuDirectoryTest extends PortalTestBase {
             assertFalse(dict.getOrDefault(kind, List.of()).isEmpty(),
                     "список «" + kind + "» не должен быть пустым");
         }
-        assertTrue(dict.containsKey("group"), "группы товара нужны выпадающему списку карточки");
-        assertTrue(dict.containsKey("type"), "типы товара нужны выпадающему списку карточки");
+        // Группа и вид товара с V38 — свободный текст, и это уже не
+        // справочник, а подсказка: встречающиеся у клиента значения.
+        // Ключи обязаны быть: карточка строит по ним datalist.
+        assertTrue(dict.containsKey("group"), "подсказка по группам товара нужна карточке");
+        assertTrue(dict.containsKey("type"), "подсказка по видам товара нужна карточке");
+    }
+
+    @Test
+    void itemGroupIsFreeTextAndSuggestedFromWhatIsUsed() {
+        signIn();
+        // Справочников групп и видов больше нет (V38): портал принимает
+        // любое название и предлагает его в следующий раз.
+        String id = (String) sku.createSku(Map.of(
+                "code", PREFIX + "011", "name", "С группой", "uom_id", 1,
+                "item_group", "Сырьё под навесом", "item_type", "Весовой")).get("skuId");
+
+        Map<String, Object> card = sku.card(id);
+        assertEquals("Сырьё под навесом", card.get("itemGroupName"));
+        assertEquals("Весовой", card.get("itemTypeName"));
+
+        assertTrue(sku.dictionaries().getOrDefault("group", List.of()).stream()
+                        .anyMatch(r -> "Сырьё под навесом".equals(r.get("name"))),
+                "использованное значение попадает в подсказку");
+
+        sku.updateSku(id, Map.of("item_group", "Сырьё в холоде"));
+        assertEquals("Сырьё в холоде", sku.card(id).get("itemGroupName"));
     }
 
     /* ---------------- Вспомогательное ---------------- */

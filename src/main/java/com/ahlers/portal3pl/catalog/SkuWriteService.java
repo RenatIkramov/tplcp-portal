@@ -333,15 +333,34 @@ public class SkuWriteService {
             out.computeIfAbsent(String.valueOf(row.get("kind")), k -> new ArrayList<>())
                     .add(Map.of("id", row.get("id"), "name", row.get("name")));
         }
-        // группы и типы товара заведены по поклажедателям — читаются под RLS
-        out.put("group", SqlRows.toCamelCase(jdbc.sql("""
-                        SELECT id::text AS id, name FROM dbo.product_group
-                        WHERE is_active ORDER BY sort_order NULLS LAST, name
-                        """).query().listOfRows()));
-        out.put("type", SqlRows.toCamelCase(jdbc.sql("""
-                        SELECT id::text AS id, name FROM dbo.product_type
-                        WHERE is_active ORDER BY sort_order NULLS LAST, name
-                        """).query().listOfRows()));
+        // Группа и тип товара перестали быть справочниками (V38) — это
+        // свободный текст. Но выпадающий список на экране остаётся
+        // полезным: он собирается из значений, которые у этого клиента
+        // уже встречаются. Человек не помнит, как написал группу
+        // в прошлый раз, а список ему это напомнит.
+        out.put("group", usedValues("item_group"));
+        out.put("type", usedValues("item_type"));
+        return out;
+    }
+
+    /**
+     * Значения текстового поля, которые у клиента уже встречаются.
+     *
+     * <p>Отдаются в том же виде, что справочные ({@code id} = {@code name}),
+     * чтобы экрану было всё равно, справочник перед ним или подсказка
+     * по собственным данным.
+     */
+    private List<Map<String, Object>> usedValues(String column) {
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (Map<String, Object> row : jdbc
+                .sql("SELECT DISTINCT " + column + " AS value FROM dbo.sku"
+                        + " WHERE " + column + " IS NOT NULL AND " + column + " <> ''"
+                        + " ORDER BY 1")
+                .query()
+                .listOfRows()) {
+            String value = String.valueOf(row.get("value"));
+            out.add(Map.of("id", value, "name", value));
+        }
         return out;
     }
 

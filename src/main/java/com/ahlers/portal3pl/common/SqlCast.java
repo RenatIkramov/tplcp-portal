@@ -20,7 +20,7 @@ public final class SqlCast {
     private static final Set<String> UUID_COLUMNS = Set.of(
             "sku_id", "supplier_id", "consignee_id", "delivery_point_id",
             "author_id", "created_by", "updated_by", "depositor_id", "doc_id",
-            "item_group_id", "item_type_id", "order_unit_id", "packaging_id");
+            "order_unit_id", "packaging_id");
 
     /** Небольшие числовые справочные ключи. */
     private static final Set<String> SMALLINT_COLUMNS = Set.of(

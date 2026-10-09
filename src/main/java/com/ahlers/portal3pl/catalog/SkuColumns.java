@@ -47,8 +47,10 @@ public final class SkuColumns {
         sku.put("item_full_name", "text");
         sku.put("barcode", "varchar");
         sku.put("uom_id", "smallint");
-        sku.put("item_group_id", "uuid");
-        sku.put("item_type_id", "uuid");
+        // Группа и тип товара — свободный текст (V38): справочники
+        // product_group и product_type удалены по решению заказчика.
+        sku.put("item_group", "varchar");
+        sku.put("item_type", "varchar");
         sku.put("has_packaging", "boolean");
 
         // физические свойства
