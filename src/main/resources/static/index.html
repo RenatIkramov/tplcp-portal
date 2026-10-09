@@ -140,12 +140,12 @@
 </div>
 </div>
 <div class="filters">
-<div class="fgroup"><label data-i18n="receipts.label.document_number">Номер документа</label><input id="receiptsSearchNo" onkeydown="if(event.key==='Enter') onReceiptsFilterChange()" data-i18n-placeholder="common.placeholder.eg_receipt_no" placeholder="напр. ПР-000123"/></div>
-<div class="fgroup"><label data-i18n="col.receipts.supplier">Поставщик</label><input id="receiptsSearchSupplier" onkeydown="if(event.key==='Enter') onReceiptsFilterChange()" data-i18n-placeholder="common.placeholder.eg_supplier" placeholder="ИП «Козлов»"/></div>
-<div class="fgroup"><label data-i18n="receipts.label.trip">Рейс</label><input id="receiptsSearchTrip" onkeydown="if(event.key==='Enter') onReceiptsFilterChange()" data-i18n-placeholder="common.placeholder.eg_receipt_wms_no" placeholder="напр. ПРБ-260701-01"/></div>
-<div class="fgroup"><label data-i18n="receipts.label.date_from">Дата с</label><input type="date" id="receiptsDateFrom"/></div>
-<div class="fgroup"><label data-i18n="receipts.label.date_to">Дата по</label><input type="date" id="receiptsDateTo"/></div>
-<div class="fgroup"><label data-i18n="col.receipts.status">Статус</label>
+<div class="fgroup"><label for="receiptsSearchNo" data-i18n="receipts.label.document_number">Номер документа</label><input id="receiptsSearchNo" onkeydown="if(event.key==='Enter') onReceiptsFilterChange()" data-i18n-placeholder="common.placeholder.eg_receipt_no" placeholder="напр. ПР-000123"/></div>
+<div class="fgroup"><label for="receiptsSearchSupplier" data-i18n="col.receipts.supplier">Поставщик</label><input id="receiptsSearchSupplier" onkeydown="if(event.key==='Enter') onReceiptsFilterChange()" data-i18n-placeholder="common.placeholder.eg_supplier" placeholder="ИП «Козлов»"/></div>
+<div class="fgroup"><label for="receiptsSearchTrip" data-i18n="receipts.label.trip">Рейс</label><input id="receiptsSearchTrip" onkeydown="if(event.key==='Enter') onReceiptsFilterChange()" data-i18n-placeholder="common.placeholder.eg_receipt_wms_no" placeholder="напр. ПРБ-260701-01"/></div>
+<div class="fgroup"><label for="receiptsDateFrom" data-i18n="receipts.label.date_from">Дата с</label><input type="date" id="receiptsDateFrom"/></div>
+<div class="fgroup"><label for="receiptsDateTo" data-i18n="receipts.label.date_to">Дата по</label><input type="date" id="receiptsDateTo"/></div>
+<div class="fgroup"><label for="receiptsFilterStatus" data-i18n="col.receipts.status">Статус</label>
 <select id="receiptsFilterStatus"><option data-i18n="receipts.option.all">Все</option><option data-i18n="receipts.option.draft">Черновик</option><option data-i18n="receipts.option.awaiting_receiving">Ожидает приёмки</option><option data-i18n="receipts.option.in_progress">В работе</option><option data-i18n="col.receiptComposition.accepted">Принято</option><option data-i18n="receipts.option.discrepancy">Расхождение</option></select>
 </div>
 <button data-i18n="receipts.button.search" class="btn primary" onclick="onReceiptsFilterChange()">Найти</button>
@@ -175,10 +175,10 @@
 </div>
 </div>
 <div class="filters">
-<div class="fgroup"><label data-i18n="transfers.label.document_number">Номер документа</label><input id="transfersSearchNo" onkeydown="if(event.key==='Enter') onTransfersFilterChange()" data-i18n-placeholder="common.placeholder.eg_transfer_no" placeholder="напр. ПМ-000001"/></div>
-<div class="fgroup"><label data-i18n="transfers.label.trip">Рейс</label><input id="transfersSearchTrip" onkeydown="if(event.key==='Enter') onTransfersFilterChange()" data-i18n-placeholder="common.placeholder.eg_transfer_wms_no" placeholder="напр. ПРМ-260701-01"/></div>
-<div class="fgroup"><label data-i18n="transfers.label.date_from">Дата с</label><input type="date" id="transfersDateFrom"/></div>
-<div class="fgroup"><label data-i18n="transfers.label.date_to">Дата по</label><input type="date" id="transfersDateTo"/></div>
+<div class="fgroup"><label for="transfersSearchNo" data-i18n="transfers.label.document_number">Номер документа</label><input id="transfersSearchNo" onkeydown="if(event.key==='Enter') onTransfersFilterChange()" data-i18n-placeholder="common.placeholder.eg_transfer_no" placeholder="напр. ПМ-000001"/></div>
+<div class="fgroup"><label for="transfersSearchTrip" data-i18n="transfers.label.trip">Рейс</label><input id="transfersSearchTrip" onkeydown="if(event.key==='Enter') onTransfersFilterChange()" data-i18n-placeholder="common.placeholder.eg_transfer_wms_no" placeholder="напр. ПРМ-260701-01"/></div>
+<div class="fgroup"><label for="transfersDateFrom" data-i18n="transfers.label.date_from">Дата с</label><input type="date" id="transfersDateFrom"/></div>
+<div class="fgroup"><label for="transfersDateTo" data-i18n="transfers.label.date_to">Дата по</label><input type="date" id="transfersDateTo"/></div>
 <button data-i18n="transfers.button.search" class="btn primary" onclick="onTransfersFilterChange()">Найти</button>
 <button data-i18n="transfers.button.clear_filters" class="btn ghost" onclick="clearTransfersFilters()">Очистить фильтры</button>
 <div class="spacer"></div>
@@ -230,7 +230,7 @@
 <div class="table-scroll-x" id="receiptCompositionScrollX">
 <table>
 <thead><tr id="receiptCompositionHeadRow">
-<th id="receiptCheckboxHead" style="display:none; width:36px;"><input type="checkbox" onclick="toggleAllReceiptLineChecks(this)"></th>
+<th id="receiptCheckboxHead" style="display:none; width:36px;"><input type="checkbox" data-i18n-aria="common.aria.select_all_rows" aria-label="Выбрать все строки" onclick="toggleAllReceiptLineChecks(this)"></th>
 </tr></thead>
 <tbody id="receiptDetailRows"></tbody>
 </table>
@@ -273,7 +273,7 @@
 <div class="table-scroll-x" id="transferCompositionScrollX">
 <table>
 <thead><tr id="transferCompositionHeadRow">
-<th id="transferCheckboxHead" style="display:none; width:36px;"><input type="checkbox" onclick="toggleAllTransferLineChecks(this)"></th>
+<th id="transferCheckboxHead" style="display:none; width:36px;"><input type="checkbox" data-i18n-aria="common.aria.select_all_rows" aria-label="Выбрать все строки" onclick="toggleAllTransferLineChecks(this)"></th>
 </tr></thead>
 <tbody id="transferDetailRows"></tbody>
 </table>
@@ -292,12 +292,12 @@
 </div>
 </div>
 <div class="filters">
-<div class="fgroup"><label data-i18n="common.label.order_number">Номер заказа</label><input id="ordersSearchNo" onkeydown="if(event.key==='Enter') onOrdersFilterChange()" data-i18n-placeholder="common.placeholder.eg_order_no" placeholder="напр. ЗК-000045"/></div>
-<div class="fgroup"><label data-i18n="col.orders.consignee">Грузополучатель</label><input id="ordersSearchConsignee" onkeydown="if(event.key==='Enter') onOrdersFilterChange()" data-i18n-placeholder="common.placeholder.eg_consignee" placeholder="ИП «Барашкин»"/></div>
-<div class="fgroup"><label data-i18n="common.label.trip">Рейс</label><input id="ordersSearchTrip" onkeydown="if(event.key==='Enter') onOrdersFilterChange()" data-i18n-placeholder="common.placeholder.eg_order_wms_no" placeholder="напр. ОТГ-260701-01"/></div>
-<div class="fgroup"><label data-i18n="common.label.ship_date_from">Дата отгрузки с</label><input type="date" id="ordersDateFrom"/></div>
-<div class="fgroup"><label data-i18n="common.label.ship_date_to">Дата отгрузки по</label><input type="date" id="ordersDateTo"/></div>
-<div class="fgroup"><label data-i18n="col.receipts.status">Статус</label>
+<div class="fgroup"><label for="ordersSearchNo" data-i18n="common.label.order_number">Номер заказа</label><input id="ordersSearchNo" onkeydown="if(event.key==='Enter') onOrdersFilterChange()" data-i18n-placeholder="common.placeholder.eg_order_no" placeholder="напр. ЗК-000045"/></div>
+<div class="fgroup"><label for="ordersSearchConsignee" data-i18n="col.orders.consignee">Грузополучатель</label><input id="ordersSearchConsignee" onkeydown="if(event.key==='Enter') onOrdersFilterChange()" data-i18n-placeholder="common.placeholder.eg_consignee" placeholder="ИП «Барашкин»"/></div>
+<div class="fgroup"><label for="ordersSearchTrip" data-i18n="common.label.trip">Рейс</label><input id="ordersSearchTrip" onkeydown="if(event.key==='Enter') onOrdersFilterChange()" data-i18n-placeholder="common.placeholder.eg_order_wms_no" placeholder="напр. ОТГ-260701-01"/></div>
+<div class="fgroup"><label for="ordersDateFrom" data-i18n="common.label.ship_date_from">Дата отгрузки с</label><input type="date" id="ordersDateFrom"/></div>
+<div class="fgroup"><label for="ordersDateTo" data-i18n="common.label.ship_date_to">Дата отгрузки по</label><input type="date" id="ordersDateTo"/></div>
+<div class="fgroup"><label for="ordersFilterStatus" data-i18n="col.receipts.status">Статус</label>
 <select id="ordersFilterStatus"><option data-i18n="receipts.option.all">Все</option><option data-i18n="receipts.option.draft">Черновик</option><option data-i18n="common.option.reserved">В резерве</option><option data-i18n="common.option.picking">Комплектуется</option><option data-i18n="common.option.shipped">Отгружен</option><option data-i18n="common.option.delayed">Задержка</option></select>
 </div>
 <button data-i18n="common.button.search" class="btn primary" onclick="onOrdersFilterChange()">Найти</button>
@@ -351,7 +351,7 @@
 <div class="table-scroll-x" id="orderCompositionScrollX">
 <table>
 <thead><tr id="orderCompositionHeadRow">
-<th id="orderCheckboxHead" style="display:none; width:36px;"><input type="checkbox" onclick="toggleAllOrderLineChecks(this)"></th>
+<th id="orderCheckboxHead" style="display:none; width:36px;"><input type="checkbox" data-i18n-aria="common.aria.select_all_rows" aria-label="Выбрать все строки" onclick="toggleAllOrderLineChecks(this)"></th>
 </tr></thead>
 <tbody id="orderDetailRows"></tbody>
 </table>
@@ -425,12 +425,12 @@
 <h1 data-i18n="common.button.stock">Запасы <span class="count" id="stockCount"></span></h1>
 </div>
 <div class="filters">
-<div class="fgroup"><label data-i18n="stock.label.code_sku">Код / артикул</label><input id="stockSearchCode" onkeydown="if(event.key==='Enter') onStockFilterChange()" data-i18n-placeholder="common.placeholder.eg_sku_code" placeholder="напр. RK-1001"/></div>
-<div class="fgroup"><label data-i18n="col.stock.name">Наименование</label><input id="stockSearchName" onkeydown="if(event.key==='Enter') onStockFilterChange()" data-i18n-placeholder="common.placeholder.eg_sku_name" placeholder="напр. Рога"/></div>
-<div class="fgroup"><label data-i18n="col.stock.group">Группа</label>
+<div class="fgroup"><label for="stockSearchCode" data-i18n="stock.label.code_sku">Код / артикул</label><input id="stockSearchCode" onkeydown="if(event.key==='Enter') onStockFilterChange()" data-i18n-placeholder="common.placeholder.eg_sku_code" placeholder="напр. RK-1001"/></div>
+<div class="fgroup"><label for="stockSearchName" data-i18n="col.stock.name">Наименование</label><input id="stockSearchName" onkeydown="if(event.key==='Enter') onStockFilterChange()" data-i18n-placeholder="common.placeholder.eg_sku_name" placeholder="напр. Рога"/></div>
+<div class="fgroup"><label for="stockFilterGroup" data-i18n="col.stock.group">Группа</label>
 <select id="stockFilterGroup"><option value="" data-i18n="receipts.option.all">Все</option><option data-i18n="stock.option.raw_materials">Сырьё</option><option data-i18n="stock.option.meat_products">Мясная продукция</option><option data-i18n="stock.option.dairy_products">Молочная продукция</option><option data-i18n="stock.option.ready_made_kits">Готовые наборы</option></select>
 </div>
-<div class="fgroup"><label data-i18n="references.label.item_type">Тип товара</label>
+<div class="fgroup"><label for="stockFilterType" data-i18n="references.label.item_type">Тип товара</label>
 <select id="stockFilterType">
 <option data-i18n="references.option.all" value="">Все</option>
 <option data-i18n="references.option.raw_materials">Сырьё</option>
@@ -484,12 +484,12 @@
 </div>
 </div>
 <div class="filters">
-<div class="fgroup"><label data-i18n="stock.label.code_sku">Код / артикул</label><input id="skuSearchCode" onkeydown="if(event.key==='Enter') onSkuFilterChange()" data-i18n-placeholder="common.placeholder.eg_sku_code" placeholder="напр. RK-1001"/></div>
-<div class="fgroup"><label data-i18n="col.stock.name">Наименование</label><input id="skuSearchName" onkeydown="if(event.key==='Enter') onSkuFilterChange()" data-i18n-placeholder="common.placeholder.eg_sku_name" placeholder="напр. Рога"/></div>
-<div class="fgroup"><label data-i18n="col.stock.group">Группа</label>
+<div class="fgroup"><label for="skuSearchCode" data-i18n="stock.label.code_sku">Код / артикул</label><input id="skuSearchCode" onkeydown="if(event.key==='Enter') onSkuFilterChange()" data-i18n-placeholder="common.placeholder.eg_sku_code" placeholder="напр. RK-1001"/></div>
+<div class="fgroup"><label for="skuSearchName" data-i18n="col.stock.name">Наименование</label><input id="skuSearchName" onkeydown="if(event.key==='Enter') onSkuFilterChange()" data-i18n-placeholder="common.placeholder.eg_sku_name" placeholder="напр. Рога"/></div>
+<div class="fgroup"><label for="skuFilterGroup" data-i18n="col.stock.group">Группа</label>
 <select id="skuFilterGroup"><option value="" data-i18n="receipts.option.all">Все</option><option data-i18n="stock.option.raw_materials">Сырьё</option><option data-i18n="stock.option.meat_products">Мясная продукция</option><option data-i18n="stock.option.dairy_products">Молочная продукция</option><option data-i18n="stock.option.ready_made_kits">Готовые наборы</option></select>
 </div>
-<div class="fgroup"><label data-i18n="references.label.item_type">Тип товара</label>
+<div class="fgroup"><label for="skuFilterType" data-i18n="references.label.item_type">Тип товара</label>
 <select id="skuFilterType">
 <option data-i18n="references.option.all" value="">Все</option>
 <option data-i18n="references.option.raw_materials">Сырьё</option>
@@ -526,8 +526,8 @@
 </div>
 </div>
 <div class="filters">
-<div class="fgroup"><label data-i18n="references.label.item_code">Код товара</label><input id="packagingSearchCode" onkeydown="if(event.key==='Enter') onPackagingFilterChange()" data-i18n-placeholder="common.placeholder.eg_sku_code" placeholder="напр. RK-1001"/></div>
-<div class="fgroup"><label data-i18n="references.label.item_name">Наименование товара</label><input id="packagingSearchName" onkeydown="if(event.key==='Enter') onPackagingFilterChange()" data-i18n-placeholder="common.placeholder.eg_sku_name" placeholder="напр. Рога"/></div>
+<div class="fgroup"><label for="packagingSearchCode" data-i18n="references.label.item_code">Код товара</label><input id="packagingSearchCode" onkeydown="if(event.key==='Enter') onPackagingFilterChange()" data-i18n-placeholder="common.placeholder.eg_sku_code" placeholder="напр. RK-1001"/></div>
+<div class="fgroup"><label for="packagingSearchName" data-i18n="references.label.item_name">Наименование товара</label><input id="packagingSearchName" onkeydown="if(event.key==='Enter') onPackagingFilterChange()" data-i18n-placeholder="common.placeholder.eg_sku_name" placeholder="напр. Рога"/></div>
 <button data-i18n="references.button.search" class="btn primary" onclick="onPackagingFilterChange()">Найти</button>
 <button data-i18n="references.button.clear_filters" class="btn ghost" onclick="clearPackagingFilters()">Очистить фильтры</button>
 <div class="spacer"></div>
@@ -734,8 +734,8 @@
 <div class="section-title" data-i18n="billing.title.invoices_issued_by_accounting" style="margin:0;">Счета, выставленные бухгалтерией</div>
 </div>
 <div class="filters">
-<div class="fgroup"><label data-i18n="col.receipts.status">Статус</label>
-<select><option data-i18n="receipts.option.all">Все</option><option data-i18n="billing.option.paid">Оплачен</option><option data-i18n="billing.option.awaiting_payment">Ожидает оплаты</option><option data-i18n="billing.option.overdue">Просрочен</option></select>
+<div class="fgroup"><label for="fgroupField1" data-i18n="col.receipts.status">Статус</label>
+<select id="fgroupField1"><option data-i18n="receipts.option.all">Все</option><option data-i18n="billing.option.paid">Оплачен</option><option data-i18n="billing.option.awaiting_payment">Ожидает оплаты</option><option data-i18n="billing.option.overdue">Просрочен</option></select>
 </div>
 <div class="spacer"></div>
 </div>
@@ -844,12 +844,12 @@
 </div>
 </div>
 <div class="filters">
-<div class="fgroup"><label data-i18n="admin.label.depositor">Поклажедатель</label>
+<div class="fgroup"><label for="reportsConfigDepositorFilter" data-i18n="admin.label.depositor">Поклажедатель</label>
 <select id="reportsConfigDepositorFilter" onchange="renderReportsConfigTable()">
 <option data-i18n="common.option.all" value="">Все</option>
 </select>
 </div>
-<div class="fgroup"><label data-i18n="common.label.location">Расположение</label>
+<div class="fgroup"><label for="reportsConfigLocationFilter" data-i18n="common.label.location">Расположение</label>
 <select id="reportsConfigLocationFilter" onchange="renderReportsConfigTable()">
 <option data-i18n="common.option.all" value="">Все</option>
 </select>
@@ -881,17 +881,17 @@
 </div>
 <div class="hint" style="margin-bottom:16px;">Пользовательские названия полей для конкретного поклажедателя — например, «Код» → «Артикул клиента». Приоритет выше языковых настроек: при выборе этого поклажедателя любым пользователем будет показано именно это название, независимо от выбранного языка интерфейса.</div>
 <div class="filters">
-<div class="fgroup"><label data-i18n="common.label.depositor">Поклажедатель</label>
+<div class="fgroup"><label for="flFilterDepositor" data-i18n="common.label.depositor">Поклажедатель</label>
 <select id="flFilterDepositor">
 <option data-i18n="common.option.all" value="">Все</option>
 </select>
 </div>
-<div class="fgroup"><label data-i18n="common.label.object">Объект</label>
+<div class="fgroup"><label for="flFilterObject" data-i18n="common.label.object">Объект</label>
 <select id="flFilterObject">
 <option data-i18n="common.option.all" value="">Все</option>
 </select>
 </div>
-<div class="fgroup"><label data-i18n="common.label.field">Поле</label>
+<div class="fgroup"><label for="flFilterField" data-i18n="common.label.field">Поле</label>
 <input type="text" id="flFilterField" data-i18n-placeholder="admin.placeholder.field_code" placeholder="код поля...">
 </div>
 <div class="spacer"></div>
@@ -911,16 +911,15 @@
 </div>
 </div>
 
-</div>
 </section>
 <div class="col-overlay" id="fieldLabelOverlay" style="align-items:center;justify-content:center;" onclick="if(event.target===this) closeFieldLabelModal()">
 <div class="col-panel" id="fieldLabelPanel" style="width:480px; box-shadow:0 8px 32px rgba(0,0,0,.24); border-radius:10px;">
 <h3 id="fieldLabelModalTitle" style="font-size:17px;"><span data-i18n="common.title.add_override">Добавление переопределения</span></h3>
 <div style="display:flex; flex-direction:column; gap:16px; margin-top:14px;">
-  <div class="kv"><label data-i18n="admin.label.depositor">Поклажедатель</label><select class="kv-input kv-input-editable" id="flDepositorSelect"></select></div>
-  <div class="kv"><label data-i18n="common.label.object">Объект</label><select class="kv-input kv-input-editable" id="flObjectSelect" onchange="onFieldLabelObjectChange()"></select></div>
-  <div class="kv"><label><span data-i18n="admin.label.field">Поле</span></label><select class="kv-input kv-input-editable" id="flFieldSelect"></select></div>
-  <div class="kv"><label><span data-i18n="common.label.custom_name">Пользовательское наименование</span></label><input type="text" class="kv-input kv-input-editable" id="flCustomLabel" data-i18n-placeholder="common.placeholder.for_example_customer_sku" placeholder="Например: Артикул клиента"></div>
+  <div class="kv"><label for="flDepositorSelect" data-i18n="admin.label.depositor">Поклажедатель</label><select class="kv-input kv-input-editable" id="flDepositorSelect"></select></div>
+  <div class="kv"><label for="flObjectSelect" data-i18n="common.label.object">Объект</label><select class="kv-input kv-input-editable" id="flObjectSelect" onchange="onFieldLabelObjectChange()"></select></div>
+  <div class="kv"><label for="flFieldSelect"><span data-i18n="admin.label.field">Поле</span></label><select class="kv-input kv-input-editable" id="flFieldSelect"></select></div>
+  <div class="kv"><label for="flCustomLabel"><span data-i18n="common.label.custom_name">Пользовательское наименование</span></label><input type="text" class="kv-input kv-input-editable" id="flCustomLabel" data-i18n-placeholder="common.placeholder.for_example_customer_sku" placeholder="Например: Артикул клиента"></div>
 </div>
 <div style="display:flex; justify-content:space-between; gap:10px; margin-top:20px;">
   <button data-i18n="common.button.delete" class="btn ghost" id="flDeleteBtn" style="display:none; color:#c0392b;" onclick="deleteFieldLabelFromModal()">Удалить</button>
@@ -1118,8 +1117,8 @@
 <div class="login-logo" id="loginLogo"></div>
 <h2 data-i18n="common.title.sign_in_to_the_3pl_customer_portal">Вход в 3PL Customer Portal</h2>
 <p class="login-sub" data-i18n="common.text.enter_your_email_and_password_to_s">Введите логин (email) и пароль для входа</p>
-<div class="login-field"><label data-i18n="common.label.email_login">Email / логин</label><input disabled="" id="loginEmail" data-i18n-placeholder="auth.placeholder.user_ahlers_com" placeholder="user@ahlers.com" type="text"/></div>
-<div class="login-field"><label data-i18n="common.label.password">Пароль</label><input disabled="" id="loginPassword" placeholder="••••••••" type="password"/></div>
+<div class="login-field"><label for="loginEmail" data-i18n="common.label.email_login">Email / логин</label><input disabled="" id="loginEmail" data-i18n-placeholder="auth.placeholder.user_ahlers_com" placeholder="user@ahlers.com" type="text"/></div>
+<div class="login-field"><label for="loginPassword" data-i18n="common.label.password">Пароль</label><input disabled="" id="loginPassword" placeholder="••••••••" type="password"/></div>
 <button class="btn primary" data-i18n="common.button.sign_in" disabled="" style="width:100%;justify-content:center;margin-top:6px;opacity:.5;cursor:not-allowed;" title="Ручной вход отключён в демо-версии — выберите пользователя ниже">Войти</button>
 <div class="hint" style="text-align:center;margin-top:8px;">Ручной ввод отключён в демо-версии — выберите пользователя ниже</div>
 <div class="login-divider" data-i18n="common.text.demo_access_select_a_user">Демо-доступ — выберите пользователя</div>
@@ -1144,7 +1143,7 @@
 <div class="kv" id="lineEditSearchWrap" style="margin-bottom:0; margin-top:8px; position:relative;">
 <label data-i18n="common.label.item">Товар</label>
 <div style="position:relative;">
-<input type="text" class="kv-input kv-input-editable" id="lineEditProductSearch" data-i18n-placeholder="common.placeholder.commercial_code_or_item_name" placeholder="Коммерческий код или наименование товара..." oninput="searchLineEditProduct(this.value)" autocomplete="off" style="padding-right:32px;">
+<input type="text" class="kv-input kv-input-editable" id="lineEditProductSearch" data-i18n-placeholder="common.placeholder.commercial_code_or_item_name" placeholder="Коммерческий код или наименование товара..." data-i18n-aria="common.placeholder.commercial_code_or_item_name" aria-label="Коммерческий код или наименование товара..." oninput="searchLineEditProduct(this.value)" autocomplete="off" style="padding-right:32px;">
 <button type="button" onclick="clearLineEditProductSearch()" data-i18n-title="common.hint.clear" title="Очистить" style="position:absolute; right:6px; top:50%; transform:translateY(-50%); background:none; border:none; cursor:pointer; color:var(--muted); font-size:16px; line-height:1; padding:4px;">✕</button>
 </div>
 <div id="lineEditProductResults" style="position:absolute; left:0; right:0; z-index:5; border:1px solid var(--line); border-radius:6px; margin-top:2px; max-height:220px; overflow-y:auto; display:none; background:#fff; box-shadow:0 4px 14px rgba(0,0,0,.12);"></div>
@@ -1160,20 +1159,20 @@
   </div>
   <div style="display:flex; flex-direction:column; gap:16px;">
     <div class="kv" id="lineEditPackagingWrap" style="display:none;">
-      <label data-i18n="common.label.packaging">Упаковка</label>
+      <label for="lineEditPackaging" data-i18n="common.label.packaging">Упаковка</label>
       <select class="kv-input kv-input-editable" id="lineEditPackaging" onchange="onLineEditPackagingChange()"></select>
     </div>
     <div class="kv" id="lineEditPackageCountWrap" style="display:none;">
-      <label data-i18n="common.label.number_of_packages">Количество упаковок</label>
+      <label for="lineEditPackageCount" data-i18n="common.label.number_of_packages">Количество упаковок</label>
       <input type="number" min="0" step="1" class="kv-input kv-input-editable" id="lineEditPackageCount" oninput="onLineEditPackageCountChange()">
     </div>
-    <div class="kv"><label data-i18n="common.label.expected_quantity" id="lineEditExpectedLabel">Ожидаемое количество</label><input type="number" min="0" step="1" class="kv-input kv-input-editable" id="lineEditExpected" oninput="validateNumericInput(this); onLineEditPriceChange();"></div>
-    <div class="kv"><label>Цена, <span id="lineEditCurrency">—</span></label><input type="number" min="0" step="0.01" class="kv-input kv-input-editable" id="lineEditPrice" oninput="onLineEditPriceChange()"></div>
+    <div class="kv"><label for="lineEditExpected" data-i18n="common.label.expected_quantity" id="lineEditExpectedLabel">Ожидаемое количество</label><input type="number" min="0" step="1" class="kv-input kv-input-editable" id="lineEditExpected" oninput="validateNumericInput(this); onLineEditPriceChange();"></div>
+    <div class="kv"><label for="lineEditPrice">Цена, <span id="lineEditCurrency">—</span></label><input type="number" min="0" step="0.01" class="kv-input kv-input-editable" id="lineEditPrice" oninput="onLineEditPriceChange()"></div>
     <div class="kv"><label data-i18n="common.label.amount">Сумма</label><div class="kv-input" id="lineEditSum" style="background:var(--bg); border-color:transparent;">—</div></div>
     <div id="lineEditExtraFields" style="display:flex; flex-direction:column; gap:16px;"></div>
   </div>
 </div>
-<div class="kv" style="margin-top:14px;"><label data-i18n="common.label.comment">Комментарий</label><textarea class="kv-input kv-input-editable" id="lineEditComment" rows="2" style="resize:vertical;"></textarea></div>
+<div class="kv" style="margin-top:14px;"><label for="lineEditComment" data-i18n="common.label.comment">Комментарий</label><textarea class="kv-input kv-input-editable" id="lineEditComment" rows="2" style="resize:vertical;"></textarea></div>
 <div class="col-actions">
 <button data-i18n="common.button.save" class="btn primary" onclick="saveLineEditModal()" style="flex:1;">Сохранить</button>
 <button data-i18n="common.button.cancel" class="btn ghost" onclick="closeLineEditModal()">Отмена</button>
@@ -1196,7 +1195,7 @@
 <div class="kv" id="orderLineEditSearchWrap" style="margin-bottom:0; margin-top:8px; position:relative;">
 <label data-i18n="common.label.item">Товар</label>
 <div style="position:relative;">
-<input type="text" class="kv-input kv-input-editable" id="orderLineEditProductSearch" data-i18n-placeholder="common.placeholder.commercial_code_or_item_name" placeholder="Коммерческий код или наименование товара..." oninput="searchOrderLineProduct(this.value)" autocomplete="off" style="padding-right:32px;">
+<input type="text" class="kv-input kv-input-editable" id="orderLineEditProductSearch" data-i18n-placeholder="common.placeholder.commercial_code_or_item_name" placeholder="Коммерческий код или наименование товара..." data-i18n-aria="common.placeholder.commercial_code_or_item_name" aria-label="Коммерческий код или наименование товара..." oninput="searchOrderLineProduct(this.value)" autocomplete="off" style="padding-right:32px;">
 <button type="button" onclick="clearOrderLineProductSearch()" data-i18n-title="common.hint.clear" title="Очистить" style="position:absolute; right:6px; top:50%; transform:translateY(-50%); background:none; border:none; cursor:pointer; color:var(--muted); font-size:16px; line-height:1; padding:4px;">✕</button>
 </div>
 <div id="orderLineEditProductResults" style="position:absolute; left:0; right:0; z-index:5; border:1px solid var(--line); border-radius:6px; margin-top:2px; max-height:220px; overflow-y:auto; display:none; background:#fff; box-shadow:0 4px 14px rgba(0,0,0,.12);"></div>
@@ -1211,20 +1210,20 @@
   </div>
   <div style="display:flex; flex-direction:column; gap:16px;">
     <div class="kv" id="orderLineEditPackagingWrap" style="display:none;">
-      <label data-i18n="common.label.packaging">Упаковка</label>
+      <label for="orderLineEditPackaging" data-i18n="common.label.packaging">Упаковка</label>
       <select class="kv-input kv-input-editable" id="orderLineEditPackaging" onchange="onOrderLineEditPackagingChange()"></select>
     </div>
     <div class="kv" id="orderLineEditPackageCountWrap" style="display:none;">
-      <label data-i18n="common.label.number_of_packages">Количество упаковок</label>
+      <label for="orderLineEditPackageCount" data-i18n="common.label.number_of_packages">Количество упаковок</label>
       <input type="number" min="0" step="1" class="kv-input kv-input-editable" id="orderLineEditPackageCount" oninput="onOrderLineEditPackageCountChange()">
     </div>
-    <div class="kv"><label data-i18n="common.label.ordered" id="orderLineEditQtyLabel">Заказано</label><input type="number" min="0" step="1" class="kv-input kv-input-editable" id="orderLineEditQty" oninput="validateNumericInput(this); onOrderLineEditPriceChange();"></div>
-    <div class="kv"><label>Цена, <span id="orderLineEditCurrency">—</span></label><input type="number" min="0" step="0.01" class="kv-input kv-input-editable" id="orderLineEditPrice" oninput="onOrderLineEditPriceChange()"></div>
+    <div class="kv"><label for="orderLineEditQty" data-i18n="common.label.ordered" id="orderLineEditQtyLabel">Заказано</label><input type="number" min="0" step="1" class="kv-input kv-input-editable" id="orderLineEditQty" oninput="validateNumericInput(this); onOrderLineEditPriceChange();"></div>
+    <div class="kv"><label for="orderLineEditPrice">Цена, <span id="orderLineEditCurrency">—</span></label><input type="number" min="0" step="0.01" class="kv-input kv-input-editable" id="orderLineEditPrice" oninput="onOrderLineEditPriceChange()"></div>
     <div class="kv"><label data-i18n="common.label.amount">Сумма</label><div class="kv-input" id="orderLineEditSum" style="background:var(--bg); border-color:transparent;">—</div></div>
     <div id="orderLineEditExtraFields" style="display:flex; flex-direction:column; gap:16px;"></div>
   </div>
 </div>
-<div class="kv" style="margin-top:14px;"><label data-i18n="common.label.comment">Комментарий</label><textarea class="kv-input kv-input-editable" id="orderLineEditComment" rows="2" style="resize:vertical;"></textarea></div>
+<div class="kv" style="margin-top:14px;"><label for="orderLineEditComment" data-i18n="common.label.comment">Комментарий</label><textarea class="kv-input kv-input-editable" id="orderLineEditComment" rows="2" style="resize:vertical;"></textarea></div>
 <div class="col-actions">
 <button data-i18n="common.button.save" class="btn primary" onclick="saveOrderLineEditModal()" style="flex:1;">Сохранить</button>
 <button data-i18n="common.button.cancel" class="btn ghost" onclick="closeOrderLineEditModal()">Отмена</button>
@@ -1247,7 +1246,7 @@
 <div class="kv" id="transferLineEditSearchWrap" style="margin-bottom:0; margin-top:8px; position:relative;">
 <label data-i18n="common.label.item">Товар</label>
 <div style="position:relative;">
-<input type="text" class="kv-input kv-input-editable" id="transferLineEditProductSearch" data-i18n-placeholder="common.placeholder.commercial_code_or_item_name" placeholder="Коммерческий код или наименование товара..." oninput="searchTransferLineProduct(this.value)" autocomplete="off" style="padding-right:32px;">
+<input type="text" class="kv-input kv-input-editable" id="transferLineEditProductSearch" data-i18n-placeholder="common.placeholder.commercial_code_or_item_name" placeholder="Коммерческий код или наименование товара..." data-i18n-aria="common.placeholder.commercial_code_or_item_name" aria-label="Коммерческий код или наименование товара..." oninput="searchTransferLineProduct(this.value)" autocomplete="off" style="padding-right:32px;">
 <button type="button" onclick="clearTransferLineProductSearch()" data-i18n-title="common.hint.clear" title="Очистить" style="position:absolute; right:6px; top:50%; transform:translateY(-50%); background:none; border:none; cursor:pointer; color:var(--muted); font-size:16px; line-height:1; padding:4px;">✕</button>
 </div>
 <div id="transferLineEditProductResults" style="position:absolute; left:0; right:0; z-index:5; border:1px solid var(--line); border-radius:6px; margin-top:2px; max-height:220px; overflow-y:auto; display:none; background:#fff; box-shadow:0 4px 14px rgba(0,0,0,.12);"></div>
@@ -1262,18 +1261,18 @@
   </div>
   <div style="display:flex; flex-direction:column; gap:16px;">
     <div class="kv" id="transferLineEditPackagingWrap" style="display:none;">
-      <label data-i18n="common.label.packaging">Упаковка</label>
+      <label for="transferLineEditPackaging" data-i18n="common.label.packaging">Упаковка</label>
       <select class="kv-input kv-input-editable" id="transferLineEditPackaging" onchange="onTransferLineEditPackagingChange()"></select>
     </div>
     <div class="kv" id="transferLineEditPackageCountWrap" style="display:none;">
-      <label data-i18n="common.label.number_of_packages">Количество упаковок</label>
+      <label for="transferLineEditPackageCount" data-i18n="common.label.number_of_packages">Количество упаковок</label>
       <input type="number" min="0" step="1" class="kv-input kv-input-editable" id="transferLineEditPackageCount" oninput="onTransferLineEditPackageCountChange()">
     </div>
-    <div class="kv"><label data-i18n="common.label.quantity" id="transferLineEditQtyLabel">Количество</label><input type="number" min="0" step="1" class="kv-input kv-input-editable" id="transferLineEditQty" oninput="validateNumericInput(this)"></div>
+    <div class="kv"><label for="transferLineEditQty" data-i18n="common.label.quantity" id="transferLineEditQtyLabel">Количество</label><input type="number" min="0" step="1" class="kv-input kv-input-editable" id="transferLineEditQty" oninput="validateNumericInput(this)"></div>
     <div id="transferLineEditExtraFields" style="display:flex; flex-direction:column; gap:16px;"></div>
   </div>
 </div>
-<div class="kv" style="margin-top:14px;"><label data-i18n="common.label.comment">Комментарий</label><textarea class="kv-input kv-input-editable" id="transferLineEditComment" rows="2" style="resize:vertical;"></textarea></div>
+<div class="kv" style="margin-top:14px;"><label for="transferLineEditComment" data-i18n="common.label.comment">Комментарий</label><textarea class="kv-input kv-input-editable" id="transferLineEditComment" rows="2" style="resize:vertical;"></textarea></div>
 <div class="col-actions">
 <button data-i18n="common.button.save" class="btn primary" onclick="saveTransferLineEditModal()" style="flex:1;">Сохранить</button>
 <button data-i18n="common.button.cancel" class="btn ghost" onclick="closeTransferLineEditModal()">Отмена</button>
@@ -1331,19 +1330,19 @@
 <h3 id="reportConfigTitle" style="font-size:16px;"><span data-i18n="common.title.add_report">Добавление отчёта</span></h3>
 
 <div style="display:flex; flex-direction:column; gap:14px; margin-top:12px;">
-  <div class="kv"><label><span data-i18n="common.label.sequence_number">Порядковый номер</span></label>
+  <div class="kv"><label for="rc_order"><span data-i18n="common.label.sequence_number">Порядковый номер</span></label>
     <input type="number" min="1" step="1" class="kv-input kv-input-editable" id="rc_order">
   </div>
-  <div class="kv"><label><span data-i18n="portal.title.depositor">Поклажедатель</span></label>
+  <div class="kv"><label for="rc_depositorId"><span data-i18n="portal.title.depositor">Поклажедатель</span></label>
     <select class="kv-input kv-input-editable" id="rc_depositorId"></select>
   </div>
-  <div class="kv"><label><span data-i18n="admin.column.report_name">Наименование отчёта</span></label>
+  <div class="kv"><label for="rc_name"><span data-i18n="admin.column.report_name">Наименование отчёта</span></label>
     <input type="text" class="kv-input kv-input-editable" id="rc_name">
   </div>
-  <div class="kv"><label><span data-i18n="admin.column.wms_report_code">Код отчёта в WMS</span></label>
+  <div class="kv"><label for="rc_wmsCode"><span data-i18n="admin.column.wms_report_code">Код отчёта в WMS</span></label>
     <input type="text" class="kv-input kv-input-editable" id="rc_wmsCode">
   </div>
-  <div class="kv"><label><span data-i18n="admin.column.location">Расположение</span></label>
+  <div class="kv"><label for="rc_location"><span data-i18n="admin.column.location">Расположение</span></label>
     <select class="kv-input kv-input-editable" id="rc_location"></select>
   </div>
   <div class="line-info-title" style="padding-top:0;">Параметры отчёта (необязательно)</div>
