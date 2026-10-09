@@ -1,5 +1,7 @@
 package com.ahlers.portal3pl.catalog;
 
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 
@@ -23,62 +25,85 @@ public final class SkuColumns {
     private SkuColumns() {
     }
 
-    /** Колонки товара, доступные правке, и их тип для приведения в SQL. */
-    public static final Map<String, String> SKU = Map.ofEntries(
-            Map.entry("code", "varchar"),
-            Map.entry("item_code", "varchar"),
-            Map.entry("name", "varchar"),
-            Map.entry("item_full_name", "text"),
-            Map.entry("barcode", "varchar"),
-            Map.entry("uom_id", "smallint"),
-            Map.entry("item_group_id", "uuid"),
-            Map.entry("item_type_id", "uuid"),
-            Map.entry("has_packaging", "boolean"),
-            Map.entry("length", "numeric"),
-            Map.entry("width", "numeric"),
-            Map.entry("height", "numeric"),
-            Map.entry("volume", "numeric"),
-            Map.entry("weight_gross", "numeric"),
-            Map.entry("weight_net", "numeric"),
-            Map.entry("manufacturer", "varchar"),
-            Map.entry("country_origin", "varchar"),
-            Map.entry("brand", "varchar"),
-            Map.entry("is_fragile", "boolean"),
-            Map.entry("is_serial_tracked", "boolean"),
-            Map.entry("batch_tracking", "varchar"),
-            Map.entry("expiry_tracking", "varchar"),
-            Map.entry("min_storage_temp", "numeric"),
-            Map.entry("max_storage_temp", "numeric"),
-            Map.entry("min_humidity", "numeric"),
-            Map.entry("max_humidity", "numeric"),
-            Map.entry("min_days_for_receipt", "numeric"),
-            Map.entry("min_days_for_reservation", "numeric"),
-            Map.entry("shelf_life_days", "numeric"),
-            Map.entry("color", "varchar"),
-            Map.entry("size", "varchar"),
-            Map.entry("abc_class", "varchar"),
-            Map.entry("xyz_class", "varchar"),
-            Map.entry("hs_code", "varchar"),
-            Map.entry("enstru_code", "varchar"),
-            Map.entry("cost", "numeric"),
-            Map.entry("currency_id", "smallint"),
-            Map.entry("is_kit", "boolean"),
-            Map.entry("is_marking_required", "boolean"),
-            Map.entry("is_excise", "boolean"),
-            Map.entry("is_controlled", "boolean"),
-            Map.entry("hazard_class_id", "smallint"),
-            Map.entry("hazard_group_id", "smallint"),
-            Map.entry("comment", "text"),
-            Map.entry("custom_attr1", "varchar"),
-            Map.entry("custom_attr2", "varchar"),
-            Map.entry("custom_attr3", "varchar"),
-            Map.entry("custom_attr4", "varchar"),
-            Map.entry("custom_attr5", "varchar"),
-            Map.entry("custom_attr6", "varchar"),
-            Map.entry("custom_attr7", "varchar"),
-            Map.entry("custom_attr8", "varchar"),
-            Map.entry("custom_attr9", "varchar"),
-            Map.entry("custom_attr10", "varchar"));
+    /**
+     * Колонки товара, доступные правке, и их тип для приведения в SQL.
+     *
+     * <p>Собирается в статическом блоке, а не одним {@code Map.ofEntries}
+     * на 54 элемента: такой вызов — один метод с 54 аргументами, и среда
+     * разработки честно предупреждает, что разбор типов на нём
+     * замедляется. Заодно список стал читаемым: поля сгруппированы
+     * по смыслу, а десять доп. параметров строятся циклом вместо
+     * десяти почти одинаковых строк.
+     */
+    public static final Map<String, String> SKU;
+
+    static {
+        Map<String, String> sku = new LinkedHashMap<>();
+
+        // опознание и наименование
+        sku.put("code", "varchar");
+        sku.put("item_code", "varchar");
+        sku.put("name", "varchar");
+        sku.put("item_full_name", "text");
+        sku.put("barcode", "varchar");
+        sku.put("uom_id", "smallint");
+        sku.put("item_group_id", "uuid");
+        sku.put("item_type_id", "uuid");
+        sku.put("has_packaging", "boolean");
+
+        // физические свойства
+        sku.put("length", "numeric");
+        sku.put("width", "numeric");
+        sku.put("height", "numeric");
+        sku.put("volume", "numeric");
+        sku.put("weight_gross", "numeric");
+        sku.put("weight_net", "numeric");
+        sku.put("color", "varchar");
+        sku.put("size", "varchar");
+
+        // производитель и классификация
+        sku.put("manufacturer", "varchar");
+        sku.put("country_origin", "varchar");
+        sku.put("brand", "varchar");
+        sku.put("abc_class", "varchar");
+        sku.put("xyz_class", "varchar");
+
+        // условия хранения
+        sku.put("min_storage_temp", "numeric");
+        sku.put("max_storage_temp", "numeric");
+        sku.put("min_humidity", "numeric");
+        sku.put("max_humidity", "numeric");
+        sku.put("min_days_for_receipt", "numeric");
+        sku.put("min_days_for_reservation", "numeric");
+        sku.put("shelf_life_days", "numeric");
+        sku.put("hazard_class_id", "smallint");
+        sku.put("hazard_group_id", "smallint");
+
+        // коды, стоимость
+        sku.put("hs_code", "varchar");
+        sku.put("enstru_code", "varchar");
+        sku.put("cost", "numeric");
+        sku.put("currency_id", "smallint");
+
+        // признаки и учёт
+        sku.put("is_fragile", "boolean");
+        sku.put("is_serial_tracked", "boolean");
+        sku.put("batch_tracking", "varchar");
+        sku.put("expiry_tracking", "varchar");
+        sku.put("is_kit", "boolean");
+        sku.put("is_marking_required", "boolean");
+        sku.put("is_excise", "boolean");
+        sku.put("is_controlled", "boolean");
+
+        sku.put("comment", "text");
+
+        // доп. параметры: в базе их десять, и правятся все десять
+        for (int i = 1; i <= 10; i++) {
+            sku.put("custom_attr" + i, "varchar");
+        }
+
+        SKU = Collections.unmodifiableMap(sku);
+    }
 
     /** Колонки упаковки. */
     public static final Map<String, String> PACKAGING = Map.of(

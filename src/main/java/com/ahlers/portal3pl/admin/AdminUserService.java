@@ -53,8 +53,9 @@ public class AdminUserService {
 
         // Администратор не может заблокировать сам себя: иначе портал
         // остался бы без того, кто вправе разблокировать.
-        if (Boolean.FALSE.equals(orDefault(s.isActive(), true))
-                && actor.userId().equals(userId)) {
+        // orDefault возвращает примитив, поэтому обёртка Boolean.FALSE.equals
+        // только заворачивала его обратно в объект
+        if (!orDefault(s.isActive(), true) && actor.userId().equals(userId)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "Нельзя заблокировать свою учётную запись");
         }
@@ -224,7 +225,7 @@ public class AdminUserService {
     }
 
     private void requireLoginFree(String login, String exceptUserId) {
-        boolean taken = Boolean.TRUE.equals(jdbc.sql("""
+        boolean taken = jdbc.sql("""
                         SELECT EXISTS (SELECT 1 FROM dbo.app_user
                                         WHERE lower(login) = lower(:login)
                                           AND (:except::uuid IS NULL OR user_id <> :except::uuid))
@@ -232,7 +233,7 @@ public class AdminUserService {
                 .param("login", login)
                 .param("except", exceptUserId)
                 .query(Boolean.class)
-                .single());
+                .single();
         if (taken) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "Логин «" + login + "» уже занят");
@@ -240,13 +241,13 @@ public class AdminUserService {
     }
 
     private void requireRoleExists(String roleCode) {
-        boolean exists = Boolean.TRUE.equals(jdbc.sql("""
+        boolean exists = jdbc.sql("""
                         SELECT EXISTS (SELECT 1 FROM dbo.enum_user_role
                                         WHERE code = :code AND is_active)
                         """)
                 .param("code", roleCode == null ? "" : roleCode)
                 .query(Boolean.class)
-                .single());
+                .single();
         if (!exists) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Выберите роль пользователя");
         }

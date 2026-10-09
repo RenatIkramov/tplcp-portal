@@ -556,20 +556,20 @@ class ColumnDirectoryTest extends PortalTestBase {
         signInAs(ADMIN, DEPOSITOR);
         String depositorId = depositorId(ADMIN, DEPOSITOR);
 
-        assertFalse(Boolean.TRUE.equals(
-                        depositorSettings.settings(admin, depositorId).get("hideTransfersTab")),
+        assertEquals(false, depositorSettings.settings(admin, depositorId)
+                        .get("hideTransfersTab"),
                 "по умолчанию раздел виден");
 
         depositorSettings.save(admin, depositorId,
                 new DepositorSettingsService.Settings(true));
-        assertTrue(Boolean.TRUE.equals(
-                        depositorSettings.settings(admin, depositorId).get("hideTransfersTab")),
+        assertEquals(true, depositorSettings.settings(admin, depositorId)
+                        .get("hideTransfersTab"),
                 "настройка сохранилась");
 
         // И действует на всех пользователей клиента, а не на одного:
         // настройка переехала с человека на организацию (V35).
         signIn();
-        assertTrue(Boolean.TRUE.equals(current.settings().get("hideTransfersTab")),
+        assertEquals(true, current.settings().get("hideTransfersTab"),
                 "пользователь этого клиента раздела не видит");
     }
 

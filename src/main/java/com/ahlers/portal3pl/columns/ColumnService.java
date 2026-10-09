@@ -245,13 +245,14 @@ public class ColumnService {
     @Transactional(readOnly = true)
     public int depositorColumnCount(PortalUser actor, String depositorId, String tableKey) {
         users.requireAdmin(actor);
-        Integer n = jdbc
+        // функция возвращает count(*)::int — NULL оттуда не приходит,
+        // поэтому проверка на null была мёртвой
+        return jdbc
                 .sql("SELECT dbo.admin_depositor_column_count(:dep::uuid, :table::text)")
                 .param("dep", depositorId)
                 .param("table", tableKey)
                 .query(Integer.class)
                 .single();
-        return n == null ? 0 : n;
     }
 
     /* ============== Переименование полей поклажедателем ============== */
@@ -282,18 +283,18 @@ public class ColumnService {
         if (fieldId == null || fieldId.isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Укажите поле");
         }
-        boolean knownObject = Boolean.TRUE.equals(jdbc
+        boolean knownObject = jdbc
                 .sql("SELECT EXISTS (SELECT 1 FROM dbo.enum_object_type WHERE code = :code::varchar)")
                 .param("code", objectCode == null ? "" : objectCode)
                 .query(Boolean.class)
-                .single());
+                .single();
         if (!knownObject) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND,
                     "Неизвестный тип объекта: " + objectCode);
         }
         // переименовывать можно только то, что где-то показывается:
         // иначе в справочнике появятся подписи, которых никто не увидит
-        boolean shown = Boolean.TRUE.equals(jdbc.sql("""
+        boolean shown = jdbc.sql("""
                         SELECT EXISTS (
                           SELECT 1 FROM dbo.table_column c
                           JOIN dbo.enum_object_type o ON o.id = c.object_type_id
@@ -302,7 +303,7 @@ public class ColumnService {
                 .param("code", objectCode)
                 .param("field", fieldId)
                 .query(Boolean.class)
-                .single());
+                .single();
         if (!shown) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND,
                     "Поле «" + fieldId + "» у объекта «" + objectCode + "» нигде не показывается");
@@ -353,11 +354,11 @@ public class ColumnService {
     /* ========================= Проверки ========================= */
 
     private void requireTable(String tableKey) {
-        boolean known = Boolean.TRUE.equals(jdbc
+        boolean known = jdbc
                 .sql("SELECT EXISTS (SELECT 1 FROM dbo.table_column WHERE table_key = :key::varchar)")
                 .param("key", tableKey == null ? "" : tableKey)
                 .query(Boolean.class)
-                .single());
+                .single();
         if (!known) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND,
                     "Таблицы «" + tableKey + "» в справочнике колонок нет");
@@ -365,7 +366,7 @@ public class ColumnService {
     }
 
     private void requireColumn(String tableKey, String columnId) {
-        boolean known = Boolean.TRUE.equals(jdbc.sql("""
+        boolean known = jdbc.sql("""
                         SELECT EXISTS (SELECT 1 FROM dbo.table_column
                                         WHERE table_key = :key::varchar
                                           AND column_id = :col::varchar)
@@ -373,7 +374,7 @@ public class ColumnService {
                 .param("key", tableKey)
                 .param("col", columnId == null ? "" : columnId)
                 .query(Boolean.class)
-                .single());
+                .single();
         if (!known) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND,
                     "Колонки «" + columnId + "» в таблице «" + tableKey + "» нет");
@@ -415,11 +416,11 @@ public class ColumnService {
     }
 
     private void requireUser(String userId) {
-        boolean known = Boolean.TRUE.equals(jdbc
+        boolean known = jdbc
                 .sql("SELECT EXISTS (SELECT 1 FROM dbo.app_user WHERE user_id = :id::uuid)")
                 .param("id", userId)
                 .query(Boolean.class)
-                .single());
+                .single();
         if (!known) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Пользователь не найден");
         }
