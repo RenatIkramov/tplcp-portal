@@ -19,7 +19,7 @@
       opt.body = JSON.stringify(body);
     }
     const resp = await fetch(url, opt);
-    if (!resp.ok) throw new Error(await PORTAL.сообщениеОтвета(resp));
+    if (!resp.ok) throw new Error(await PORTAL.responseMessage(resp));
     return resp.status === 204 ? null : resp.json();
   }
 
@@ -410,7 +410,7 @@
       state.matrix = await api('PUT', '/api/admin/ui-texts',
           {textKey: key, locale: locale, value: el.value});
       if (locale === state.code) await apply(state.code);
-      el.style.borderColor = 'var(--ok, #2e7d32)';
+      el.style.borderColor = 'var(--ok-fg)';
       setTimeout(() => { el.style.borderColor = ''; }, 1200);
     } catch (e){
       say(e.message);
@@ -439,8 +439,8 @@
     window.setLanguage = code => window.portalSetLanguage(code);
 
     buildSwitch().then(() => {
-      const стартовый = (state.locales.find(l => l.isDefault) || state.locales[0] || {}).code;
-      return apply(стартовый);
+      const initial = (state.locales.find(l => l.isDefault) || state.locales[0] || {}).code;
+      return apply(initial);
     }).catch(() => {});
 
     PORTAL.onLogin(() => {

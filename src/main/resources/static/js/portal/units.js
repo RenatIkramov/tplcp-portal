@@ -18,7 +18,7 @@
       opt.body = JSON.stringify(body);
     }
     const resp = await fetch(url, opt);
-    if (!resp.ok) throw new Error(await PORTAL.сообщениеОтвета(resp));
+    if (!resp.ok) throw new Error(await PORTAL.responseMessage(resp));
     return resp.status === 204 ? null : resp.json();
   }
 
@@ -30,37 +30,37 @@
 
   /* ================= Разметка вкладки ================= */
 
-  function создатьВкладку(){
+  function createTab(){
     const tabs = document.querySelector('#view-references .admin-subtabs');
     if (!tabs || document.getElementById('ref-sub-units')) return;
 
-    const кнопка = document.createElement('button');
-    кнопка.className = 'admin-subtab-btn ref-subtab-btn';
-    кнопка.type = 'button';
-    кнопка.id = 'refSubBtnUnits';
-    кнопка.setAttribute('data-refsub', 'units');
-    кнопка.textContent = T_('references.button.units');
-    кнопка.onclick = () => showReferencesSub('units');
+    const button = document.createElement('button');
+    button.className = 'admin-subtab-btn ref-subtab-btn';
+    button.type = 'button';
+    button.id = 'refSubBtnUnits';
+    button.setAttribute('data-refsub', 'units');
+    button.textContent = T_('references.button.units');
+    button.onclick = () => showReferencesSub('units');
     // Рядом с упаковками: товар, его упаковки, его единицы измерения.
-    const после = tabs.querySelector('[data-refsub="packaging"]');
-    if (после && после.nextSibling) tabs.insertBefore(кнопка, после.nextSibling);
-    else tabs.appendChild(кнопка);
+    const after = tabs.querySelector('[data-refsub="packaging"]');
+    if (after && after.nextSibling) tabs.insertBefore(button, after.nextSibling);
+    else tabs.appendChild(button);
 
-    const панель = document.createElement('div');
-    панель.className = 'admin-sub ref-sub';
-    панель.id = 'ref-sub-units';
-    панель.innerHTML = ''
+    const panel = document.createElement('div');
+    panel.className = 'admin-sub ref-sub';
+    panel.id = 'ref-sub-units';
+    panel.innerHTML = ''
       + '<div class="panel-head"><h1>' + esc(T_('references.title.units')) + '</h1>'
       + '<div class="actions" id="unitsActions"></div></div>'
       + '<div class="hint" style="margin:-6px 0 12px;">'
       + esc(T_('references.hint.units')) + '</div>'
       + '<div class="table-card"><table><thead><tr id="unitsHead"></tr></thead>'
       + '<tbody id="unitsBody"></tbody></table></div>';
-    const рядом = document.getElementById('ref-sub-packaging');
-    if (рядом && рядом.parentNode){
-      рядом.parentNode.insertBefore(панель, рядом.nextSibling);
+    const near = document.getElementById('ref-sub-packaging');
+    if (near && near.parentNode){
+      near.parentNode.insertBefore(panel, near.nextSibling);
     } else {
-      document.getElementById('view-references').appendChild(панель);
+      document.getElementById('view-references').appendChild(panel);
     }
   }
 
@@ -69,15 +69,15 @@
    * и о наших не знает. Поэтому оборачиваем: вкладку единиц
    * показываем сами, остальное отдаём прототипу.
    */
-  function перехватитьПереключение(){
+  function interceptSwitch(){
     if (!window.showReferencesSub || window.showReferencesSub.__units) return;
-    const прежняя = window.showReferencesSub;
-    const обёртка = function(sub){
-      const наша = sub === 'units';
-      const панель = document.getElementById('ref-sub-units');
-      if (!наша){
-        if (панель) панель.classList.remove('active');
-        return прежняя(sub);
+    const previous = window.showReferencesSub;
+    const wrapper = function(sub){
+      const isOurs = sub === 'units';
+      const panel = document.getElementById('ref-sub-units');
+      if (!isOurs){
+        if (panel) panel.classList.remove('active');
+        return previous(sub);
       }
       document.querySelectorAll('#view-references .ref-sub').forEach(d => {
         d.classList.toggle('active', d.id === 'ref-sub-units');
@@ -85,30 +85,30 @@
       document.querySelectorAll('[data-refsub]').forEach(b => {
         b.classList.toggle('active', b.getAttribute('data-refsub') === 'units');
       });
-      загрузить();
+      load();
     };
-    обёртка.__units = true;
-    window.showReferencesSub = обёртка;
+    wrapper.__units = true;
+    window.showReferencesSub = wrapper;
   }
 
   /* ================= Данные ================= */
 
-  async function загрузить(){
+  async function load(){
     try {
-      const ответ = await api('GET', '/api/units');
-      state.rows = ответ.units || [];
-      state.canEdit = ответ.canEdit === true;
+      const response = await api('GET', '/api/units');
+      state.rows = response.units || [];
+      state.canEdit = response.canEdit === true;
       state.loaded = true;
     } catch (e){
       state.rows = [];
       say(e.message);
     }
-    нарисовать();
+    render();
   }
 
   /* ================= Отрисовка ================= */
 
-  function нарисовать(){
+  function render(){
     const body = document.getElementById('unitsBody');
     if (!body) return;
     const head = document.getElementById('unitsHead');
@@ -119,9 +119,9 @@
         + (state.canEdit ? '<th></th>' : '');
     }
 
-    const строка = r => {
+    const row = r => {
       if (state.form && state.form.id === r.unitId){
-        return форма(r.isActive ? T('portal.text.yes') : 'нет');
+        return formRow(r.isActive ? T('portal.text.yes') : 'нет');
       }
       return '<tr><td>' + esc(dash(r.mkeiCode)) + '</td>'
         + '<td><strong>' + esc(r.symbol) + '</strong></td>'
@@ -129,16 +129,16 @@
         + '<td class="num">' + esc(dash(r.sortOrder)) + '</td>'
         + '<td>' + (r.isActive ? T('portal.text.yes') : '<span class="count">' + T('portal.text.disabled') + '</span>') + '</td>'
         + (state.canEdit ? '<td style="white-space:nowrap;">'
-            + кнопка('portalUnitEdit', r.unitId, T('portal.text.edit2'))
-            + кнопка('portalUnitToggle', r.unitId, r.isActive ? T('portal.text.disable') : T('portal.text.enable'))
-            + кнопка('portalUnitDelete', r.unitId, T('common.button.delete'))
+            + button('portalUnitEdit', r.unitId, T('portal.text.edit2'))
+            + button('portalUnitToggle', r.unitId, r.isActive ? T('portal.text.disable') : T('portal.text.enable'))
+            + button('portalUnitDelete', r.unitId, T('common.button.delete'))
             + '</td>' : '')
         + '</tr>';
     };
 
-    let html = state.rows.map(строка).join('');
+    let html = state.rows.map(row).join('');
     if (state.form && state.form.id === null){
-      html += форма(T('portal.text.yes'));
+      html += formRow(T('portal.text.yes'));
     }
     body.innerHTML = html
       || '<tr><td colspan="6" style="color:var(--muted);">' + T('partners.text.directory_is_empty') + '</td></tr>';
@@ -153,25 +153,25 @@
     }
   }
 
-  function кнопка(fn, id, подпись){
+  function button(fn, id, label){
     return '<button class="btn ghost" type="button" onclick="' + fn + '(\'' + id + '\')">'
-      + esc(подпись) + '</button> ';
+      + esc(label) + '</button> ';
   }
 
   // Длины те же, что у колонок базы: код МКЕИ — три знака,
   // обозначение — десять. Сервер проверяет это сам; здесь поле просто
   // не даёт набрать лишнее, чтобы отказ не приходил после «Сохранить».
-  const ДЛИНА = {mkeiCode: 3, symbol: 10, name: 255};
+  const MAX_LENGTH = {mkeiCode: 3, symbol: 10, name: 255};
 
-  function форма(признак){
+  function formRow(flag){
     const v = state.form.values;
-    const поле = (col, num) => '<td><input class="kv-input" type="'
+    const field = (col, num) => '<td><input class="kv-input" type="'
       + (num ? 'number' : 'text') + '" value="'
       + esc(v[col] === null || v[col] === undefined ? '' : v[col]) + '"'
-      + (ДЛИНА[col] ? ' maxlength="' + ДЛИНА[col] + '"' : '')
+      + (MAX_LENGTH[col] ? ' maxlength="' + MAX_LENGTH[col] + '"' : '')
       + ' data-unit="' + col + '" oninput="portalUnitField(this)"></td>';
-    return '<tr>' + поле('mkeiCode') + поле('symbol') + поле('name')
-      + поле('sortOrder', true) + '<td>' + esc(признак) + '</td>'
+    return '<tr>' + field('mkeiCode') + field('symbol') + field('name')
+      + field('sortOrder', true) + '<td>' + esc(flag) + '</td>'
       + '<td style="white-space:nowrap;">'
       + '<button class="btn primary" type="button" onclick="portalUnitSave()">' + T('portal.text.save') + '</button> '
       + '<button class="btn ghost" type="button" onclick="portalUnitCancel()">' + T('common.button.cancel') + '</button>'
@@ -187,7 +187,7 @@
 
   window.portalUnitAdd = function(){
     state.form = {id: null, values: {}};
-    нарисовать();
+    render();
   };
 
   window.portalUnitEdit = function(id){
@@ -195,12 +195,12 @@
     if (!r) return;
     state.form = {id: r.unitId, values:
       {mkeiCode: r.mkeiCode, symbol: r.symbol, name: r.name, sortOrder: r.sortOrder}};
-    нарисовать();
+    render();
   };
 
   window.portalUnitCancel = function(){
     state.form = null;
-    нарисовать();
+    render();
   };
 
   window.portalUnitSave = async function(){
@@ -218,12 +218,12 @@
       isActive: r ? r.isActive : true
     };
     try {
-      const ответ = form.id === null
+      const response = form.id === null
         ? await api('POST', '/api/units', body)
         : await api('PUT', '/api/units/' + encodeURIComponent(form.id), body);
-      применить(ответ);
+      apply(response);
       state.form = null;
-      нарисовать();
+      render();
       say(T('portal.text.saved'));
     } catch (e){
       say(e.message);
@@ -234,9 +234,9 @@
     const r = state.rows.find(x => String(x.unitId) === String(id));
     if (!r) return;
     try {
-      применить(await api('POST', '/api/units/' + encodeURIComponent(id) + '/archive',
+      apply(await api('POST', '/api/units/' + encodeURIComponent(id) + '/archive',
                           {active: !r.isActive}));
-      нарисовать();
+      render();
     } catch (e){
       say(e.message);
     }
@@ -246,26 +246,26 @@
     const r = state.rows.find(x => String(x.unitId) === String(id));
     if (!window.confirm('Удалить «' + (r ? r.name : id) + '»?')) return;
     try {
-      применить(await api('DELETE', '/api/units/' + encodeURIComponent(id)));
-      нарисовать();
+      apply(await api('DELETE', '/api/units/' + encodeURIComponent(id)));
+      render();
       say(T('portal.text.deleted'));
     } catch (e){
       say(e.message);
     }
   };
 
-  function применить(ответ){
-    if (!ответ) return;
-    state.rows = ответ.units || [];
-    state.canEdit = ответ.canEdit === true;
+  function apply(response){
+    if (!response) return;
+    state.rows = response.units || [];
+    state.canEdit = response.canEdit === true;
   }
 
   /* ================= Установка ================= */
 
   function install(){
     PORTAL.onLogin(() => {
-      создатьВкладку();
-      перехватитьПереключение();
+      createTab();
+      interceptSwitch();
       state.form = null;
       state.loaded = false;
       // Права и список — чужие после смены поклажедателя или роли.
@@ -273,9 +273,9 @@
       // на экране остались бы кнопки правки от прошлого входа.
       state.rows = [];
       state.canEdit = false;
-      const панель = document.getElementById('ref-sub-units');
-      if (панель && панель.classList.contains('active')) загрузить();
-      else нарисовать();
+      const panel = document.getElementById('ref-sub-units');
+      if (panel && panel.classList.contains('active')) load();
+      else render();
     });
   }
 

@@ -16,7 +16,7 @@
       opt.body = JSON.stringify(body);
     }
     const resp = await fetch(url, opt);
-    if (!resp.ok) throw new Error(await PORTAL.сообщениеОтвета(resp));
+    if (!resp.ok) throw new Error(await PORTAL.responseMessage(resp));
     return resp.status === 204 ? null : resp.json();
   }
 
@@ -46,13 +46,13 @@
   // уровне. Такие объявления — лексические глобали: свойства у window для
   // них не создаётся, и обращение через window.tableColumnState даёт
   // undefined. Поэтому читаем по голому имени, прикрываясь typeof.
-  const есть = name => {
+  const hasGlobal = name => {
     try { return eval('typeof ' + name) !== 'undefined'; } catch (e){ return false; }
   };
 
   function applyTable(tableKey, rows){
     raw[tableKey] = rows.map(r => r.columnId);
-    if (!есть('tableColumnState') || !tableColumnState[tableKey]) return;
+    if (!hasGlobal('tableColumnState') || !tableColumnState[tableKey]) return;
     const known = new Set((tableColumns[tableKey] || []).map(c => c.id));
     // колонка могла пропасть из вёрстки, но остаться в базе — рисовать
     // её нечем, поэтому ориентируемся на то, что умеет прототип
@@ -129,8 +129,8 @@
     if (typeof applyOrig === 'function'){
       window.applyColumnPicker = function(){
         // прочитать ДО вызова оригинала: он закрывает окно и обнуляет обе
-        const tableKey = есть('colPickerTable') ? colPickerTable : null;
-        const draft = есть('colPickerDraft') ? colPickerDraft : null;
+        const tableKey = hasGlobal('colPickerTable') ? colPickerTable : null;
+        const draft = hasGlobal('colPickerDraft') ? colPickerDraft : null;
         // прототип сначала применяет выбор у себя — экран меняется сразу,
         // не дожидаясь ответа сервера
         applyOrig.apply(this, arguments);
@@ -160,7 +160,7 @@
     if (typeof renderOrig === 'function'){
       window.renderColumnPickerList = function(){
         renderOrig.apply(this, arguments);
-        const tableKey = есть('colPickerTable') ? colPickerTable : null;
+        const tableKey = hasGlobal('colPickerTable') ? colPickerTable : null;
         if (!tableKey) return;
         const pinned = new Set((layout[tableKey] || [])
             .filter(r => r.isPinned).map(r => r.columnId));
@@ -185,7 +185,7 @@
     // применяется сразу, поэтому окно закрывается — иначе осталась бы
     // кнопка «Применить», которая записала бы умолчания как личный выбор.
     window.resetColumnPicker = function(){
-      const tableKey = есть('colPickerTable') ? colPickerTable : null;
+      const tableKey = hasGlobal('colPickerTable') ? colPickerTable : null;
       if (!tableKey) return;
       api('DELETE', '/api/table-columns/' + encodeURIComponent(tableKey))
         .then(rows => {
@@ -222,7 +222,7 @@
         if (own) return own;
       }
       // окно выбора зовёт без таблицы — берём открытую
-      const open = есть('colPickerTable') ? colPickerTable : null;
+      const open = hasGlobal('colPickerTable') ? colPickerTable : null;
       if (!tableKey && open){
         const rows = layout[open] || [];
         const cols = tableColumns[open] || [];
@@ -363,7 +363,6 @@
   // Карточка поклажедателя в прототипе без вкладок, поэтому полоску
   // вкладок добавляем сами, а не переписываем карточку целиком.
   function wrapDepositorCard(){
-    const renderOrig = window.portalDirRenderHook;
     const state = {tab: 'card'};
 
     function decorate(){
@@ -418,7 +417,6 @@
         if (isAdmin() && dirName === 'depositorsDir') decorate();
       };
     }
-    return renderOrig;
   }
 
   /* ============ Копирование настроек пользователю ============ */
@@ -437,7 +435,7 @@
     const host = document.getElementById('adminSetPassword');
     const row = host && host.parentNode;
     if (!row || document.getElementById('copySettingsFrom')) return;
-    let users = [];
+    let users;
     try {
       users = await api('GET', '/api/admin/users');
     } catch (e){ return; }

@@ -15,137 +15,137 @@
     const text = await resp.text();
     const data = text ? JSON.parse(text) : null;
     if (!resp.ok){
-      const e = new Error(PORTAL.текстОшибки(resp.status, data));
+      const e = new Error(PORTAL.errorText(resp.status, data));
       e.status = resp.status;
       throw e;
     }
     return data;
   }
 
-  const экран = id => document.getElementById(id);
-  const экранировать = v => String(v === null || v === undefined ? '' : v)
+  const byId = id => document.getElementById(id);
+  const esc = v => String(v === null || v === undefined ? '' : v)
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
-  const данные = {пользователи: [], поклажедатели: [], склады: [], доступыПоклажедателей: []};
+  const store = {users: [], depositors: [], warehouseList: [], depositorAccess: []};
 
-  async function загрузить(){
+  async function load(){
     try {
-      const [пользователи, поклажедатели, склады, доступы] = await Promise.all([
+      const [users, depositors, warehouseList, access] = await Promise.all([
         api('GET', '/api/admin/users'),
         api('GET', '/api/admin/depositors'),
         api('GET', '/api/admin/warehouses'),
         api('GET', '/api/admin/depositor-access')
       ]);
-      данные.пользователи = пользователи;
-      данные.поклажедатели = поклажедатели;
-      данные.склады = склады;
-      данные.доступыПоклажедателей = доступы;
+      store.users = users;
+      store.depositors = depositors;
+      store.warehouseList = warehouseList;
+      store.depositorAccess = access;
     } catch (e){
       // 403 — раздел доступен только администратору, это нормально
-      данные.пользователи = [];
-      данные.доступыПоклажедателей = [];
+      store.users = [];
+      store.depositorAccess = [];
     }
-    отрисоватьДоступыМенеджеров();
-    отрисоватьДоступыСотрудников();
-    отрисоватьСкладыПоклажедателей();
+    drawManagerAccess();
+    drawStaffAccess();
+    drawDepositorWarehouses();
   }
 
   /** Общий блок галочек: один список, одно правило разметки. */
-  function галочки(элементы, выбранные, атрибут, подпись, пояснение){
-    const выбрано = new Set(выбранные || []);
-    if (!элементы.length){
+  function checkboxes(items, selectedItems, attr, label, note){
+    const chosen = new Set(selectedItems || []);
+    if (!items.length){
       return '<div style="color:var(--muted);font-size:13.5px;">' + T('admin.text.list_is_empty') + '</div>';
     }
-    return элементы.map(x =>
+    return items.map(x =>
       '<label style="display:flex;align-items:center;gap:8px;font-size:13.5px;'
       + 'padding:9px 0;border-bottom:1px solid var(--line);">'
-      + '<input type="checkbox" ' + атрибут + '="' + экранировать(x.id) + '"'
-      + (выбрано.has(x.id) ? ' checked' : '') + '> ' + экранировать(подпись(x))
-      + (пояснение && пояснение(x)
-          ? ' <span style="color:var(--muted);">· ' + экранировать(пояснение(x)) + '</span>'
+      + '<input type="checkbox" ' + attr + '="' + esc(x.id) + '"'
+      + (chosen.has(x.id) ? ' checked' : '') + '> ' + esc(label(x))
+      + (note && note(x)
+          ? ' <span style="color:var(--muted);">· ' + esc(note(x)) + '</span>'
           : '')
       + '</label>').join('');
   }
 
-  function отмеченные(атрибут){
-    return [...document.querySelectorAll('#adminUserEditContent input[' + атрибут + ']:checked')]
-      .map(cb => cb.getAttribute(атрибут));
+  function checked(attr){
+    return [...document.querySelectorAll('#adminUserEditContent input[' + attr + ']:checked')]
+      .map(cb => cb.getAttribute(attr));
   }
 
-  function кнопки(подраздел, обработчик){
-    const el = экран('adminUserEditContent');
-    el.querySelector('[data-save]').onclick = обработчик;
+  function buttons(section, handler){
+    const el = byId('adminUserEditContent');
+    el.querySelector('[data-save]').onclick = handler;
     el.querySelector('[data-cancel]').onclick = () => {
       showView('admin');
-      showAdminSub(подраздел);
+      showAdminSub(section);
     };
   }
 
-  const действия = ''
+  const actions = ''
     + '<div class="actions" style="margin-top:18px;display:flex;gap:8px;">'
     + '  <button class="btn primary" type="button" data-save>' + T('portal.text.save') + '</button>'
     + '  <button class="btn ghost" type="button" data-cancel>' + T('common.button.cancel') + '</button>'
     + '</div>';
 
-  const толькоЧтение = () => currentUserRole === 'developer';
+  const readOnly = () => currentUserRole === 'developer';
 
-  function запретитьПравку(){
-    if (!толькоЧтение()) return;
-    const el = экран('adminUserEditContent');
+  function lockEditing(){
+    if (!readOnly()) return;
+    const el = byId('adminUserEditContent');
     el.insertAdjacentHTML('afterbegin', '<div style="background:#eef2ff;border:1px solid #c7d2fe;'
       + 'color:#3730a3;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:13px;">'
       + '👁 Режим просмотра — менять доступы вправе только администратор.</div>');
     el.querySelectorAll('input').forEach(e => e.disabled = true);
-    const кнопка = el.querySelector('[data-save]');
-    if (кнопка) кнопка.style.display = 'none';
+    const button = el.querySelector('[data-save]');
+    if (button) button.style.display = 'none';
   }
 
   /* ======================================================================
      1. «Доступы» — поклажедатели менеджера
      ====================================================================== */
 
-  function менеджеры(){
-    return данные.пользователи.filter(u => u.roleCode === 'manager');
+  function managers(){
+    return store.users.filter(u => u.roleCode === 'manager');
   }
 
-  function отрисоватьДоступыМенеджеров(){
-    const body = экран('adminAccessBody');
+  function drawManagerAccess(){
+    const body = byId('adminAccessBody');
     if (!body) return;
-    const список = менеджеры();
-    body.innerHTML = список.length
-      ? список.map(u => '<tr onclick="portalOpenManagerAccess(\'' + u.userId + '\')">'
-          + '<td><strong>' + экранировать(u.fullName) + '</strong>'
-          + '<div style="color:var(--muted);font-size:12.5px;">' + экранировать(u.login) + '</div></td>'
-          + '<td>' + экранировать(u.scope) + '</td></tr>').join('')
+    const list = managers();
+    body.innerHTML = list.length
+      ? list.map(u => '<tr onclick="portalOpenManagerAccess(\'' + u.userId + '\')">'
+          + '<td><strong>' + esc(u.fullName) + '</strong>'
+          + '<div style="color:var(--muted);font-size:12.5px;">' + esc(u.login) + '</div></td>'
+          + '<td>' + esc(u.scope) + '</td></tr>').join('')
       : '<tr><td colspan="2" style="color:var(--muted);">' + T('admin.text.no_managers_defined') + '</td></tr>';
   }
 
   window.portalOpenManagerAccess = async function(userId){
-    const u = данные.пользователи.find(x => x.userId === userId);
+    const u = store.users.find(x => x.userId === userId);
     if (!u) return;
-    let выданные = [];
-    try { выданные = await api('GET', '/api/admin/users/' + encodeURIComponent(userId) + '/depositors'); }
-    catch (e){ выданные = []; }
+    let granted;
+    try { granted = await api('GET', '/api/admin/users/' + encodeURIComponent(userId) + '/depositors'); }
+    catch (e){ granted = []; }
 
-    экран('adminUserEditContent').innerHTML = ''
+    byId('adminUserEditContent').innerHTML = ''
       + '<div class="detail-head"><div>'
-      + '  <h2>Доступы менеджера — ' + экранировать(u.fullName) + '</h2>'
-      + '  <div class="meta">' + экранировать(u.userPosition || '—') + ' · '
-      +      экранировать(u.login) + '</div></div></div>'
+      + '  <h2>Доступы менеджера — ' + esc(u.fullName) + '</h2>'
+      + '  <div class="meta">' + esc(u.userPosition || '—') + ' · '
+      +      esc(u.login) + '</div></div></div>'
       + '<div class="section-title" style="margin-top:0;">' + T('admin.text.depositors_this_manager_works_with') + '</div>'
       + '<div class="table-card" style="padding:18px 20px;">'
       + '  <div class="hint" style="margin:-4px 0 10px;">Менеджер видит только отмеченных. '
       + 'Если доступен не один, портал при входе спросит, с кем он работает.</div>'
-      + галочки(данные.поклажедатели.map(d => ({id: d.depositorId, name: d.orgName, code: d.code})),
-                выданные, 'data-depositor-id', x => x.name, x => x.code)
+      + checkboxes(store.depositors.map(d => ({id: d.depositorId, name: d.orgName, code: d.code})),
+                granted, 'data-depositor-id', x => x.name, x => x.code)
       + '</div>'
-      + действия;
+      + actions;
 
-    кнопки('access', async () => {
+    buttons('access', async () => {
       try {
         await api('PUT', '/api/admin/users/' + encodeURIComponent(userId) + '/depositors',
-                  {depositorIds: отмеченные('data-depositor-id')});
-        await загрузить();
+                  {depositorIds: checked('data-depositor-id')});
+        await load();
         if (typeof notify === 'function') notify('Доступы обновлены: ' + u.fullName);
         showView('admin');
         showAdminSub('access');
@@ -153,7 +153,7 @@
         if (typeof notify === 'function') notify('Не удалось сохранить: ' + e.message);
       }
     });
-    запретитьПравку();
+    lockEditing();
     showView('admin-user-edit');
   };
 
@@ -161,49 +161,49 @@
      2. «Доступы сотрудников» — склады кладовщика
      ====================================================================== */
 
-  function кладовщики(){
-    return данные.пользователи.filter(u => u.roleCode === 'staff');
+  function warehouseStaff(){
+    return store.users.filter(u => u.roleCode === 'staff');
   }
 
-  function отрисоватьДоступыСотрудников(){
-    const body = экран('adminStaffAccessBody');
+  function drawStaffAccess(){
+    const body = byId('adminStaffAccessBody');
     if (!body) return;
-    const список = кладовщики();
-    body.innerHTML = список.length
-      ? список.map(u => '<tr onclick="portalOpenStaffAccess(\'' + u.userId + '\')">'
-          + '<td><strong>' + экранировать(u.fullName) + '</strong>'
-          + '<div style="color:var(--muted);font-size:12.5px;">' + экранировать(u.login) + '</div></td>'
-          + '<td>' + экранировать(u.scope) + '</td>'
-          + '<td>' + экранировать(u.depositorCodes || 'по складам') + '</td></tr>').join('')
+    const list = warehouseStaff();
+    body.innerHTML = list.length
+      ? list.map(u => '<tr onclick="portalOpenStaffAccess(\'' + u.userId + '\')">'
+          + '<td><strong>' + esc(u.fullName) + '</strong>'
+          + '<div style="color:var(--muted);font-size:12.5px;">' + esc(u.login) + '</div></td>'
+          + '<td>' + esc(u.scope) + '</td>'
+          + '<td>' + esc(u.depositorCodes || 'по складам') + '</td></tr>').join('')
       : '<tr><td colspan="3" style="color:var(--muted);">' + T('admin.text.no_warehouse_staff_defined') + '</td></tr>';
   }
 
   window.portalOpenStaffAccess = async function(userId){
-    const u = данные.пользователи.find(x => x.userId === userId);
+    const u = store.users.find(x => x.userId === userId);
     if (!u) return;
-    let выданные = [];
-    try { выданные = await api('GET', '/api/admin/users/' + encodeURIComponent(userId) + '/warehouses'); }
-    catch (e){ выданные = []; }
+    let granted;
+    try { granted = await api('GET', '/api/admin/users/' + encodeURIComponent(userId) + '/warehouses'); }
+    catch (e){ granted = []; }
 
-    экран('adminUserEditContent').innerHTML = ''
+    byId('adminUserEditContent').innerHTML = ''
       + '<div class="detail-head"><div>'
-      + '  <h2>Доступы сотрудника — ' + экранировать(u.fullName) + '</h2>'
-      + '  <div class="meta">' + экранировать(u.userPosition || '—') + ' · '
-      +      экранировать(u.login) + '</div></div></div>'
+      + '  <h2>Доступы сотрудника — ' + esc(u.fullName) + '</h2>'
+      + '  <div class="meta">' + esc(u.userPosition || '—') + ' · '
+      +      esc(u.login) + '</div></div></div>'
       + '<div class="section-title" style="margin-top:0;">' + T('admin.text.warehouses_this_employee_works_at') + '</div>'
       + '<div class="table-card" style="padding:18px 20px;">'
       + '  <div class="hint" style="margin:-4px 0 10px;">Поклажедатели сотруднику не назначаются '
       + 'отдельно: он видит тех, чей товар лежит на его складах.</div>'
-      + галочки(данные.склады.map(w => ({id: w.warehouseId, name: w.name, address: w.address})),
-                выданные, 'data-warehouse-id', x => x.name, x => x.address)
+      + checkboxes(store.warehouseList.map(w => ({id: w.warehouseId, name: w.name, address: w.address})),
+                granted, 'data-warehouse-id', x => x.name, x => x.address)
       + '</div>'
-      + действия;
+      + actions;
 
-    кнопки('staff-access', async () => {
+    buttons('staff-access', async () => {
       try {
         await api('PUT', '/api/admin/users/' + encodeURIComponent(userId) + '/warehouses',
-                  {warehouseIds: отмеченные('data-warehouse-id')});
-        await загрузить();
+                  {warehouseIds: checked('data-warehouse-id')});
+        await load();
         if (typeof notify === 'function') notify('Склады сотрудника обновлены: ' + u.fullName);
         showView('admin');
         showAdminSub('staff-access');
@@ -211,7 +211,7 @@
         if (typeof notify === 'function') notify('Не удалось сохранить: ' + e.message);
       }
     });
-    запретитьПравку();
+    lockEditing();
     showView('admin-user-edit');
   };
 
@@ -219,50 +219,50 @@
      3. «Склады поклажедателей»
      ====================================================================== */
 
-  function отрисоватьСкладыПоклажедателей(){
-    const body = экран('adminDepositorAccessBody');
+  function drawDepositorWarehouses(){
+    const body = byId('adminDepositorAccessBody');
     if (!body) return;
-    const список = данные.доступыПоклажедателей;
-    body.innerHTML = список.length
-      ? список.map(d => '<tr onclick="portalOpenDepositorWarehouses(\'' + d.depositorId + '\')">'
-          + '<td><strong>' + экранировать(d.orgName) + '</strong>'
-          + '<div style="color:var(--muted);font-size:12.5px;">' + экранировать(d.code) + '</div></td>'
+    const list = store.depositorAccess;
+    body.innerHTML = list.length
+      ? list.map(d => '<tr onclick="portalOpenDepositorWarehouses(\'' + d.depositorId + '\')">'
+          + '<td><strong>' + esc(d.orgName) + '</strong>'
+          + '<div style="color:var(--muted);font-size:12.5px;">' + esc(d.code) + '</div></td>'
           + '<td>' + (d.warehouses
-              ? экранировать(d.warehouses)
+              ? esc(d.warehouses)
               : '<span style="color:var(--muted);">' + T('admin.text.all_warehouses') + '</span>') + '</td>'
           + '<td></td></tr>').join('')
       : '<tr><td colspan="3" style="color:var(--muted);">' + T('admin.text.no_depositors_defined') + '</td></tr>';
   }
 
   window.portalOpenDepositorWarehouses = async function(depositorId){
-    const d = данные.доступыПоклажедателей.find(x => x.depositorId === depositorId);
+    const d = store.depositorAccess.find(x => x.depositorId === depositorId);
     if (!d) return;
-    let выданные = [];
+    let granted;
     try {
-      выданные = await api('GET', '/api/admin/depositors/'
+      granted = await api('GET', '/api/admin/depositors/'
                 + encodeURIComponent(depositorId) + '/warehouses');
-    } catch (e){ выданные = []; }
+    } catch (e){ granted = []; }
 
-    экран('adminUserEditContent').innerHTML = ''
+    byId('adminUserEditContent').innerHTML = ''
       + '<div class="detail-head"><div>'
-      + '  <h2>Доступные склады — ' + экранировать(d.orgName) + '</h2>'
-      + '  <div class="meta">Код поклажедателя: ' + экранировать(d.code) + '</div></div></div>'
+      + '  <h2>Доступные склады — ' + esc(d.orgName) + '</h2>'
+      + '  <div class="meta">Код поклажедателя: ' + esc(d.code) + '</div></div></div>'
       + '<div class="section-title" style="margin-top:0;">' + T('admin.text.warehouses_where_this_depositor_st') + '</div>'
       + '<div class="table-card" style="padding:18px 20px;">'
       + '  <div class="hint" style="margin:-4px 0 10px;">Отмеченные склады поклажедатель видит '
       + 'в документах. Если не отмечен ни один — доступны все: так забытая настройка '
       + 'не оставит клиента без складов.</div>'
-      + галочки(данные.склады.map(w => ({id: w.warehouseId, name: w.name, address: w.address})),
-                выданные, 'data-warehouse-id', x => x.name, x => x.address)
+      + checkboxes(store.warehouseList.map(w => ({id: w.warehouseId, name: w.name, address: w.address})),
+                granted, 'data-warehouse-id', x => x.name, x => x.address)
       + '</div>'
-      + действия;
+      + actions;
 
-    кнопки('depositor-access', async () => {
+    buttons('depositor-access', async () => {
       try {
-        данные.доступыПоклажедателей = await api('PUT', '/api/admin/depositors/'
+        store.depositorAccess = await api('PUT', '/api/admin/depositors/'
                 + encodeURIComponent(depositorId) + '/warehouses',
-                {warehouseIds: отмеченные('data-warehouse-id')});
-        отрисоватьСкладыПоклажедателей();
+                {warehouseIds: checked('data-warehouse-id')});
+        drawDepositorWarehouses();
         if (typeof notify === 'function') notify('Доступные склады обновлены: ' + d.orgName);
         // если правили текущего поклажедателя — обновляем списки складов в документах
         if (PORTAL.session && PORTAL.session.depositorId === depositorId){
@@ -274,7 +274,7 @@
         if (typeof notify === 'function') notify('Не удалось сохранить: ' + e.message);
       }
     });
-    запретитьПравку();
+    lockEditing();
     showView('admin-user-edit');
   };
 
@@ -283,15 +283,15 @@
      ====================================================================== */
 
   function install(){
-    window.renderAdminAccess = отрисоватьДоступыМенеджеров;
-    window.renderAdminStaffAccess = отрисоватьДоступыСотрудников;
-    window.renderAdminDepositorAccess = отрисоватьСкладыПоклажедателей;
+    window.renderAdminAccess = drawManagerAccess;
+    window.renderAdminStaffAccess = drawStaffAccess;
+    window.renderAdminDepositorAccess = drawDepositorWarehouses;
     // старые демо-обработчики строк больше не нужны
     window.openAdminAccessEdit = () => {};
     window.openAdminStaffAccessEdit = () => {};
     window.openAdminDepositorAccessEdit = window.portalOpenDepositorWarehouses;
     window.setStaffWarehouseFilter = window.setStaffWarehouseFilter || (() => {});
-    PORTAL.onLogin(загрузить);
+    PORTAL.onLogin(load);
   }
 
   if (document.readyState === 'loading'){

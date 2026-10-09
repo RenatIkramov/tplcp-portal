@@ -7,12 +7,12 @@
 
   const T_ = k => (typeof T === 'function' ? T(k) : k);
 
-  const ВКЛАДКИ = [
-    {id: 'reports',  ключ: 'billing.tab.reports'},
-    {id: 'services', ключ: 'billing.tab.services_and_rates'},
-    {id: 'invoices', ключ: 'billing.tab.invoices'}
+  const TABS = [
+    {id: 'reports',  key: 'billing.tab.reports'},
+    {id: 'services', key: 'billing.tab.services_and_rates'},
+    {id: 'invoices', key: 'billing.tab.invoices'}
   ];
-  let активная = 'reports';
+  let active = 'reports';
 
   /**
    * Раскладывает блоки экрана по вкладкам.
@@ -21,93 +21,93 @@
    * section-title и table-card идентификаторов нет, а переименовать их
    * значило бы править разметку в двух местах.
    */
-  function разложить(){
+  function spread(){
     const view = document.getElementById('view-billing');
     if (!view || view.querySelector('#billingTabs')) return;
 
-    const узел = id => document.getElementById(id);
-    const дети = [...view.children];
-    const принадлежность = {};
+    const node = id => document.getElementById(id);
+    const kids = [...view.children];
+    const ownerOf = {};
 
     // Блок начинается с заголовка (section-title или panel-head) и идёт
     // до следующего заголовка. Какой это блок, определяет tbody внутри.
-    let текущий = null;
-    const группы = [];
-    дети.forEach(el => {
-      const заголовок = el.classList.contains('section-title')
+    let current = null;
+    const groups = [];
+    kids.forEach(el => {
+      const title = el.classList.contains('section-title')
         || (el.classList.contains('panel-head') && el.querySelector('.section-title'));
-      if (заголовок || !текущий){
-        текущий = {узлы: [], таблица: null};
-        группы.push(текущий);
+      if (title || !current){
+        current = {nodes: [], table: null};
+        groups.push(current);
       }
-      текущий.узлы.push(el);
+      current.nodes.push(el);
       ['billingServicesBody', 'billingReportsBody', 'billingInvoicesBody'].forEach(id => {
-        if (el.querySelector && el.querySelector('#' + id)) текущий.таблица = id;
+        if (el.querySelector && el.querySelector('#' + id)) current.table = id;
       });
     });
 
-    принадлежность.billingReportsBody = 'reports';
-    принадлежность.billingServicesBody = 'services';
-    принадлежность.billingInvoicesBody = 'invoices';
+    ownerOf.billingReportsBody = 'reports';
+    ownerOf.billingServicesBody = 'services';
+    ownerOf.billingInvoicesBody = 'invoices';
 
-    const заголовокЭкрана = view.querySelector('.panel-head');
-    const полосы = {};
-    ВКЛАДКИ.forEach(в => {
+    const screenTitle = view.querySelector('.panel-head');
+    const bars = {};
+    TABS.forEach(tab => {
       const d = document.createElement('div');
       d.className = 'admin-sub';
-      d.id = 'billing-sub-' + в.id;
-      полосы[в.id] = d;
+      d.id = 'billing-sub-' + tab.id;
+      bars[tab.id] = d;
     });
 
-    группы.forEach(г => {
+    groups.forEach(grp => {
       // первый блок — это шапка экрана с кнопкой экспорта, она не таблица
-      if (г.узлы[0] === заголовокЭкрана) return;
-      const куда = принадлежность[г.таблица];
-      if (!куда) return;
-      г.узлы.forEach(el => полосы[куда].appendChild(el));
+      if (grp.nodes[0] === screenTitle) return;
+      const target = ownerOf[grp.table];
+      if (!target) return;
+      grp.nodes.forEach(el => bars[target].appendChild(el));
     });
 
-    const полоса = document.createElement('div');
-    полоса.className = 'admin-subtabs';
-    полоса.id = 'billingTabs';
-    view.appendChild(полоса);
-    ВКЛАДКИ.forEach(в => view.appendChild(полосы[в.id]));
+    const bar = document.createElement('div');
+    bar.className = 'admin-subtabs';
+    bar.id = 'billingTabs';
+    view.appendChild(bar);
+    TABS.forEach(tab => view.appendChild(bars[tab.id]));
 
     // Кнопка «Экспортировать в Excel» выгружает тарифы и услуги —
     // на других вкладках она сбивала бы с толку, поэтому переезжает
     // вместе с ними.
-    const экспорт = заголовокЭкрана
-      && заголовокЭкрана.querySelector('.actions');
-    if (экспорт) полосы.services.insertBefore(экспорт, полосы.services.firstChild);
+    const exportBtn = screenTitle
+      && screenTitle.querySelector('.actions');
+    if (exportBtn) bars.services.insertBefore(exportBtn, bars.services.firstChild);
 
-    отрисовать();
+    draw();
   }
 
-  function отрисовать(){
-    const полоса = document.getElementById('billingTabs');
-    if (!полоса) return;
-    полоса.innerHTML = ВКЛАДКИ.map(в =>
-      '<button class="admin-subtab-btn' + (в.id === активная ? ' active' : '') + '"'
-      + ' type="button" data-billing-tab="' + в.id + '">'
-      + T_(в.ключ) + '</button>').join('');
-    полоса.querySelectorAll('[data-billing-tab]').forEach(b => {
-      b.onclick = () => { активная = b.getAttribute('data-billing-tab'); отрисовать(); };
+  function draw(){
+    const bar = document.getElementById('billingTabs');
+    if (!bar) return;
+    bar.innerHTML = TABS.map(tab =>
+      '<button class="admin-subtab-btn' + (tab.id === active ? ' active' : '') + '"'
+      + ' type="button" data-billing-tab="' + tab.id + '">'
+      + T_(tab.key) + '</button>').join('');
+    bar.querySelectorAll('[data-billing-tab]').forEach(b => {
+      b.onclick = () => { active = b.getAttribute('data-billing-tab'); draw(); };
     });
-    ВКЛАДКИ.forEach(в => {
-      const el = document.getElementById('billing-sub-' + в.id);
-      if (el) el.classList.toggle('active', в.id === активная);
+    TABS.forEach(tab => {
+      const el = document.getElementById('billing-sub-' + tab.id);
+      if (el) el.classList.toggle('active', tab.id === active);
     });
   }
 
   window.showBillingSub = function(id){
-    if (ВКЛАДКИ.some(в => в.id === id)) активная = id;
-    отрисовать();
+    if (TABS.some(tab => tab.id === id)) active = id;
+    draw();
   };
 
   function install(){
-    разложить();
+    spread();
     // подписи вкладок приходят вместе с переводами
-    PORTAL.onLogin(() => { разложить(); отрисовать(); });
+    PORTAL.onLogin(() => { spread(); draw(); });
   }
 
   if (document.readyState === 'loading'){

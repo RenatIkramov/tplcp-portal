@@ -22,7 +22,7 @@
     const url = '/api/' + name;
     const resp = await fetch(url, {headers: {'Accept': 'application/json'}});
     if (!resp.ok){
-      throw new Error(await PORTAL.сообщениеОтвета(resp));
+      throw new Error(await PORTAL.responseMessage(resp));
     }
     return resp.json();
   }
@@ -169,10 +169,10 @@
     // Перечитать список товаров умеют теперь и другие блоки: после
     // загрузки из Excel созданные позиции должны оказаться в списке,
     // а не ждать следующего входа.
-    PORTAL.перечитатьТовары = () => load('sku', renderSkuFromApi);
+    PORTAL.reloadProducts = () => load('sku', renderSkuFromApi);
 
     PORTAL.onLogin(() => {
-      PORTAL.перечитатьТовары();
+      PORTAL.reloadProducts();
       load('service-tariffs', renderTariffsFromApi);
       load('invoices', renderInvoicesFromApi);
     });

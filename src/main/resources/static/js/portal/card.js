@@ -63,7 +63,7 @@
     const url = '/api/' + type + '/' + encodeURIComponent(docId);
     const resp = await fetch(url, {headers: {'Accept': 'application/json'}});
     if (!resp.ok){
-      throw new Error(await PORTAL.сообщениеОтвета(resp));
+      throw new Error(await PORTAL.responseMessage(resp));
     }
     return resp.json();
   }

@@ -20,7 +20,7 @@
       opt.body = JSON.stringify(body);
     }
     const resp = await fetch(url, opt);
-    if (!resp.ok) throw new Error(await PORTAL.сообщениеОтвета(resp));
+    if (!resp.ok) throw new Error(await PORTAL.responseMessage(resp));
     return resp.status === 204 ? null : resp.json();
   }
 

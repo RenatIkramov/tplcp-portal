@@ -33,7 +33,7 @@
       opt.body = JSON.stringify(body);
     }
     const resp = await fetch(url, opt);
-    if (!resp.ok) throw new Error(await PORTAL.сообщениеОтвета(resp));
+    if (!resp.ok) throw new Error(await PORTAL.responseMessage(resp));
     return resp.status === 204 ? null : resp.json();
   }
 
@@ -63,10 +63,10 @@
     currency_id: 'currency', hazard_class_id: 'hazardClass',
     hazard_group_id: 'hazardGroup'
   };
-  function полеДоступно(column){
+  function fieldAllowed(column){
     const id = COL_OF[column]
       || column.replace(/_([a-z0-9])/g, (m, c) => c.toUpperCase());
-    return !PORTAL.полеДоступно || PORTAL.полеДоступно(id);
+    return !PORTAL.fieldAllowed || PORTAL.fieldAllowed(id);
   }
 
   const TABS = {
@@ -330,7 +330,7 @@
     }
     // Поля, закрытые этому поклажедателю, не правятся: иначе запрет
     // действовал бы только в просмотре, а в правке поле оставалось бы.
-    const fields = TABS[tab].filter(f => полеДоступно(f.col));
+    const fields = TABS[tab].filter(f => fieldAllowed(f.col));
     if (!fields.length){
       body.innerHTML = '<div style="color:var(--muted); font-size:13px;">'
         + 'На этой вкладке у вас нет доступных полей</div>';

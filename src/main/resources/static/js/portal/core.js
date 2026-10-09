@@ -25,7 +25,7 @@
    * время. Берём язык, выбранный пользователем; пока переводы не загрузились
    * или язык неизвестен — английский, как язык портала по умолчанию.
    */
-  PORTAL.языкВремени = function(){
+  PORTAL.timeLocale = function(){
     const code = (PORTAL.i18n && PORTAL.i18n.code) || 'en';
     return {ru: 'ru-RU', en: 'en-GB', nl: 'nl-NL', kk: 'kk-KZ'}[code] || 'en-GB';
   };
@@ -99,7 +99,7 @@
         + '</span> · <a href="#" id="portalStockRefresh">' + T('common.text.retry') + '</a>';
     } else {
       const t = PORTAL.loadedAt
-        ? PORTAL.loadedAt.toLocaleTimeString(PORTAL.языкВремени(),
+        ? PORTAL.loadedAt.toLocaleTimeString(PORTAL.timeLocale(),
             {hour:'2-digit', minute:'2-digit'})
         : '—';
       bar.innerHTML = '' + T('admin.column.depositor') + ' <b>' + PORTAL.depositorCode + '</b> · '
@@ -115,12 +115,7 @@
     PORTAL.error = null;
     renderStatusBar();
     try {
-      const url = '/api/stock';
-      const resp = await fetch(url, {headers: {'Accept': 'application/json'}});
-      if (!resp.ok){
-        throw new Error(await PORTAL.сообщениеОтвета(resp));
-      }
-      PORTAL.rows = (await resp.json()).map(toRow);
+      PORTAL.rows = (await PORTAL.fetchJson('/api/stock')).map(toRow);
       PORTAL.loadedAt = new Date();
     } catch (e){
       PORTAL.rows = [];
@@ -144,7 +139,7 @@
    * (поле message), но если ответ пустой — подставляем понятный по смыслу
    * кода, а не «код 400», из которого пользователю ничего не ясно.
    */
-  const ПО_КОДУ = {
+  const BY_CODE = {
     400: T('stock.text.request_rejected_check_the_fields'),
     401: T('stock.text.please_sign_in_again'),
     403: T('stock.text.this_action_is_not_available_to_yo'),
@@ -156,15 +151,33 @@
     502: T('stock.text.no_connection_to_the_portal_server'),
     503: T('stock.text.portal_is_temporarily_unavaila')
   };
-  PORTAL.текстОшибки = (status, data) =>
-    (data && (data.message || data.detail)) || ПО_КОДУ[status]
+  PORTAL.errorText = (status, data) =>
+    (data && (data.message || data.detail)) || BY_CODE[status]
     || ('запрос не выполнен (код ' + status + ')');
 
   /** Разбирает неудачный ответ fetch и возвращает готовое сообщение. */
-  PORTAL.сообщениеОтвета = async resp => {
+  PORTAL.responseMessage = async resp => {
     let data = null;
     try { data = await resp.clone().json(); } catch (e) {}
-    return PORTAL.текстОшибки(resp.status, data);
+    return PORTAL.errorText(resp.status, data);
+  };
+
+  /**
+   * Запрос к порталу с разбором ответа.
+   *
+   * Отказ превращается в исключение с готовым сообщением — тем самым,
+   * которое увидит человек. Вызывающему остаётся один `try` вокруг
+   * всего обращения, без проверки `resp.ok` внутри него: бросать
+   * исключение в том же блоке, который его ловит, — приём, на который
+   * справедливо ругается анализатор, да и читается он плохо.
+   */
+  PORTAL.fetchJson = async (url, options) => {
+    const resp = await fetch(url, Object.assign(
+        {headers: {'Accept': 'application/json'}}, options || {}));
+    if (!resp.ok) {
+      throw new Error(await PORTAL.responseMessage(resp));
+    }
+    return resp.status === 204 ? null : resp.json();
   };
 
   PORTAL.onLogin = fn => { PORTAL.loaders.push(fn); };

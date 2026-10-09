@@ -15,7 +15,7 @@
     const text = await resp.text();
     const data = text ? JSON.parse(text) : null;
     if (!resp.ok){
-      const e = new Error(PORTAL.текстОшибки(resp.status, data));
+      const e = new Error(PORTAL.errorText(resp.status, data));
       e.status = resp.status;
       throw e;
     }
@@ -29,15 +29,15 @@
   // Любой запрос к API может вернуться с 401 — например, если истёк срок
   // сессии. Чтобы это не выглядело как «данные пропали», перехватываем ответ
   // один раз в одном месте и возвращаем человека на экран входа.
-  const штатныйFetch = window.fetch.bind(window);
-  let сеансПотерян = false;
+  const builtinFetch = window.fetch.bind(window);
+  let sessionLost = false;
   window.fetch = async function(url, opts){
-    const resp = await штатныйFetch(url, opts);
-    const адрес = String(typeof url === 'string' ? url : (url && url.url) || '');
-    if (resp.status === 401 && адрес.indexOf('/api/') === 0
-        && адрес.indexOf('/api/auth/') !== 0 && !сеансПотерян){
-      сеансПотерян = true;
-      показатьВход(T('auth.text.session_ended_please_sign_in_again'));
+    const resp = await builtinFetch(url, opts);
+    const address = String(typeof url === 'string' ? url : (url && url.url) || '');
+    if (resp.status === 401 && address.indexOf('/api/') === 0
+        && address.indexOf('/api/auth/') !== 0 && !sessionLost){
+      sessionLost = true;
+      showLogin(T('auth.text.session_ended_please_sign_in_again'));
     }
     return resp;
   };
@@ -45,27 +45,27 @@
      2. Экран входа
      -------------------------------------------------------------------------- */
 
-  function поле(id){ return document.getElementById(id); }
+  function field(id){ return document.getElementById(id); }
 
-  function ошибка(текст){
-    const el = поле('portalLoginError');
+  function error(msg){
+    const el = field('portalLoginError');
     if (!el) return;
-    el.textContent = текст || '';
-    el.style.display = текст ? '' : 'none';
+    el.textContent = msg || '';
+    el.style.display = msg ? '' : 'none';
   }
 
   /** Включает штатную форму демо (в прототипе она была заблокирована). */
-  function включитьФормуВхода(){
+  function enableLoginForm(){
     const card = document.querySelector('#loginScreen .login-card');
     if (!card) return;
 
     ['loginEmail', 'loginPassword'].forEach(id => {
-      const el = поле(id);
+      const el = field(id);
       if (!el) return;
       el.disabled = false;
       el.addEventListener('keydown', e => { if (e.key === 'Enter') window.doLogin(); });
     });
-    const email = поле('loginEmail');
+    const email = field('loginEmail');
     if (email) email.placeholder = 'client@roga-kopyta.kz';
 
     const btn = card.querySelector('button.btn.primary');
@@ -81,11 +81,11 @@
     card.querySelectorAll('.hint').forEach(el => el.remove());
     const divider = card.querySelector('.login-divider');
     if (divider) divider.remove();
-    const list = поле('demoUserList');
+    const list = field('demoUserList');
     if (list) list.remove();
     document.querySelectorAll('.demo-flag').forEach(el => el.remove());
 
-    if (!поле('portalLoginError')){
+    if (!field('portalLoginError')){
       const err = document.createElement('div');
       err.id = 'portalLoginError';
       err.style.cssText = 'display:none;margin-top:10px;padding:8px 10px;border-radius:6px;'
@@ -94,17 +94,17 @@
     }
   }
 
-  function показатьВход(текст){
+  function showLogin(msg){
     if (PORTAL.forgetAll) PORTAL.forgetAll();
     PORTAL.session = null;
     PORTAL.user = null;
     PORTAL.depositorCode = '';
-    const shell = поле('appShell');
+    const shell = field('appShell');
     if (shell) shell.style.display = 'none';
-    поле('loginScreen')?.classList.add('active');
-    const pwd = поле('loginPassword');
+    field('loginScreen')?.classList.add('active');
+    const pwd = field('loginPassword');
     if (pwd) pwd.value = '';
-    ошибка(текст);
+    error(msg);
   }
 
   /* --------------------------------------------------------------------------
@@ -112,15 +112,15 @@
      -------------------------------------------------------------------------- */
 
   window.doLogin = async function(){
-    const login = (поле('loginEmail')?.value || '').trim();
-    const password = поле('loginPassword')?.value || '';
-    if (!login || !password){ ошибка(T('auth.text.enter_your_login_and_password')); return; }
-    ошибка('');
+    const login = (field('loginEmail')?.value || '').trim();
+    const password = field('loginPassword')?.value || '';
+    if (!login || !password){ error(T('auth.text.enter_your_login_and_password')); return; }
+    error('');
     try {
-      const сеанс = await api('POST', '/api/auth/login', {login: login, password: password});
-      await войтиВПортал(сеанс);
+      const sess = await api('POST', '/api/auth/login', {login: login, password: password});
+      await signIn(sess);
     } catch (e){
-      ошибка(e.message || T('auth.text.sign_in_failed'));
+      error(e.message || T('auth.text.sign_in_failed'));
     }
   };
 
@@ -130,94 +130,94 @@
 
   window.logout = async function(){
     try { await api('POST', '/api/auth/logout'); } catch (e) {}
-    сеансПотерян = false;
-    const email = поле('loginEmail');
+    sessionLost = false;
+    const email = field('loginEmail');
     if (email) email.value = '';
-    показатьВход('');
+    showLogin('');
   };
 
   /** Собирает объект пользователя в том виде, в каком его ждёт интерфейс демо. */
-  function пользовательДляИнтерфейса(сеанс, me){
-    const скрытые = [];
-    if (me.hideTransfersTab) скрытые.push('transfers');
-    if (me.hideBillingTab) скрытые.push('billing');
+  function uiUser(sess, me){
+    const hidden = [];
+    if (me.hideTransfersTab) hidden.push('transfers');
+    if (me.hideBillingTab) hidden.push('billing');
     return {
-      role: сеанс.roleCode,
-      login: сеанс.login,
-      full_name: сеанс.fullName,
+      role: sess.roleCode,
+      login: sess.login,
+      full_name: sess.fullName,
       position: me.position || '—',
       organization: me.organization || '—',
       phone: me.phone || '',
       lastLogin: me.lastLogin || '',
-      manager: подписьРежима(сеанс),
-      hiddenTabs: скрытые,
+      manager: modeLabel(sess),
+      hiddenTabs: hidden,
       hideServicesTab: me.hideServicesTab === true,
       canCreateReceipts: me.canCreateReceipts !== false,
       canCreateOrders: me.canCreateOrders !== false,
       canCreateTransfers: me.canCreateTransfers !== false,
       canUploadSkuExcel: me.canUploadSkuExcel !== false,
       canUploadPackagingExcel: me.canUploadSkuExcel !== false,
-      defaultDepositor: сеанс.depositorId
+      defaultDepositor: sess.depositorId
     };
   }
 
-  function подписьРежима(сеанс){
-    const имена = (сеанс.depositors || []).map(d => d.orgName).join(', ');
-    switch (сеанс.roleCode){
-      case 'manager':   return 'Режим менеджера: доступны поклажедатели — ' + (имена || 'нет');
+  function modeLabel(sess){
+    const names = (sess.depositors || []).map(d => d.orgName).join(', ');
+    switch (sess.roleCode){
+      case 'manager':   return 'Режим менеджера: доступны поклажедатели — ' + (names || 'нет');
       case 'admin':     return T('auth.text.administrator_mode_users_and_acces');
       case 'developer': return T('auth.text.developer_mode_document_and_field');
       case 'staff':     return T('auth.text.warehouse_staff_mode_only_granted');
-      default:          return 'Организация: ' + (имена || '—');
+      default:          return 'Организация: ' + (names || '—');
     }
   }
 
-  async function войтиВПортал(сеанс){
+  async function signIn(sess){
     if (PORTAL.forgetAll) PORTAL.forgetAll();
-    PORTAL.session = сеанс;
+    PORTAL.session = sess;
     const me = await api('GET', '/api/me');
     PORTAL.user = me;
 
-    const user = пользовательДляИнтерфейса(сеанс, me);
+    const user = uiUser(sess, me);
     currentUser = user;
     currentUserRole = user.role;
 
-    сеансПотерян = false;
-    поле('loginScreen')?.classList.remove('active');
-    const shell = поле('appShell');
+    sessionLost = false;
+    field('loginScreen')?.classList.remove('active');
+    const shell = field('appShell');
     if (shell) shell.style.display = '';
-    ошибка('');
-    const pwd = поле('loginPassword');
+    error('');
+    const pwd = field('loginPassword');
     if (pwd) pwd.value = '';
 
     if (typeof applyUserTabVisibility === 'function') applyUserTabVisibility(user);
     if (typeof applyUserCreatePermissions === 'function') applyUserCreatePermissions(user);
 
-    const админ = user.role === 'admin' || user.role === 'developer';
-    const показать = (id, видно) => { const el = поле(id); if (el) el.style.display = видно ? '' : 'none'; };
-    показать('adminTabBtn', админ);
-    показать('devSettingsTabBtn', user.role === 'developer');
+    const admin = user.role === 'admin' || user.role === 'developer';
+    const show = (id, visible) => { const el = field(id); if (el) el.style.display = visible ? '' : 'none'; };
+    show('adminTabBtn', admin);
+    show('devSettingsTabBtn', user.role === 'developer');
     ['refSubBtnOrderTypes','refSubBtnDocTypes','refSubBtnDepositorsDir',
-     'refSubBtnWarehousesDir','refSubBtnUsers'].forEach(id => показать(id, админ));
+     'refSubBtnWarehousesDir','refSubBtnUsers'].forEach(id => show(id, admin));
 
-    const managerLine = поле('managerLine');
+    const managerLine = field('managerLine');
     if (managerLine) managerLine.textContent = user.manager;
     if (typeof renderProfile === 'function') renderProfile(user);
 
-    применитьПоклажедателя();
+    applyDepositor();
 
     lastMainView = 'orders';
     if (typeof showTab === 'function') showTab('orders');
 
     // §6.2: пароль выдал администратор — сначала свой пароль, данных пока нет
-    if (сеанс.mustChangePassword && typeof window.portalOpenPasswordChange === 'function'){
+    if (sess.mustChangePassword && typeof window.portalOpenPasswordChange === 'function'){
       window.portalOpenPasswordChange('forced');
       return;
     }
 
     // §6.4: если доступен не один поклажедатель и выбор не сделан — сначала выбор
-    if (сеанс.needsDepositorChoice){
-      поле('depositorSwitcher')?.classList.add('active');
+    if (sess.needsDepositorChoice){
+      field('depositorSwitcher')?.classList.add('active');
       if (typeof notify === 'function') notify(T('auth.message.select_the_depositor_you_are_worki'));
     } else {
       PORTAL.reloadAll();
@@ -234,7 +234,7 @@
    * клиента показан, у другого скрыт. Без этого вкладка менялась только
    * после перезагрузки страницы.
    */
-  PORTAL.обновитьНастройки = async function(){
+  PORTAL.refreshSettings = async function(){
     let me;
     try {
       me = await api('GET', '/api/me');
@@ -267,56 +267,56 @@
      4. Переключатель поклажедателей
      -------------------------------------------------------------------------- */
 
-  function текущийПоклажедатель(){
+  function currentDepositor(){
     const s = PORTAL.session;
     if (!s || !s.depositorId) return null;
     return (s.depositors || []).find(d => d.depositorId === s.depositorId) || null;
   }
 
   /** Заголовок с названием организации и состояние переключателя. */
-  function применитьПоклажедателя(){
+  function applyDepositor(){
     const s = PORTAL.session || {depositors: []};
-    const текущий = текущийПоклажедатель();
-    PORTAL.depositorCode = текущий ? текущий.code : '';
-    PORTAL.depositorName = текущий ? текущий.orgName : '';
+    const current = currentDepositor();
+    PORTAL.depositorCode = current ? current.code : '';
+    PORTAL.depositorName = current ? current.orgName : '';
 
-    const org = поле('tabsOrg');
+    const org = field('tabsOrg');
     if (org){
-      org.textContent = текущий ? текущий.orgName : T('auth.text.select_a_depositor');
+      org.textContent = current ? current.orgName : T('auth.text.select_a_depositor');
       org.classList.toggle('switchable', (s.depositors || []).length > 1);
     }
     window.renderDepositorSwitcher();
   }
 
   window.renderDepositorSwitcher = function(){
-    const el = поле('depositorSwitcher');
+    const el = field('depositorSwitcher');
     if (!el) return;
     const s = PORTAL.session || {depositors: []};
-    const выбран = s.depositorId;
+    const selected = s.depositorId;
     el.innerHTML = '<div class="ks-title">' + T('auth.text.switch_depositor') + '</div>'
       + (s.depositors || []).map(d =>
-          '<div class="ks-item ' + (d.depositorId === выбран ? 'current' : '') + '"'
+          '<div class="ks-item ' + (d.depositorId === selected ? 'current' : '') + '"'
           + ' onclick="portalSelectDepositor(\'' + d.depositorId + '\')">'
           + '<span>' + d.orgName + '</span>'
-          + (d.depositorId === выбран ? '<span>✓</span>' : '') + '</div>').join('');
+          + (d.depositorId === selected ? '<span>✓</span>' : '') + '</div>').join('');
   };
 
   window.toggleDepositorSwitcher = function(){
     const s = PORTAL.session;
     if (!s || (s.depositors || []).length <= 1) return;
     window.renderDepositorSwitcher();
-    поле('depositorSwitcher')?.classList.toggle('active');
+    field('depositorSwitcher')?.classList.toggle('active');
   };
 
   window.portalSelectDepositor = async function(id){
     try {
-      const сеанс = await api('POST', '/api/auth/depositor', {depositorId: id});
+      const sess = await api('POST', '/api/auth/depositor', {depositorId: id});
       if (PORTAL.forgetAll) PORTAL.forgetAll();
-      PORTAL.session = сеанс;
-      поле('depositorSwitcher')?.classList.remove('active');
-      применитьПоклажедателя();
+      PORTAL.session = sess;
+      field('depositorSwitcher')?.classList.remove('active');
+      applyDepositor();
       // видимость разделов зависит от клиента, поэтому спрашиваем заново
-      await PORTAL.обновитьНастройки();
+      await PORTAL.refreshSettings();
       PORTAL.reloadAll();
       if (typeof notify === 'function') notify('Выбран поклажедатель: ' + PORTAL.depositorName);
     } catch (e){
@@ -332,14 +332,14 @@
      -------------------------------------------------------------------------- */
 
   async function install(){
-    включитьФормуВхода();
+    enableLoginForm();
     // Обновление страницы не должно выбрасывать из портала: если сессия
     // ещё жива, сервер её узнает и экран входа даже не мелькнёт.
     try {
-      const сеанс = await api('GET', '/api/auth/session');
-      await войтиВПортал(сеанс);
+      const sess = await api('GET', '/api/auth/session');
+      await signIn(sess);
     } catch (e){
-      показатьВход('');
+      showLogin('');
     }
   }
 

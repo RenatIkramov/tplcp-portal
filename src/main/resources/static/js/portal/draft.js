@@ -17,7 +17,7 @@
     const text = await resp.text();
     const data = text ? JSON.parse(text) : null;
     if (!resp.ok){
-      const e = new Error(PORTAL.текстОшибки(resp.status, data));
+      const e = new Error(PORTAL.errorText(resp.status, data));
       e.status = resp.status;
       throw e;
     }
@@ -29,14 +29,14 @@
   const refs = {loaded:false, warehouses:[], suppliers:[], consignees:[], skuByCode:{}};
   const me = {canEditTransport:false, loaded:false};
 
-  async function загрузитьСправочники(){
+  async function loadDirectories(){
     if (refs.loaded) return refs;
-    const [w, s, c, sku, кто] = await Promise.all([
+    const [w, s, c, sku, meResponse] = await Promise.all([
       api('GET','/api/warehouses'), api('GET','/api/suppliers'),
       api('GET','/api/consignees'), api('GET','/api/sku'), api('GET','/api/me')
     ]);
-    me.canEditTransport = кто.canEditTransport === true;
-    me.roleCode = кто.roleCode;
+    me.canEditTransport = meResponse.canEditTransport === true;
+    me.roleCode = meResponse.roleCode;
     me.loaded = true;
     refs.warehouses = w.map(x => ({value:x.warehouseId, text:x.name}));
     refs.suppliers  = s.map(x => ({value:x.supplierId,  text:x.name}));
@@ -45,7 +45,7 @@
     // Окно ввода строки ищет товар в массиве products — наполняем его
     // настоящей номенклатурой, чтобы поиск работал по данным базы.
     refs.skuByCode = {};
-    const список = sku.map(x => {
+    const list = sku.map(x => {
       refs.skuByCode[x.code] = x;
       return {
         skuId: x.skuId, code: x.code, name: x.name, unit: x.uomName || '',
@@ -58,8 +58,8 @@
                  customAttrs: Array.from({length:10}, () => '—')}
       };
     });
-    refs.skuList = список;
-    наполнитьТовары();
+    refs.skuList = list;
+    fillProducts();
     refs.loaded = true;
     return refs;
   }
@@ -69,7 +69,7 @@
    * поэтому наполняем его не один раз, а перед каждым открытием окна строки:
    * поиск товара в окне работает именно по нему.
    */
-  function наполнитьТовары(){
+  function fillProducts(){
     if (typeof products === 'undefined' || !refs.skuList) return;
     products.length = 0;
     refs.skuList.forEach(p => products.push(p));
@@ -81,22 +81,22 @@
    * Штатный kvField умеет только простые строки, поэтому расширяем его
    * вариантами вида {value, text}, не ломая прежнее поведение.
    */
-  const kvFieldОригинал = window.kvField;
+  const kvFieldOriginal = window.kvField;
   window.kvField = function(label, value, opts){
     opts = opts || {};
     const options = opts.options || [];
-    const сложные = options.length && typeof options[0] === 'object';
-    if (opts.type !== 'select' || !сложные){
-      return kvFieldОригинал(label, value, opts);
+    const complex = options.length && typeof options[0] === 'object';
+    if (opts.type !== 'select' || !complex){
+      return kvFieldOriginal(label, value, opts);
     }
     const esc = s => String(s === null || s === undefined ? '' : s).replace(/"/g,'&quot;');
     const idAttr = opts.id ? 'id="' + opts.id + '"' : '';
-    const выбран = String(value === null || value === undefined ? '' : value);
-    const placeholder = options.some(o => String(o.value) === выбран)
+    const selected = String(value === null || value === undefined ? '' : value);
+    const placeholder = options.some(o => String(o.value) === selected)
         ? '' : '<option value="" selected>' + T('sku.text.not_selected') + '</option>';
     const html = options.map(o =>
         '<option value="' + esc(o.value) + '"' +
-        (String(o.value) === выбран ? ' selected' : '') + '>' + esc(o.text) + '</option>').join('');
+        (String(o.value) === selected ? ' selected' : '') + '>' + esc(o.text) + '</option>').join('');
     const label2 = (typeof localizeColumnLabel === 'function') ? localizeColumnLabel(label) : label;
     return '<div class="kv"><label>' + label2 + '</label>'
          + '<select class="kv-input kv-input-editable" ' + idAttr + '>'
@@ -106,7 +106,7 @@
   /* ---------------- поля шапки: что куда сохраняется ---------------- */
 
   // поле карточки → колонка базы
-  const ПОЛЯ = {
+  const FIELDS = {
     receipts: {
       rf_erpNo:'erp_number', rf_warehouse:'warehouse_id', rf_supplier:'supplier_id',
       rf_docType:'doc_type_id', rf_eta:'eta_date', rf_date:'doc_date',
@@ -122,21 +122,21 @@
     }
   };
 
-  function собратьШапку(type){
-    const данные = {};
-    Object.entries(ПОЛЯ[type]).forEach(([id, column]) => {
+  function collectHeader(type){
+    const store = {};
+    Object.entries(FIELDS[type]).forEach(([id, column]) => {
       const el = document.getElementById(id);
       if (!el) return;
       const v = (el.value || '').trim();
-      данные[column] = v === '' || v === '—' ? null : v;
+      store[column] = v === '' || v === '—' ? null : v;
     });
-    return данные;
+    return store;
   }
 
   /** Состав документа в том виде, в каком его ждёт API. */
-  function собратьСостав(type){
-    const состав = type === 'receipts' ? currentReceiptComposition : currentOrderComposition;
-    return (состав || []).map(l => {
+  function collectLines(type){
+    const composition = type === 'receipts' ? currentReceiptComposition : currentOrderComposition;
+    return (composition || []).map(l => {
       // строки, созданные окном демо, несут код товара, а не идентификатор
       const skuId = l.skuId || (refs.skuByCode[l.code] && refs.skuByCode[l.code].skuId);
       const line = {sku_id: skuId, line_comment: l.lineComment || null};
@@ -160,12 +160,12 @@
   const dash = v => (v === null || v === undefined || v === '') ? '—' : v;
 
   /** Карточка из API → объект документа в терминах демо. */
-  function вДокумент(type, card){
+  function toDocument(type, card){
     const h = card.header;
     const BADGE = {draft:'draft', awaiting:'warn', in_progress:'warn', received:'ok', discrepancy:'err',
                    sent_to_wms:'warn', send_failed:'err',
                    reserved:'warn', picking:'warn', shipped:'ok', delayed:'err'};
-    const общее = {
+    const totalCount = {
       docId: h.docId, no: h.documentNo,
       // пустой номер ERP оставляем пустым: заголовок карточки подставит номер портала
       erpNo: h.erpNumber || '', wmsNumber: dash(h.docNumber),
@@ -185,7 +185,7 @@
       warehouse: h.warehouseId, warehouseName: h.warehouseName
     };
     if (type === 'receipts'){
-      Object.assign(общее, {
+      Object.assign(totalCount, {
         supplier: h.supplierId, supplierName: dash(h.supplierName),
         docType: h.docTypeId, docTypeName: dash(h.docTypeName),
         eta: ruDate(h.etaDate), etaIso: h.etaDate,
@@ -193,14 +193,14 @@
         gtd: h.gtd || ''
       });
     } else {
-      Object.assign(общее, {
+      Object.assign(totalCount, {
         consignee: h.consigneeId, consigneeName: dash(h.consigneeName),
         orderType: h.orderTypeId, orderTypeName: dash(h.orderTypeName),
         plannedShip: ruDate(h.plannedShipDate), ship: ruDate(h.shipDate),
         deliveryDate: ruDate(h.deliveryDate), deliveryAddress: dash(h.deliveryAddress)
       });
     }
-    общее.lines = (card.lines || []).map(l => ({
+    totalCount.lines = (card.lines || []).map(l => ({
       skuId: l.skuId, code: l.skuCode, name: l.skuName, unit: l.unitName || '',
       skuInWms: l.skuInWms !== false,
       expected: l.expectedQty, expectedWms: l.expectedQtyWms ?? l.expectedQty,
@@ -211,14 +211,14 @@
       price: l.price, currency: l.currencyCode, lineComment: l.lineComment === '—' ? '' : (l.lineComment || ''),
       lineNumber: l.lineNumber
     }));
-    общее.items = общее.lines.length;
-    return общее;
+    totalCount.items = totalCount.lines.length;
+    return totalCount;
   }
 
-  async function открытьИзApi(type, docId){
-    await загрузитьСправочники();
+  async function openFromApi(type, docId){
+    await loadDirectories();
     const card = await api('GET', '/api/' + type + '/' + docId);
-    const doc = вДокумент(type, card);
+    const doc = toDocument(type, card);
     if (type === 'receipts'){
       receipts.length = 0; receipts.push(doc);
       openReceipt(doc.no);
@@ -226,12 +226,12 @@
       orders.length = 0; orders.push(doc);
       openOrder(doc.no);
     }
-    показатьПричины(type, doc);
+    showReasons(type, doc);
     return doc;
   }
 
   /** Причины, по которым документ нельзя отправить — в штатный баннер карточки. */
-  function показатьПричины(type, doc){
+  function showReasons(type, doc){
     const banner = document.getElementById(type === 'receipts' ? 'receiptDetailBanner' : 'orderDetailBanner');
     if (!banner) return;
     const problems = (doc && doc.problems) || [];
@@ -243,43 +243,43 @@
       banner.innerHTML = '';
     }
     // кнопка «Подтвердить» неактивна, пока есть причины
-    const кнопка = document.querySelector('#' + (type === 'receipts' ? 'receiptDraftActions' : 'orderDraftActions')
+    const button = document.querySelector('#' + (type === 'receipts' ? 'receiptDraftActions' : 'orderDraftActions')
                                           + ' .btn.primary');
-    if (кнопка){
-      const блок = problems.length > 0;
-      кнопка.disabled = блок;
-      кнопка.style.opacity = блок ? '.5' : '';
-      кнопка.style.cursor = блок ? 'not-allowed' : '';
-      кнопка.title = блок ? 'Сначала устраните: ' + problems.join('; ') : T('sku.text.send_document_to_wms');
+    if (button){
+      const block = problems.length > 0;
+      button.disabled = block;
+      button.style.opacity = block ? '.5' : '';
+      button.style.cursor = block ? 'not-allowed' : '';
+      button.title = block ? 'Сначала устраните: ' + problems.join('; ') : T('sku.text.send_document_to_wms');
     }
   }
 
   /* ---------------- поля шапки: выпадающие списки из API ---------------- */
 
-  function обернутьПоляШапки(){
-    const оберни = (имяФункции, карта) => {
-      const оригинал = window[имяФункции];
-      if (typeof оригинал !== 'function') return;
-      window[имяФункции] = function(dbField, doc, editable){
-        const правило = карта[dbField];
-        if (правило && editable){
-          return kvField(правило.label, doc[правило.value],
-              {id: правило.id, editable: true, type: 'select', options: правило.options()});
+  function wrapHeaderFields(){
+    const wrap = (functionName, rules) => {
+      const original = window[functionName];
+      if (typeof original !== 'function') return;
+      window[functionName] = function(dbField, doc, editable){
+        const rule = rules[dbField];
+        if (rule && editable){
+          return kvField(rule.label, doc[rule.value],
+              {id: rule.id, editable: true, type: 'select', options: rule.options()});
         }
-        if (правило && !editable){
-          return kvField(правило.label, dash(doc[правило.name]), {id: правило.id});
+        if (rule && !editable){
+          return kvField(rule.label, dash(doc[rule.name]), {id: rule.id});
         }
-        return оригинал(dbField, doc, editable);
+        return original(dbField, doc, editable);
       };
     };
 
-    оберни('fcReceiptSpecialFieldHtml', {
+    wrap('fcReceiptSpecialFieldHtml', {
       warehouse: {id:'rf_warehouse', label:T('sku.label.warehouse'), value:'warehouse', name:'warehouseName',
                   options:() => refs.warehouses},
       supplier:  {id:'rf_supplier', label:T('server.message.supplier'), value:'supplier', name:'supplierName',
                   options:() => refs.suppliers}
     });
-    оберни('fcOrderSpecialFieldHtml', {
+    wrap('fcOrderSpecialFieldHtml', {
       warehouse: {id:'of_warehouse', label:T('sku.label.warehouse'), value:'warehouse', name:'warehouseName',
                   options:() => refs.warehouses},
       consignee: {id:'of_consignee', label:T('partners.title.consignee'), value:'consignee', name:'consigneeName',
@@ -289,17 +289,17 @@
 
   /* ---------------- действия с черновиком ---------------- */
 
-  function сообщить(e){
+  function tell(e){
     if (typeof notify === 'function') notify(e.message || String(e));
   }
 
-  async function сохранить(type, тихо){
+  async function save(type, quiet){
     const ref = type === 'receipts' ? currentReceiptRef : currentOrderRef;
     if (!ref || ref.statusCode !== 'draft') return null;
-    await api('PUT', '/api/' + type + '/' + ref.docId, собратьШапку(type));
-    await api('PUT', '/api/' + type + '/' + ref.docId + '/lines', собратьСостав(type));
-    const doc = await открытьИзApi(type, ref.docId);
-    if (!тихо && typeof notify === 'function'){
+    await api('PUT', '/api/' + type + '/' + ref.docId, collectHeader(type));
+    await api('PUT', '/api/' + type + '/' + ref.docId + '/lines', collectLines(type));
+    const doc = await openFromApi(type, ref.docId);
+    if (!quiet && typeof notify === 'function'){
       notify(type === 'receipts' ? T('sku.text.receipt_changes_saved') : T('sku.text.order_changes_saved'));
     }
     return doc;
@@ -307,37 +307,37 @@
 
   window.createNewReceiptDraft = async function(){
     try {
-      await загрузитьСправочники();
+      await loadDirectories();
       const card = await api('POST', '/api/receipts', {});
-      await открытьИзApi('receipts', card.header.docId);
+      await openFromApi('receipts', card.header.docId);
       if (typeof notify === 'function') notify('Создан черновик поступления ' + card.header.documentNo);
       if (typeof portalReloadDocuments === 'function') portalReloadDocuments();
-    } catch (e){ сообщить(e); }
+    } catch (e){ tell(e); }
   };
 
   window.createNewOrderDraft = async function(){
     try {
-      await загрузитьСправочники();
+      await loadDirectories();
       const card = await api('POST', '/api/orders', {});
-      await открытьИзApi('orders', card.header.docId);
+      await openFromApi('orders', card.header.docId);
       if (typeof notify === 'function') notify('Создан черновик заказа ' + card.header.documentNo);
       if (typeof portalReloadDocuments === 'function') portalReloadDocuments();
-    } catch (e){ сообщить(e); }
+    } catch (e){ tell(e); }
   };
 
-  window.saveReceiptDraft = () => сохранить('receipts').catch(сообщить);
-  window.saveOrderDraft = () => сохранить('orders').catch(сообщить);
+  window.saveReceiptDraft = () => save('receipts').catch(tell);
+  window.saveOrderDraft = () => save('orders').catch(tell);
 
-  async function подтвердить(type){
+  async function confirm(type){
     const ref = type === 'receipts' ? currentReceiptRef : currentOrderRef;
     if (!ref) return;
     try {
-      await сохранить(type, true);
+      await save(type, true);
       const card = await api('POST', '/api/' + type + '/' + ref.docId + '/confirm');
-      const doc = вДокумент(type, card);
+      const doc = toDocument(type, card);
       if (type === 'receipts'){ receipts.length = 0; receipts.push(doc); openReceipt(doc.no); }
       else { orders.length = 0; orders.push(doc); openOrder(doc.no); }
-      показатьПричины(type, doc);
+      showReasons(type, doc);
       if (typeof notify === 'function'){
         notify(doc.statusCode === 'send_failed'
             ? T('sku.text.sending_to_wms_failed_the_document')
@@ -351,14 +351,14 @@
         banner.innerHTML = '<div class="hint" style="background:#fdf2f2; border-left:3px solid #c0392b;'
           + ' padding:10px 14px; border-radius:6px; color:#8a2b2b;">' + (e.message || e) + '</div>';
       }
-      сообщить(e);
+      tell(e);
     }
   }
 
-  window.confirmReceiptDraft = () => подтвердить('receipts');
-  window.confirmOrderDraft = () => подтвердить('orders');
+  window.confirmReceiptDraft = () => confirm('receipts');
+  window.confirmOrderDraft = () => confirm('orders');
 
-  async function удалить(type){
+  async function remove(type){
     const ref = type === 'receipts' ? currentReceiptRef : currentOrderRef;
     if (!ref) return;
     try {
@@ -369,41 +369,41 @@
       showTab(type);
       if (typeof portalReloadDocuments === 'function') portalReloadDocuments();
       if (typeof notify === 'function') notify('Черновик ' + ref.no + ' удалён');
-    } catch (e){ сообщить(e); }
+    } catch (e){ tell(e); }
   }
 
-  window.deleteReceiptDraft = () => удалить('receipts');
-  window.deleteOrderDraft = () => удалить('orders');
+  window.deleteReceiptDraft = () => remove('receipts');
+  window.deleteOrderDraft = () => remove('orders');
 
   /* ---------------- строки состава ---------------- */
 
   // Окно ввода строки остаётся демонстрационным: поиск товара, упаковка,
   // пересчёт, цена, объединение дублей. Мы подключаемся после сохранения
   // и отправляем получившийся состав целиком.
-  function послеИзмененияСостава(имяФункции, type){
-    const оригинал = window[имяФункции];
-    if (typeof оригинал !== 'function') return;
-    window[имяФункции] = function(){
-      const результат = оригинал.apply(this, arguments);
+  function afterLinesChanged(functionName, type){
+    const original = window[functionName];
+    if (typeof original !== 'function') return;
+    window[functionName] = function(){
+      const result = original.apply(this, arguments);
       const ref = type === 'receipts' ? currentReceiptRef : currentOrderRef;
       if (ref && ref.statusCode === 'draft'){
-        сохранить(type, true).catch(сообщить);
+        save(type, true).catch(tell);
       }
-      return результат;
+      return result;
     };
   }
 
   /* ---------------- состав: позиции, неизвестные WMS ---------------- */
 
-  function пометитьНеизвестныеПозиции(){
+  function markUnknownRows(){
     ['receipt','order'].forEach(prefix => {
-      const оригинал = window['render' + prefix.charAt(0).toUpperCase() + prefix.slice(1) + 'Composition'];
-      if (typeof оригинал !== 'function') return;
+      const original = window['render' + prefix.charAt(0).toUpperCase() + prefix.slice(1) + 'Composition'];
+      if (typeof original !== 'function') return;
       window['render' + prefix.charAt(0).toUpperCase() + prefix.slice(1) + 'Composition'] = function(){
-        const результат = оригинал.apply(this, arguments);
-        const состав = prefix === 'receipt' ? currentReceiptComposition : currentOrderComposition;
+        const result = original.apply(this, arguments);
+        const composition = prefix === 'receipt' ? currentReceiptComposition : currentOrderComposition;
         const rows = document.querySelectorAll('#' + prefix + 'DetailRows tr');
-        (состав || []).forEach((l, i) => {
+        (composition || []).forEach((l, i) => {
           const row = rows[i];
           if (!row || l.skuInWms !== false) return;
           row.style.background = '#fff6e6';
@@ -415,7 +415,7 @@
               + ' background:#f6c343; color:#4a3500; font-size:11px;">' + T('sku.text.not_in_wms') + '</span>');
           }
         });
-        return результат;
+        return result;
       };
     });
   }
@@ -432,29 +432,29 @@
   };
 
   /** Транспорт уходит в WMS отдельным запросом, поэтому и кнопка отдельная. */
-  async function сохранитьТранспорт(type){
+  async function saveTransport(type){
     const ref = type === 'receipts' ? currentReceiptRef : currentOrderRef;
     if (!ref) return;
-    const поля = ['trip','carrier','transportType','transportBrand','carNumber','trailerNumber',
+    const fields = ['trip','carrier','transportType','transportBrand','carNumber','trailerNumber',
                   'techPassportNumber','containerNumber','sealNumber',
                   'driverName','driverPhone','driverIdNumber','driverInn'];
     const prefix = type === 'receipts' ? 'rf_' : 'of_';
-    const данные = {};
-    поля.forEach(f => {
+    const store = {};
+    fields.forEach(f => {
       const el = document.getElementById(prefix + f);
       if (!el) return;
-      const колонка = f.replace(/[A-Z]/g, c => '_' + c.toLowerCase());
-      данные[колонка] = (el.value || '').trim() === '' || el.value === '—' ? null : el.value.trim();
+      const col = f.replace(/[A-Z]/g, c => '_' + c.toLowerCase());
+      store[col] = (el.value || '').trim() === '' || el.value === '—' ? null : el.value.trim();
     });
     try {
-      await api('PUT', '/api/' + type + '/' + ref.docId + '/transport', данные);
-      await открытьИзApi(type, ref.docId);
+      await api('PUT', '/api/' + type + '/' + ref.docId + '/transport', store);
+      await openFromApi(type, ref.docId);
       if (typeof notify === 'function') notify(T('sku.text.transport_details_sent_to_wms'));
-    } catch (e){ сообщить(e); }
+    } catch (e){ tell(e); }
   }
-  window.portalSaveTransport = сохранитьТранспорт;
+  window.portalSaveTransport = saveTransport;
   /** Открыть документ по идентификатору — используется проверками и ссылками. */
-  window.portalOpenDocumentById = (type, docId) => открытьИзApi(type, docId).catch(сообщить);
+  window.portalOpenDocumentById = (type, docId) => openFromApi(type, docId).catch(tell);
 
   /**
    * Кнопка «Сохранить транспортную информацию» в прототипе уже есть —
@@ -462,7 +462,7 @@
    */
   window.fcSaveTransportSection = function(docType){
     if (docType === 'receipts' || docType === 'orders'){
-      сохранитьТранспорт(docType);
+      saveTransport(docType);
       return;
     }
     if (typeof notify === 'function') notify(T('sku.message.transport_details_are_not_availabl'));
@@ -475,64 +475,64 @@
    * поэтому превышение доступного количества — предупреждение, а не запрет.
    * Последнее слово остаётся за WMS.
    */
-  function предупреждениеПоОстаткам(){
-    const оригинал = window.saveOrderLineEditModal;
-    if (typeof оригинал !== 'function') return;
+  function stockWarning(){
+    const original = window.saveOrderLineEditModal;
+    if (typeof original !== 'function') return;
     window.saveOrderLineEditModal = function(){
-      const товар = window.orderLineEditSelectedProduct;
-      const поле = document.getElementById('orderLineEditQty');
-      const кол = поле ? Number(поле.value) : null;
-      const результат = оригинал.apply(this, arguments);
-      if (товар && кол){
-        const остаток = (PORTAL.rows || []).find(r => r.code === товар.code);
-        if (остаток && кол > остаток.available && typeof notify === 'function'){
-          notify('Внимание: заказано ' + кол + ' ' + (товар.unit || '')
-               + ', доступно по данным портала ' + остаток.available
+      const product = window.orderLineEditSelectedProduct;
+      const field = document.getElementById('orderLineEditQty');
+      const count = field ? Number(field.value) : null;
+      const result = original.apply(this, arguments);
+      if (product && count){
+        const stockRow = (PORTAL.rows || []).find(r => r.code === product.code);
+        if (stockRow && count > stockRow.available && typeof notify === 'function'){
+          notify('Внимание: заказано ' + count + ' ' + (product.unit || '')
+               + ', доступно по данным портала ' + stockRow.available
                + '. Фактическую доступность подтвердит WMS.');
         }
       }
-      return результат;
+      return result;
     };
   }
 
   /* ---------------- открытие документа из списка ---------------- */
 
-  const просмотрДемо = window.portalOpenDocument;
+  const demoView = window.portalOpenDocument;
   window.portalOpenDocument = function(no){
     const type = (PORTAL.docs.receipts || []).some(r => r.no === no) ? 'receipts'
                : ((PORTAL.docs.orders || []).some(r => r.no === no) ? 'orders' : 'transfers');
     const row = (PORTAL.docs[type] || []).find(r => r.no === no);
     if (row && (type === 'receipts' || type === 'orders')){
-      открытьИзApi(type, row.docId).catch(сообщить);
+      openFromApi(type, row.docId).catch(tell);
       return;
     }
-    if (typeof просмотрДемо === 'function') просмотрДемо(no);
+    if (typeof demoView === 'function') demoView(no);
   };
 
   /** Перед открытием окна ввода строки подкладываем настоящую номенклатуру. */
-  function обернутьОкноСтроки(){
+  function wrapLineModal(){
     ['openLineAddModal','openLineEditModal','openOrderLineAddModal','openOrderLineEditModal']
-      .forEach(имя => {
-        const оригинал = window[имя];
-        if (typeof оригинал !== 'function') return;
-        window[имя] = function(){
-          наполнитьТовары();
-          return оригинал.apply(this, arguments);
+      .forEach(fieldName => {
+        const original = window[fieldName];
+        if (typeof original !== 'function') return;
+        window[fieldName] = function(){
+          fillProducts();
+          return original.apply(this, arguments);
         };
       });
   }
 
   function install(){
-    обернутьПоляШапки();
-    обернутьОкноСтроки();
-    предупреждениеПоОстаткам();
-    пометитьНеизвестныеПозиции();
-    послеИзмененияСостава('saveLineEditModal', 'receipts');
-    послеИзмененияСостава('saveOrderLineEditModal', 'orders');
-    послеИзмененияСостава('deleteSelectedReceiptLines', 'receipts');
-    послеИзмененияСостава('deleteSelectedOrderLines', 'orders');
+    wrapHeaderFields();
+    wrapLineModal();
+    stockWarning();
+    markUnknownRows();
+    afterLinesChanged('saveLineEditModal', 'receipts');
+    afterLinesChanged('saveOrderLineEditModal', 'orders');
+    afterLinesChanged('deleteSelectedReceiptLines', 'receipts');
+    afterLinesChanged('deleteSelectedOrderLines', 'orders');
     // справочники зависят от поклажедателя — перечитываем их при каждом входе
-    PORTAL.onLogin(() => { refs.loaded = false; загрузитьСправочники().catch(() => {}); });
+    PORTAL.onLogin(() => { refs.loaded = false; loadDirectories().catch(() => {}); });
   }
 
   if (document.readyState === 'loading'){

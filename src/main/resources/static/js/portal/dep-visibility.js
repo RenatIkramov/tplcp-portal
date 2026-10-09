@@ -15,7 +15,7 @@
     const text = await resp.text();
     const data = text ? JSON.parse(text) : null;
     if (!resp.ok){
-      const e = new Error(PORTAL.текстОшибки(resp.status, data));
+      const e = new Error(PORTAL.errorText(resp.status, data));
       e.status = resp.status;
       throw e;
     }
@@ -40,7 +40,7 @@
     draft: {}                 // columnId -> доступно ли (правки до сохранения)
   };
 
-  const толькоЧтение = () => currentUserRole === 'developer';
+  const readOnly = () => currentUserRole === 'developer';
 
   /* ============ Поля, недоступные поклажедателю ============ */
 
@@ -52,12 +52,12 @@
    * «клиенту недоступна». Пока раскладка не пришла, показываем всё:
    * мигание карточки хуже лишнего поля на долю секунды.
    */
-  function доступна(columnId){
+  function isColumnAvailable(columnId){
     const rows = PORTAL.columns && PORTAL.columns.raw && PORTAL.columns.raw.sku;
     if (!rows) return true;
     return rows.indexOf(columnId) >= 0;
   }
-  PORTAL.полеДоступно = доступна;
+  PORTAL.fieldAllowed = isColumnAvailable;
 
   /**
    * Строка карточки товара с привязкой к колонке.
@@ -68,34 +68,34 @@
    * оставалось бы на месте.
    */
   window.fcKvC = function(columnId, label, value){
-    if (!доступна(columnId)) return '';
+    if (!isColumnAvailable(columnId)) return '';
     return fcKv(label, value);
   };
 
   /* ================== Вкладки карточки ================== */
 
-  function вкладки(){
-    const кнопка = (id, ключ) =>
+  function tabs(){
+    const button = (id, textKey) =>
       '<button class="admin-subtab-btn' + (state.tab === id ? ' active' : '') + '"'
-      + ' type="button" data-dep-tab="' + id + '">' + esc(T_(ключ)) + '</button>';
+      + ' type="button" data-dep-tab="' + id + '">' + esc(T_(textKey)) + '</button>';
     return '<div class="admin-subtabs" id="depVisTabs">'
-      + кнопка('sections', 'admin.tab.sections_and_warehouses')
-      + кнопка('fields', 'admin.tab.product_fields')
+      + button('sections', 'admin.tab.sections_and_warehouses')
+      + button('fields', 'admin.tab.product_fields')
       + '</div>';
   }
 
   /* ================== Вкладка «Разделы и склады» ================== */
 
-  function складиРазделы(){
-    const склады = (DEPVIS.склады || []).map(w => ({
+  function warehousesAndSections(){
+    const warehouseList = (DEPVIS.warehouseList || []).map(w => ({
       id: w.warehouseId, name: w.name, address: w.address
     }));
-    const выдано = new Set(state.warehouses || []);
-    const строкаСклада = x =>
+    const issued = new Set(state.warehouses || []);
+    const warehouseRow = x =>
       '<label style="display:flex;align-items:center;gap:8px;font-size:13.5px;'
       + 'padding:9px 0;border-bottom:1px solid var(--line);">'
       + '<input type="checkbox" data-warehouse-id="' + esc(x.id) + '"'
-      + (выдано.has(x.id) ? ' checked' : '') + '> ' + esc(x.name)
+      + (issued.has(x.id) ? ' checked' : '') + '> ' + esc(x.name)
       + (x.address ? ' <span style="color:var(--muted);">· ' + esc(x.address) + '</span>' : '')
       + '</label>';
 
@@ -115,8 +115,8 @@
       + '<div class="table-card" style="padding:18px 20px;">'
       + '  <div class="hint" style="margin:-4px 0 10px;">'
       + esc(T_('admin.hint.depositor_warehouses')) + '</div>'
-      + (склады.length
-          ? склады.map(строкаСклада).join('')
+      + (warehouseList.length
+          ? warehouseList.map(warehouseRow).join('')
           : '<div style="color:var(--muted);font-size:13.5px;">'
             + esc(T_('common.text.list_is_empty')) + '</div>')
       + '</div>';
@@ -125,7 +125,7 @@
   /* ================== Вкладка «Поля товаров» ================== */
 
   /** Подвкладки в порядке карточки товара: порядок задаёт сама база. */
-  function группы(){
+  function groups(){
     const out = [];
     const seen = new Set();
     state.columns.forEach(c => {
@@ -138,32 +138,32 @@
     return out;
   }
 
-  function поляТовара(){
-    const гр = группы();
-    if (!гр.length){
+  function productFields(){
+    const groupList = groups();
+    if (!groupList.length){
       return '<div style="color:var(--muted);font-size:13.5px;">'
         + esc(T_('common.text.list_is_empty')) + '</div>';
     }
-    if (!гр.some(g => g.key === state.group)) state.group = гр[0].key;
+    if (!groupList.some(g => g.key === state.group)) state.group = groupList[0].key;
 
-    const подвкладки = '<div class="admin-subtabs" style="margin-top:4px;">'
-      + гр.map(g => '<button class="admin-subtab-btn'
+    const subtabs = '<div class="admin-subtabs" style="margin-top:4px;">'
+      + groupList.map(g => '<button class="admin-subtab-btn'
           + (g.key === state.group ? ' active' : '') + '" type="button"'
           + ' data-dep-group="' + esc(g.key) + '">' + esc(g.label) + '</button>').join('')
       + '</div>';
 
-    const поля = state.columns.filter(c => (c.groupKey || '') === state.group);
-    const строка = c => {
-      const доступно = state.draft[c.columnId] !== undefined
+    const fields = state.columns.filter(c => (c.groupKey || '') === state.group);
+    const row = c => {
+      const available = state.draft[c.columnId] !== undefined
         ? state.draft[c.columnId] : c.isAvailable !== false;
-      const заперто = c.isLocked === true;
+      const locked = c.isLocked === true;
       return '<label style="display:flex;align-items:center;gap:8px;font-size:13.5px;'
         + 'padding:9px 0;border-bottom:1px solid var(--line);'
-        + (заперто ? 'color:var(--muted);' : '') + '">'
+        + (locked ? 'color:var(--muted);' : '') + '">'
         + '<input type="checkbox" data-column-id="' + esc(c.columnId) + '"'
-        + (доступно ? ' checked' : '') + (заперто ? ' disabled' : '') + '> '
-        + '<span style="color:var(--text);">' + esc(c.label) + '</span>'
-        + (заперто
+        + (available ? ' checked' : '') + (locked ? ' disabled' : '') + '> '
+        + '<span style="color:var(--ink);">' + esc(c.label) + '</span>'
+        + (locked
             ? ' <span style="color:var(--muted);">· '
               + esc(T_('admin.text.required_field_locked')) + '</span>'
             : '')
@@ -173,23 +173,23 @@
         + '</label>';
     };
 
-    return подвкладки
+    return subtabs
       + '<div class="table-card" style="padding:18px 20px;">'
       + '  <div class="hint" style="margin:-4px 0 10px;">'
       + esc(T_('admin.hint.product_fields')) + '</div>'
-      + поля.map(строка).join('')
+      + fields.map(row).join('')
       + '</div>';
   }
 
   /* ================== Сборка карточки ================== */
 
-  const действия = ''
+  const actions = ''
     + '<div class="actions" style="margin-top:18px;display:flex;gap:8px;">'
     + '  <button class="btn primary" type="button" data-dep-save></button>'
     + '  <button class="btn ghost" type="button" data-dep-cancel></button>'
     + '</div>';
 
-  function нарисовать(){
+  function render(){
     const el = document.getElementById('adminUserEditContent');
     if (!el) return;
     const d = state.depositor || {};
@@ -198,27 +198,27 @@
       + '  <h2>' + esc(d.orgName || '') + '</h2>'
       + '  <div class="meta">' + esc(T_('admin.column.depositor')) + ': '
       + esc(d.code || '') + '</div></div></div>'
-      + вкладки()
-      + (state.tab === 'fields' ? поляТовара() : складиРазделы())
-      + действия;
+      + tabs()
+      + (state.tab === 'fields' ? productFields() : warehousesAndSections())
+      + actions;
 
     el.querySelectorAll('[data-dep-tab]').forEach(b => {
-      b.onclick = () => { запомнить(); state.tab = b.getAttribute('data-dep-tab'); нарисовать(); };
+      b.onclick = () => { remember(); state.tab = b.getAttribute('data-dep-tab'); render(); };
     });
     el.querySelectorAll('[data-dep-group]').forEach(b => {
-      b.onclick = () => { запомнить(); state.group = b.getAttribute('data-dep-group'); нарисовать(); };
+      b.onclick = () => { remember(); state.group = b.getAttribute('data-dep-group'); render(); };
     });
 
-    const сохранить = el.querySelector('[data-dep-save]');
-    сохранить.textContent = T_('common.button.save');
-    сохранить.onclick = отправить;
-    const отмена = el.querySelector('[data-dep-cancel]');
-    отмена.textContent = T_('common.button.cancel');
-    отмена.onclick = () => { showView('admin'); showAdminSub('depositor-access'); };
+    const save = el.querySelector('[data-dep-save]');
+    save.textContent = T_('common.button.save');
+    save.onclick = send;
+    const cancel = el.querySelector('[data-dep-cancel]');
+    cancel.textContent = T_('common.button.cancel');
+    cancel.onclick = () => { showView('admin'); showAdminSub('depositor-access'); };
 
-    if (толькоЧтение()){
+    if (readOnly()){
       el.querySelectorAll('input').forEach(e => e.disabled = true);
-      сохранить.style.display = 'none';
+      save.style.display = 'none';
     }
   }
 
@@ -229,26 +229,26 @@
    * и без этого правка, сделанная на одной подвкладке, исчезала бы
    * при переходе на другую — человек бы решил, что сохранил.
    */
-  function запомнить(){
+  function remember(){
     const el = document.getElementById('adminUserEditContent');
     if (!el) return;
     el.querySelectorAll('input[data-column-id]').forEach(cb => {
       if (cb.disabled) return;          // обязательные не трогаем
       state.draft[cb.getAttribute('data-column-id')] = cb.checked;
     });
-    const склады = [...el.querySelectorAll('input[data-warehouse-id]')];
-    if (склады.length) state.warehouses = склады.filter(c => c.checked)
+    const warehouseList = [...el.querySelectorAll('input[data-warehouse-id]')];
+    if (warehouseList.length) state.warehouses = warehouseList.filter(c => c.checked)
       .map(c => c.getAttribute('data-warehouse-id'));
-    const перемещения = el.querySelector('#depVisTransfers');
-    if (перемещения) state.settings.hideTransfersTab = !перемещения.checked;
+    const transfers = el.querySelector('#depVisTransfers');
+    if (transfers) state.settings.hideTransfersTab = !transfers.checked;
   }
 
-  async function отправить(){
-    запомнить();
+  async function send(){
+    remember();
     try {
       // Склады и настройку разделов отправляем всегда: их видно на одной
       // вкладке, и человек вправе рассчитывать, что кнопка сохраняет всё.
-      DEPVIS.доступы = await api('PUT', '/api/admin/depositors/'
+      DEPVIS.access = await api('PUT', '/api/admin/depositors/'
         + encodeURIComponent(state.depositorId) + '/warehouses',
         {warehouseIds: state.warehouses});
       await api('PUT', '/api/admin/depositors/'
@@ -258,19 +258,19 @@
       // Поля — только изменённые: каждая строка отдельным запросом,
       // потому что база заводит запись лишь при отличии от портальной
       // настройки и сама убирает её, когда отличие исчезло.
-      const изменённые = state.columns.filter(c => {
-        const было = c.isAvailable !== false;
-        const стало = state.draft[c.columnId];
-        return стало !== undefined && стало !== было;
+      const changed = state.columns.filter(c => {
+        const before = c.isAvailable !== false;
+        const now = state.draft[c.columnId];
+        return now !== undefined && now !== before;
       });
-      for (const c of изменённые){
+      for (const c of changed){
         await api('PUT', '/api/admin/depositor-columns', {
           depositorId: state.depositorId, table: 'sku', columnId: c.columnId,
           isAvailable: state.draft[c.columnId], isDefault: c.isDefault !== false
         });
       }
 
-      say(изменённые.length
+      say(changed.length
         ? T_('admin.message.fields_updated')
         : T_('admin.message.settings_updated'));
 
@@ -288,33 +288,33 @@
 
   /* ================== Открытие ================== */
 
-  const DEPVIS = {склады: [], доступы: []};
+  const DEPVIS = {warehouseList: [], access: []};
 
   window.portalOpenDepositorSettings = async function(depositorId){
-    const d = (DEPVIS.доступы || []).find(x => x.depositorId === depositorId);
+    const d = (DEPVIS.access || []).find(x => x.depositorId === depositorId);
     state.depositorId = depositorId;
     state.depositor = d || {};
     state.tab = 'sections';
     state.group = null;
     state.draft = {};
     try {
-      const [склады, выдано, настройки, колонки] = await Promise.all([
-        DEPVIS.склады.length ? Promise.resolve(DEPVIS.склады)
+      const [warehouseList, issued, prefs, columnList] = await Promise.all([
+        DEPVIS.warehouseList.length ? Promise.resolve(DEPVIS.warehouseList)
                              : api('GET', '/api/admin/warehouses'),
         api('GET', '/api/admin/depositors/' + encodeURIComponent(depositorId) + '/warehouses'),
         api('GET', '/api/admin/depositors/' + encodeURIComponent(depositorId) + '/settings'),
         api('GET', '/api/admin/depositor-columns?table=sku&depositorId='
             + encodeURIComponent(depositorId))
       ]);
-      DEPVIS.склады = склады || [];
-      state.warehouses = выдано || [];
-      state.settings = настройки || {hideTransfersTab: false};
-      state.columns = колонки || [];
+      DEPVIS.warehouseList = warehouseList || [];
+      state.warehouses = issued || [];
+      state.settings = prefs || {hideTransfersTab: false};
+      state.columns = columnList || [];
     } catch (e){
       say(e.message);
       return;
     }
-    нарисовать();
+    render();
     showView('admin-user-edit');
   };
 
@@ -326,7 +326,7 @@
    * уже выполнено в другом месте: администратор искал бы настройку там,
    * где её нет.
    */
-  function подсказатьГдеНастройка(){
+  function hintWhereSetting(){
     const el = document.getElementById('fl-sub-visibility');
     if (!el || el.dataset.redirected) return;
     el.dataset.redirected = '1';
@@ -346,17 +346,17 @@
 
     PORTAL.onLogin(async () => {
       try {
-        const [склады, доступы] = await Promise.all([
+        const [warehouseList, access] = await Promise.all([
           api('GET', '/api/admin/warehouses'),
           api('GET', '/api/admin/depositor-access')
         ]);
-        DEPVIS.склады = склады || [];
-        DEPVIS.доступы = доступы || [];
+        DEPVIS.warehouseList = warehouseList || [];
+        DEPVIS.access = access || [];
       } catch (e){
-        DEPVIS.склады = [];
-        DEPVIS.доступы = [];
+        DEPVIS.warehouseList = [];
+        DEPVIS.access = [];
       }
-      подсказатьГдеНастройка();
+      hintWhereSetting();
     });
   }
 

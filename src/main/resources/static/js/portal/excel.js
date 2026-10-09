@@ -17,7 +17,7 @@
    */
   async function download(url, fallbackName){
     const resp = await fetch(url, {headers: {'Accept': '*/*'}});
-    if (!resp.ok) throw new Error(await PORTAL.сообщениеОтвета(resp));
+    if (!resp.ok) throw new Error(await PORTAL.responseMessage(resp));
 
     // имя файла сервер присылает в заголовке, в том числе по-русски
     let name = fallbackName;

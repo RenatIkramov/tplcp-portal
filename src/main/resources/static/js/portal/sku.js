@@ -79,7 +79,7 @@
   async function fetchBatches(skuCode){
     const url = '/api/stock/details?skuCode=' + encodeURIComponent(skuCode);
     const resp = await fetch(url, {headers: {'Accept': 'application/json'}});
-    if (!resp.ok) throw new Error(await PORTAL.сообщениеОтвета(resp));
+    if (!resp.ok) throw new Error(await PORTAL.responseMessage(resp));
     return resp.json();
   }
 
@@ -185,10 +185,7 @@
 
   async function loadTransfers(){
     try {
-      const url = '/api/transfers';
-      const resp = await fetch(url, {headers: {'Accept': 'application/json'}});
-      if (!resp.ok) throw new Error(await PORTAL.сообщениеОтвета(resp));
-      PORTAL.docs.transfers = (await resp.json()).map(toTransfer);
+      PORTAL.docs.transfers = (await PORTAL.fetchJson('/api/transfers')).map(toTransfer);
       PORTAL.docsError.transfers = null;
     } catch (e){
       PORTAL.docs.transfers = [];

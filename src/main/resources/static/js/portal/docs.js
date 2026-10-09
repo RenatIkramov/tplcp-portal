@@ -121,7 +121,7 @@
       const t = PORTAL.docsLoadedAt[table];
       bar.innerHTML = '' + T('admin.column.depositor') + ' <b>' + PORTAL.depositorCode + '</b> · '
         + T('common.text.data_as_of') + ' '
-        + (t ? t.toLocaleTimeString(PORTAL.языкВремени(),
+        + (t ? t.toLocaleTimeString(PORTAL.timeLocale(),
               {hour:'2-digit', minute:'2-digit'}) : '—')
         + ' · <a href="#" data-portal-reload="' + table + '">' + T('stock.text.refresh') + '</a>';
     }
@@ -131,12 +131,7 @@
 
   async function load(table){
     try {
-      const url = '/api/' + table;
-      const resp = await fetch(url, {headers: {'Accept': 'application/json'}});
-      if (!resp.ok){
-        throw new Error(await PORTAL.сообщениеОтвета(resp));
-      }
-      const data = await resp.json();
+      const data = await PORTAL.fetchJson('/api/' + table);
       PORTAL.docs[table] = data.map(table === 'receipts' ? toReceipt : toOrder);
       PORTAL.docsLoadedAt[table] = new Date();
       PORTAL.docsError[table] = null;

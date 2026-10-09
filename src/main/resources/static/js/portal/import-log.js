@@ -15,45 +15,43 @@
   PORTAL.importLog = state;
 
   /** «09.10.2026, 13:45» из метки времени, как её отдаёт сервер. */
-  function когда(iso){
+  function when(iso){
     if (!iso) return '—';
     const d = new Date(iso);
     if (isNaN(d.getTime())) return String(iso).slice(0, 16).replace('T', ', ');
-    const двa = n => String(n).padStart(2, '0');
-    return двa(d.getDate()) + '.' + двa(d.getMonth() + 1) + '.' + d.getFullYear()
-      + ', ' + двa(d.getHours()) + ':' + двa(d.getMinutes());
+    const two = n => String(n).padStart(2, '0');
+    return two(d.getDate()) + '.' + two(d.getMonth() + 1) + '.' + d.getFullYear()
+      + ', ' + two(d.getHours()) + ':' + two(d.getMinutes());
   }
 
-  async function загрузить(){
-    const адрес = '/api/admin/excel-imports'
+  async function load(){
+    const url = '/api/admin/excel-imports'
       + (state.depositorId ? '?depositorId=' + encodeURIComponent(state.depositorId) : '');
     try {
-      const resp = await fetch(адрес, {headers: {'Accept': 'application/json'}});
-      if (!resp.ok) throw new Error(await PORTAL.сообщениеОтвета(resp));
-      const ответ = await resp.json();
-      state.imports = ответ.imports || [];
-      state.issues = ответ.issues || [];
+      const response = await PORTAL.fetchJson(url);
+      state.imports = response.imports || [];
+      state.issues = response.issues || [];
       state.loaded = true;
     } catch (e){
       state.imports = [];
       state.issues = [];
       say(e.message);
     }
-    нарисовать();
+    render();
   }
 
   /* ================= Разметка ================= */
 
-  function подготовить(){
-    const панель = document.getElementById('admin-sub-excel');
-    if (!панель || панель.dataset.wired) return;
-    панель.dataset.wired = '1';
+  function prepare(){
+    const panel = document.getElementById('admin-sub-excel');
+    if (!panel || panel.dataset.wired) return;
+    panel.dataset.wired = '1';
 
     // Выдуманные строки прототипа заменяем своей разметкой целиком:
     // шапка у настоящего журнала другая (добавился поклажедатель),
     // а подставлять данные в чужую таблицу значило бы зависеть
     // от порядка её колонок.
-    панель.innerHTML = ''
+    panel.innerHTML = ''
       + '<div class="section-title" style="margin-top:0;">'
       + esc(T_('admin.title.excel_import_errors')) + '</div>'
       + '<div class="hint" style="margin:-6px 0 12px;">'
@@ -72,19 +70,19 @@
       + '<th>' + esc(T_('admin.column.error')) + '</th>'
       + '</tr></thead><tbody id="impLogBody"></tbody></table></div>';
 
-    const выбор = document.getElementById('impLogDepositor');
-    выбор.innerHTML = '<option value="">' + esc(T_('common.option.all')) + '</option>'
+    const choice = document.getElementById('impLogDepositor');
+    choice.innerHTML = '<option value="">' + esc(T_('common.option.all')) + '</option>'
       + (PORTAL.session && PORTAL.session.depositors || []).map(d =>
           '<option value="' + esc(d.depositorId) + '">' + esc(d.orgName) + '</option>').join('');
-    выбор.onchange = () => { state.depositorId = выбор.value; загрузить(); };
+    choice.onchange = () => { state.depositorId = choice.value; load(); };
   }
 
-  function нарисовать(){
-    const тело = document.getElementById('impLogBody');
-    if (!тело) return;
+  function render(){
+    const body = document.getElementById('impLogBody');
+    if (!body) return;
 
-    тело.innerHTML = state.issues.map(i =>
-        '<tr><td style="white-space:nowrap;">' + esc(когда(i.startedAt)) + '</td>'
+    body.innerHTML = state.issues.map(i =>
+        '<tr><td style="white-space:nowrap;">' + esc(when(i.startedAt)) + '</td>'
       + '<td>' + esc(dash(i.depositorName)) + '</td>'
       + '<td>' + esc(dash(i.login)) + '</td>'
       + '<td>' + esc(dash(i.fileName)) + '</td>'
@@ -98,14 +96,14 @@
     // Сводка по загрузкам: сколько файлов, сколько позиций создано
     // и обновлено. Без неё журнал отвечает только на вопрос
     // «что не загрузилось», а «что загрузилось» — нигде.
-    const сумма = поле => state.imports.reduce((s, r) => s + (r[поле] || 0), 0);
-    const сводка = document.getElementById('impLogSummary');
-    if (сводка){
-      сводка.innerHTML = state.imports.length
+    const sum = field => state.imports.reduce((s, r) => s + (r[field] || 0), 0);
+    const summary = document.getElementById('impLogSummary');
+    if (summary){
+      summary.innerHTML = state.imports.length
         ? '<div class="hint" style="margin:0 0 10px;">'
           + esc(T_('admin.text.import_count')) + ': ' + state.imports.length
-          + ' · ' + esc(T_('sku.message.created_items')) + ': ' + сумма('createdRows')
-          + ' · ' + esc(T_('sku.message.updated_items')) + ': ' + сумма('updatedRows')
+          + ' · ' + esc(T_('sku.message.created_items')) + ': ' + sum('createdRows')
+          + ' · ' + esc(T_('sku.message.updated_items')) + ': ' + sum('updatedRows')
           + '</div>'
         : '';
     }
@@ -116,26 +114,26 @@
   function install(){
     // Подвкладку открывает showAdminSub прототипа; оборачиваем её,
     // чтобы журнал читался при открытии, а не висел устаревшим.
-    const прежняя = window.showAdminSub;
-    if (typeof прежняя === 'function' && !прежняя.__implog){
-      const обёртка = function(sub){
-        const r = прежняя.apply(this, arguments);
+    const previous = window.showAdminSub;
+    if (typeof previous === 'function' && !previous.__implog){
+      const wrapper = function(sub){
+        const r = previous.apply(this, arguments);
         if (sub === 'excel'){
-          подготовить();
-          загрузить();
+          prepare();
+          load();
         }
         return r;
       };
-      обёртка.__implog = true;
-      window.showAdminSub = обёртка;
+      wrapper.__implog = true;
+      window.showAdminSub = wrapper;
     }
     PORTAL.onLogin(() => {
       state.loaded = false;
       state.depositorId = '';
-      const панель = document.getElementById('admin-sub-excel');
-      if (панель && панель.classList.contains('active')){
-        подготовить();
-        загрузить();
+      const panel = document.getElementById('admin-sub-excel');
+      if (panel && panel.classList.contains('active')){
+        prepare();
+        load();
       }
     });
   }
