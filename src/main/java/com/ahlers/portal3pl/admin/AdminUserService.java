@@ -2,6 +2,7 @@ package com.ahlers.portal3pl.admin;
 
 import com.ahlers.portal3pl.auth.PasswordService;
 import com.ahlers.portal3pl.auth.PortalUser;
+import com.ahlers.portal3pl.auth.RememberMeService;
 import com.ahlers.portal3pl.common.SqlRows;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -23,10 +24,13 @@ public class AdminUserService {
 
     private final JdbcClient jdbc;
     private final PasswordService passwords;
+    private final RememberMeService rememberMe;
 
-    public AdminUserService(JdbcClient jdbc, PasswordService passwords) {
+    public AdminUserService(JdbcClient jdbc, PasswordService passwords,
+                            RememberMeService rememberMe) {
         this.jdbc = jdbc;
         this.passwords = passwords;
+        this.rememberMe = rememberMe;
     }
 
     @Transactional(readOnly = true)
@@ -79,6 +83,12 @@ public class AdminUserService {
                 .query()
                 .listOfRows();
 
+        // Заблокировали — «запомнить меня» перестаёт действовать сразу.
+        // Иначе человек, уже вошедший надолго, продолжал бы работать:
+        // блокировка проверяется при входе, а он больше не входит.
+        if (!orDefault(s.isActive(), true)) {
+            rememberMe.forgetAll(userId);
+        }
         return users(actor);
     }
 

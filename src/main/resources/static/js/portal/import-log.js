@@ -127,7 +127,9 @@
       wrapper.__implog = true;
       window.showAdminSub = wrapper;
     }
-    PORTAL.onLogin(() => {
+    // Журнал загрузок администратор смотрит по всем клиентам,
+    // выбирая нужного фильтром внутри экрана.
+    PORTAL.onSession(() => {
       state.loaded = false;
       state.depositorId = '';
       const panel = document.getElementById('admin-sub-excel');

@@ -63,7 +63,6 @@
       const el = field(id);
       if (!el) return;
       el.disabled = false;
-      el.addEventListener('keydown', e => { if (e.key === 'Enter') window.doLogin(); });
     });
     const email = field('loginEmail');
     if (email) email.placeholder = 'client@roga-kopyta.kz';
@@ -74,7 +73,18 @@
       btn.style.opacity = '';
       btn.style.cursor = 'pointer';
       btn.removeAttribute('title');
-      btn.onclick = () => window.doLogin();
+    }
+
+    // Вход идёт через ОТПРАВКУ ФОРМЫ, а не по щелчку по кнопке.
+    // Это не стилистика: менеджер паролей Chrome предлагает сохранить
+    // пароль, увидев отправку формы с полями логина и пароля. Обработчик
+    // на кнопке такого события не создаёт, и сохранять Хрому нечего.
+    // Enter в поле тоже отправляет форму сам — отдельный обработчик
+    // клавиши больше не нужен.
+    const form = field('loginForm');
+    if (form && !form.dataset.wired){
+      form.addEventListener('submit', e => { e.preventDefault(); window.doLogin(); });
+      form.dataset.wired = '1';
     }
 
     // убираем всё, что относилось к демо-доступу
@@ -114,10 +124,12 @@
   window.doLogin = async function(){
     const login = (field('loginEmail')?.value || '').trim();
     const password = field('loginPassword')?.value || '';
+    const remember = field('loginRemember')?.checked === true;
     if (!login || !password){ error(T('auth.text.enter_your_login_and_password')); return; }
     error('');
     try {
-      const sess = await api('POST', '/api/auth/login', {login: login, password: password});
+      const sess = await api('POST', '/api/auth/login',
+          {login: login, password: password, remember: remember});
       await signIn(sess);
     } catch (e){
       error(e.message || T('auth.text.sign_in_failed'));
@@ -180,6 +192,11 @@
     const me = await api('GET', '/api/me');
     PORTAL.user = me;
 
+    // Язык учётной записи применяем ДО того, как собираются подписи:
+    // строка режима пользователя и всплывающие сообщения берут текст
+    // один раз, и позже их уже никто не переведёт.
+    await PORTAL.reloadSession();
+
     const user = uiUser(sess, me);
     currentUser = user;
     currentUserRole = user.role;
@@ -216,12 +233,6 @@
       window.portalOpenPasswordChange('forced');
       return;
     }
-
-    // Язык и кнопки по роли — до ветвления: они зависят от учётной записи,
-    // а не от выбранного клиента. Раньше это ехало вместе с данными
-    // в reloadAll, и администратор до выбора поклажедателя видел портал
-    // на языке формы входа (см. PORTAL.onSession).
-    PORTAL.reloadSession();
 
     // §6.4: если доступен не один поклажедатель и выбор не сделан — сначала выбор
     if (sess.needsDepositorChoice){

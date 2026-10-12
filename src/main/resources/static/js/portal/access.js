@@ -300,7 +300,9 @@
     window.openAdminStaffAccessEdit = () => {};
     window.openAdminDepositorAccessEdit = window.portalOpenDepositorWarehouses;
     window.setStaffWarehouseFilter = window.setStaffWarehouseFilter || (() => {});
-    PORTAL.onLogin(load);
+    // Доступы ведутся по всему порталу и от выбранного клиента
+    // не зависят — грузим сразу после входа (см. PORTAL.onSession).
+    PORTAL.onSession(load);
   }
 
   if (document.readyState === 'loading'){

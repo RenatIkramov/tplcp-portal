@@ -387,6 +387,29 @@ class ColumnDirectoryTest extends PortalTestBase {
         // рядом видно, где подпись поменяется, — иначе это приходится угадывать
         assertTrue(String.valueOf(labels.getFirst().get("shownIn")).contains("receiptComposition"));
 
+        // Раскладка отдаёт обе подписи (V50): по разнице между ними экран
+        // понимает, что поле переименовано. Без этого признака он либо
+        // не применял бы переименование вовсе — так и было, —
+        // либо подставлял бы серверную подпись всегда, а она при пустом
+        // каталоге текстов доходит до ключа.
+        signIn();
+        PortalUser renamed = authService.authenticate(USER, USER_PASSWORD);
+        localeOf(renamed, "ru");
+        Map<String, Object> code = columns.layout(renamed, "sku").stream()
+                .filter(r -> "code".equals(r.get("columnId")))
+                .findFirst()
+                .orElseThrow();
+        assertEquals("Артикул клиента", code.get("label"));
+        assertEquals("Коммерческий код", code.get("portalLabel"),
+                "портальное название приходит рядом с переименованным");
+        Map<String, Object> plain = columns.layout(renamed, "sku").stream()
+                .filter(r -> "barcode".equals(r.get("columnId")))
+                .findFirst()
+                .orElseThrow();
+        assertEquals(plain.get("portalLabel"), plain.get("label"),
+                "не переименованное поле: обе подписи совпадают — экран переводит сам");
+
+        signInAs(ADMIN, DEPOSITOR);
         assertTrue(columns.saveFieldLabel(admin, depositorId, "sku", "code", "  ").isEmpty(),
                 "пустая подпись возвращает портальное название, а не хранится пустой");
 
@@ -415,6 +438,60 @@ class ColumnDirectoryTest extends PortalTestBase {
                 columns.saveFieldLabel(admin, depositorId, "sku", "  ", "Имя"));
     }
 
+    /**
+     * Каталог переименуемых полей (V48) — список для окна правки.
+     *
+     * <p>Прежний экран брал его из массива в прототипе, поэтому в окне
+     * были только пять «объектов» и колонки макета. Проверяем, что
+     * список приходит из каталога колонок: строка на поле, рядом
+     * таблицы, где подпись поменяется.
+     */
+    @Test
+    void fieldCatalogListsRenameableFields() {
+        PortalUser admin = portalAdmin();
+        signInAs(ADMIN, DEPOSITOR);
+        localeOf(admin, "ru");
+        List<Map<String, Object>> catalog = columns.fieldCatalog(admin);
+
+        assertFalse(catalog.isEmpty(), "каталог полей не может быть пустым");
+        Map<String, Object> code = catalog.stream()
+                .filter(r -> "sku".equals(r.get("objectCode"))
+                        && "code".equals(r.get("fieldId")))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("в каталоге нет поля sku.code"));
+        // Обязательное поле (is_locked) переименовать можно: «обязательное»
+        // значит «нельзя скрыть от поклажедателя», а не «нельзя назвать
+        // по-своему».
+        assertEquals("Коммерческий код", code.get("portalLabel"),
+                "поле зовётся так, как в своём разделе: в товарах — «Коммерческий"
+                        + " код», а не «Код» из запасов");
+        columns.saveFieldLabel(admin, depositorId(ADMIN, DEPOSITOR),
+                "sku", "code", "Артикул клиента");
+        assertEquals("Артикул клиента",
+                labelOf(columns.layout(admin, "sku"), "code"),
+                "обязательное поле переименовывается наравне с остальными");
+        assertTrue(String.valueOf(code.get("shownIn")).contains("sku"),
+                "рядом с полем перечислены таблицы, где подпись поменяется: "
+                        + code.get("shownIn"));
+
+        // Строка на ПОЛЕ, а не на колонку: одно поле показывается
+        // в нескольких таблицах, а название у него одно.
+        long duplicates = catalog.size() - catalog.stream()
+                .map(r -> r.get("objectCode") + "|" + r.get("fieldId"))
+                .distinct()
+                .count();
+        assertEquals(0, duplicates, "поле в каталоге повторяться не должно");
+
+        // Переименовать можно только то, что где-то показывается, —
+        // ровно это и проверяет saveFieldLabel.
+        String depositorId = depositorId(ADMIN, DEPOSITOR);
+        for (Map<String, Object> field : catalog) {
+            columns.saveFieldLabel(admin, depositorId,
+                    String.valueOf(field.get("objectCode")),
+                    String.valueOf(field.get("fieldId")), "");
+        }
+    }
+
     @Test
     void onlyAdminChangesDepositorSettings() {
         signIn();
@@ -428,6 +505,7 @@ class ColumnDirectoryTest extends PortalTestBase {
                 columns.copySettings(client, userId(USER), userId(OTHER_USER)));
         expectRejection(403, () -> columns.resetDepositorColumns(client, depositorId, null));
         expectRejection(403, () -> columns.fieldLabels(client, depositorId));
+        expectRejection(403, () -> columns.fieldCatalog(client));
         expectRejection(403, () ->
                 columns.saveFieldLabel(client, depositorId, "sku", "code", "Своё"));
     }

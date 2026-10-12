@@ -2,6 +2,7 @@ package com.ahlers.portal3pl.auth;
 
 import com.ahlers.portal3pl.i18n.LocaleService;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -30,20 +31,28 @@ public class AuthController {
     private final AuthService auth;
     private final SessionUser session;
     private final LocaleService locales;
+    private final RememberMeService rememberMe;
 
-    public AuthController(AuthService auth, SessionUser session, LocaleService locales) {
+    public AuthController(AuthService auth, SessionUser session, LocaleService locales,
+                          RememberMeService rememberMe) {
         this.auth = auth;
         this.session = session;
         this.locales = locales;
+        this.rememberMe = rememberMe;
     }
 
-    public record LoginRequest(String login, String password) {
+    /** {@code remember} — галочка «запомнить меня»; её может и не быть. */
+    public record LoginRequest(String login, String password, Boolean remember) {
     }
 
     @PostMapping("/login")
-    public Map<String, Object> login(@RequestBody LoginRequest body, HttpServletRequest request) {
+    public Map<String, Object> login(@RequestBody LoginRequest body, HttpServletRequest request,
+                                     HttpServletResponse response) {
         PortalUser user = auth.authenticate(body.login(), body.password());
         session.setUser(request, user);
+        if (Boolean.TRUE.equals(body.remember())) {
+            rememberMe.remember(request, response, user.userId());
+        }
 
         List<Map<String, Object>> depositors = auth.availableDepositors(user.login());
         if (depositors.size() == 1) {
@@ -54,7 +63,11 @@ public class AuthController {
 
     @PostMapping("/logout")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void logout(HttpServletRequest request) {
+    public void logout(HttpServletRequest request, HttpServletResponse response) {
+        // Сначала токен, потом сессия: после signOut запроса уже не из чего
+        // достать cookie-признак, а оставленный токен пустил бы обратно
+        // без пароля — то есть выход не был бы выходом.
+        rememberMe.forget(request, response);
         session.signOut(request);
     }
 

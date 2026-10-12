@@ -35,9 +35,36 @@
   .utility-row > span:not(.lang):not(#userName){color:rgba(255,255,255,.25);}
   .utility-row.muted{color:rgba(255,255,255,.5);font-size:12px;}
   .utility-row.muted a{color:rgba(255,255,255,.7);text-decoration:underline;}
-  .lang{display:flex;gap:6px;}
+  .lang{display:flex;gap:6px;position:relative;}
   .lang span{padding:2px 6px;border-radius:3px;cursor:default;color:rgba(255,255,255,.55);}
   .lang span.active{background:rgba(255,255,255,.15);color:#fff;}
+  /* Чип текущего языка открывает список — вид тот же, что был
+     у активного языка, поэтому шапка не меняется на вид. */
+  .lang .lang-current{cursor:pointer;user-select:none;}
+  .lang .lang-current:focus-visible{outline:2px solid rgba(255,255,255,.6);outline-offset:1px;}
+  .lang .lang-menu{
+    position:absolute;top:100%;right:0;margin-top:4px;z-index:50;
+    background:#fff;border:1px solid var(--line);border-radius:6px;
+    box-shadow:0 6px 20px rgba(0,0,0,.18);padding:4px;min-width:150px;
+    display:flex;flex-direction:column;
+  }
+  /* Обязательно: display:flex выше в силе, чем [hidden]{display:none},
+     и без этой строки список виден всегда. Поймано проверкой. */
+  .lang .lang-menu[hidden]{display:none;}
+
+  /* «Запомнить меня» на форме входа */
+  .login-remember{
+    display:flex;align-items:center;gap:8px;margin-top:10px;
+    font-size:13px;color:var(--muted);cursor:pointer;user-select:none;
+  }
+  .login-remember input{margin:0;}
+  .lang .lang-menu button{
+    background:none;border:0;text-align:left;padding:6px 10px;border-radius:4px;
+    font:inherit;font-size:13px;color:var(--ink);cursor:pointer;white-space:nowrap;
+  }
+  .lang .lang-menu button:hover{background:var(--bg);}
+  .lang .lang-menu button.active{background:var(--navy);color:#fff;}
+  .lang .lang-menu b{display:inline-block;min-width:22px;}
   .brand-row{
     display:flex;align-items:center;justify-content:space-between;
     padding:10px 28px;

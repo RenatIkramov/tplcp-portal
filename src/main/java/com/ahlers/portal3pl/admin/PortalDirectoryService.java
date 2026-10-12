@@ -33,14 +33,23 @@ import java.util.UUID;
 @Service
 public class PortalDirectoryService {
 
-    /** Что можно править в складе. Идентификатор склада задаётся при создании. */
+    /**
+     * Что можно править в складе. Идентификатор склада задаётся при создании.
+     *
+     * <p>Ключи — имена колонок базы: они подставляются в запрос, и белый
+     * список здесь не удобство, а защита от подстановки чужого имени.
+     * Площадь и режим работы добавлены в V45 — они показываются
+     * на странице «Контакты».
+     */
     private static final Map<String, String> WAREHOUSE_COLUMNS = Map.of(
             "code", "varchar",
             "name", "varchar",
             "address", "varchar",
             "responsible", "varchar",
             "phone", "varchar",
-            "email", "varchar");
+            "email", "varchar",
+            "area_m2", "numeric",
+            "work_hours", "varchar");
 
     private final JdbcClient jdbc;
     private final AdminUserService users;

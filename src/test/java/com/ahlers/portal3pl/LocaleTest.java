@@ -42,16 +42,60 @@ class LocaleTest extends PortalTestBase {
                 });
     }
 
+    /**
+     * Два списка языков — и это не дублирование.
+     *
+     * <p>{@code locales()} отвечает на вопрос «что показать в
+     * переключателе» и выключенные языки намеренно скрывает:
+     * выбрать язык, для которого нет переводов, человек не должен.
+     * {@code allLocales()} — справочник целиком, он нужен администратору,
+     * чтобы язык можно было подготовить и включить.
+     *
+     * <p>С V44 казахский и нидерландский выключены: переводов у них нет
+     * ни для одного из 1326 ключей.
+     */
     @Test
     void englishIsThePortalDefault() {
         assertEquals("en", locales.defaultLocale());
-        List<Map<String, Object>> list = locales.locales();
-        assertTrue(list.size() >= 4, "языков должно быть четыре: en, ru, nl, kk");
+
+        List<Map<String, Object>> shown = locales.locales();
+        assertTrue(shown.size() >= 2, "в переключателе есть хотя бы английский и русский");
+        assertEquals("en", shown.getFirst().get("code"), "английский идёт первым");
+        assertEquals(1, shown.stream().filter(l -> Boolean.TRUE.equals(l.get("isDefault"))).count(),
+                "язык по умолчанию ровно один");
+        assertTrue(shown.stream().noneMatch(l -> "nl".equals(l.get("code"))),
+                "выключенный язык в переключателе не предлагается");
+
+        List<Map<String, Object>> all = locales.allLocales(portalAdmin());
+        assertTrue(all.size() >= 4, "в справочнике четыре языка: en, ru, nl, kk");
+        assertTrue(all.stream().anyMatch(l -> "nl".equals(l.get("code"))),
+                "выключенный язык остаётся в справочнике — иначе его не включить обратно");
+
         assertEquals("Depositor", locales.texts("en").get("common.label.depositor"),
                 "поклажедатель по-английски — depositor, а не client");
-        assertEquals("en", list.getFirst().get("code"), "английский идёт первым");
-        assertEquals(1, list.stream().filter(l -> Boolean.TRUE.equals(l.get("isDefault"))).count(),
-                "язык по умолчанию ровно один");
+    }
+
+    /**
+     * Готовить переводы можно и для выключенного языка.
+     *
+     * <p>Иначе получается замкнутый круг: язык выключен — колонки в
+     * таблице переводов нет — тексты завести нельзя; текстов нет —
+     * включать язык нельзя. Так новый язык в портале не появился бы
+     * никогда (V47).
+     */
+    @Test
+    void disabledLanguageCanStillBeTranslated() {
+        PortalUser admin = portalAdmin();
+        locales.save(admin, KEY, "nl", "Bestellingen");
+        assertEquals("Bestellingen", locales.texts("nl").get(KEY),
+                "перевод для выключенного языка сохраняется и читается");
+
+        // но выбрать себе выключенный язык нельзя: переводов почти нет,
+        // и человек увидел бы портал на языке отката
+        PortalUser client = authService.authenticate(USER, USER_PASSWORD);
+        expectRejection(404, () -> locales.setLocaleOf(client, "nl"));
+
+        locales.save(admin, KEY, "nl", null);
     }
 
     @Test

@@ -78,13 +78,41 @@
     Object.keys(byTable).forEach(t => applyTable(t, byTable[t]));
   }
 
-  /** Подпись колонки из раскладки: в ней уже и перевод, и переименование. */
-  function labelOf(tableKey, columnId){
+  /**
+   * Как ЭТОТ клиент называет поле, или null, если не переименовывал.
+   *
+   * Сервер отдаёт обе подписи: label (с переименованием) и portal_label
+   * (без). Разница между ними и есть переименование — единственное,
+   * чего экран не может узнать сам: перевод он берёт по ключу,
+   * а подписи карточек вписаны в разметку.
+   *
+   * Отдаём именно разницу, а не готовую подпись. Если текста в каталоге
+   * нет, серверный COALESCE доходит до ключа, и подстановка подписи
+   * всегда поставила бы в карточку «col.sku.manufacturer» вместо
+   * «Производитель». На этом уже попалась проверка карточки товара.
+   *
+   * Переименование от языка не зависит (решение заказчика): клиент
+   * назвал поле по-своему, и язык интерфейса его слово не отменяет.
+   * Поэтому раскладку после смены языка перечитывать не нужно —
+   * разница между подписями останется той же.
+   */
+  function renameOf(tableKey, columnId){
     const rows = layout[tableKey];
     if (!rows) return null;
     const row = rows.find(r => r.columnId === columnId);
-    return row ? row.label : null;
+    if (!row || !row.portalLabel) return null;
+    return row.label !== row.portalLabel ? row.label : null;
   }
+  PORTAL.columns.renameOf = renameOf;
+
+  /** Какая таблица содержит этот объект колонки прототипа. */
+  function tableOfColumn(column){
+    for (const t of Object.keys(layout)){
+      if ((tableColumns[t] || []).some(x => x === column)) return t;
+    }
+    return null;
+  }
+  PORTAL.columns.tableOfColumn = tableOfColumn;
 
   // Перерисовка таблицы после смены раскладки. Имена функций берём
   // у прототипа: каждая таблица рисуется своей.
@@ -195,45 +223,6 @@
           say(T('common.message.columns_reset_to_default'));
         })
         .catch(err => say(err.message));
-    };
-  }
-
-  /* ============ Подписи ============ */
-
-  function wrapLabels(){
-    // COLTH зовут шапки таблиц в карточках документов и регистрах
-    const colthOrig = window.COLTH;
-    window.COLTH = function(c){
-      if (c && c.id){
-        for (const t of Object.keys(layout)){
-          if ((tableColumns[t] || []).some(x => x === c)){
-            const own = labelOf(t, c.id);
-            if (own) return own;
-          }
-        }
-      }
-      return typeof colthOrig === 'function' ? colthOrig(c) : (c && c.label) || '';
-    };
-
-    const locOrig = window.localizeColumnLabel;
-    window.localizeColumnLabel = function(ruLabel, tableKey, colId){
-      if (tableKey && colId){
-        const own = labelOf(tableKey, colId);
-        if (own) return own;
-      }
-      // окно выбора зовёт без таблицы — берём открытую
-      const open = hasGlobal('colPickerTable') ? colPickerTable : null;
-      if (!tableKey && open){
-        const rows = layout[open] || [];
-        const cols = tableColumns[open] || [];
-        const col = cols.find(x => x.label === ruLabel);
-        if (col){
-          const row = rows.find(r => r.columnId === col.id);
-          if (row) return row.label;
-        }
-      }
-      return typeof locOrig === 'function'
-        ? locOrig.apply(this, arguments) : ruLabel;
     };
   }
 
@@ -477,7 +466,6 @@
 
   function install(){
     wrapPicker();
-    wrapLabels();
     wrapDepositorCard();
     wrapUserCard();
 

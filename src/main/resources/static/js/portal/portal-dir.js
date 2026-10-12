@@ -44,6 +44,9 @@
         {col: 'code', labelKey: 'references.column.code', required: true},
         {col: 'name', labelKey: 'portal.label.warehouse_name', required: true},
         {col: 'address', labelKey: 'portal.label.address'},
+        {col: 'area_m2', readCol: 'areaM2',
+         labelKey: 'portal.label.warehouse_area', num: true},
+        {col: 'work_hours', readCol: 'workHours', labelKey: 'portal.label.work_hours'},
         {col: 'responsible', labelKey: 'portal.label.responsible_person'},
         {col: 'phone', labelKey: 'partners.label.phone'},
         {col: 'email', labelKey: 'common.column.email'}
@@ -591,7 +594,12 @@
     window.renderOrderTypes = () => renderEnum('orderTypes');
     window.renderDocTypes = () => renderEnum('docTypes');
 
-    PORTAL.onLogin(() => {
+    // onSession, а не onLogin: склады, поклажедатели, организации
+    // оператора и типы документов — справочники ВСЕГО портала,
+    // к выбранному клиенту отношения не имеют. На onLogin они не
+    // грузились до выбора поклажедателя, и администратор, которому
+    // выбор обязателен, видел пустые справочники.
+    PORTAL.onSession(() => {
       // Раздел открыт только администратору и разработчику; остальным
       // эти экраны и так не показываются (showReferencesSub).
       if (!isAdmin()) return;

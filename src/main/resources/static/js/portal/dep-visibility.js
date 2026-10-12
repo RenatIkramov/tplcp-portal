@@ -69,7 +69,13 @@
    */
   window.fcKvC = function(columnId, label, value){
     if (!isColumnAvailable(columnId)) return '';
-    return fcKv(label, value);
+    // Подпись берём из раскладки по идентификатору колонки: там и перевод,
+    // и переименование поля клиентом. В разметку карточки подписи вписаны
+    // русскими строками, и по строке переименование не найти — только
+    // по идентификатору.
+    const own = PORTAL.columns && PORTAL.columns.renameOf
+        ? PORTAL.columns.renameOf('sku', columnId) : null;
+    return fcKv(own || label, value);
   };
 
   /* ================== Вкладки карточки ================== */
@@ -81,6 +87,10 @@
     return '<div class="admin-subtabs" id="depVisTabs">'
       + button('sections', 'admin.tab.sections_and_warehouses')
       + button('fields', 'admin.tab.product_fields')
+      // Переименование полей переехало сюда из отдельного раздела
+      // администрирования: настройка одного клиента должна лежать
+      // в одном месте.
+      + button('labels', 'admin.button.custom_field_names')
       + '</div>';
   }
 
@@ -193,14 +203,21 @@
     const el = document.getElementById('adminUserEditContent');
     if (!el) return;
     const d = state.depositor || {};
+    // Вкладка наименований полей сохраняет каждую правку сразу, своим
+    // окном: общая кнопка «Сохранить» на ней сохраняла бы пустоту,
+    // а человек решил бы, что она сохранила названия.
+    const labels = state.tab === 'labels';
+    const body = labels
+      ? (PORTAL.fieldLabels ? PORTAL.fieldLabels.html() : '')
+      : (state.tab === 'fields' ? productFields() : warehousesAndSections());
     el.innerHTML = ''
       + '<div class="detail-head"><div>'
       + '  <h2>' + esc(d.orgName || '') + '</h2>'
       + '  <div class="meta">' + esc(T_('admin.column.depositor')) + ': '
       + esc(d.code || '') + '</div></div></div>'
       + tabs()
-      + (state.tab === 'fields' ? productFields() : warehousesAndSections())
-      + actions;
+      + body
+      + (labels ? '' : actions);
 
     el.querySelectorAll('[data-dep-tab]').forEach(b => {
       b.onclick = () => { remember(); state.tab = b.getAttribute('data-dep-tab'); render(); };
@@ -208,6 +225,22 @@
     el.querySelectorAll('[data-dep-group]').forEach(b => {
       b.onclick = () => { remember(); state.group = b.getAttribute('data-dep-group'); render(); };
     });
+
+    if (labels){
+      if (PORTAL.fieldLabels) PORTAL.fieldLabels.wire(el, render);
+      if (readOnly()){
+        el.querySelectorAll('input, select').forEach(e => e.disabled = true);
+        el.querySelectorAll('#flAddBtn, [data-fl-del]').forEach(b => b.remove());
+        el.querySelectorAll('[data-fl-row]').forEach(tr => {
+          tr.onclick = null;
+          tr.style.cursor = 'default';
+        });
+        // фильтры разработчику оставляем: смотреть не запрещено
+        el.querySelectorAll('#flFilterObject2, #flFilterField2')
+          .forEach(e => e.disabled = false);
+      }
+      return;
+    }
 
     const save = el.querySelector('[data-dep-save]');
     save.textContent = T_('common.button.save');
@@ -304,7 +337,9 @@
         api('GET', '/api/admin/depositors/' + encodeURIComponent(depositorId) + '/warehouses'),
         api('GET', '/api/admin/depositors/' + encodeURIComponent(depositorId) + '/settings'),
         api('GET', '/api/admin/depositor-columns?table=sku&depositorId='
-            + encodeURIComponent(depositorId))
+            + encodeURIComponent(depositorId)),
+        // наименования полей — третья вкладка этой же карточки
+        PORTAL.fieldLabels ? PORTAL.fieldLabels.load(depositorId) : Promise.resolve()
       ]);
       DEPVIS.warehouseList = warehouseList || [];
       state.warehouses = issued || [];
@@ -320,33 +355,14 @@
     showView('admin-user-edit');
   };
 
-  /**
-   * Заглушка «Раздел в разработке» в настройке полей поклажедателя.
-   *
-   * Этот раздел теперь существует — в карточке доступов поклажедателя.
-   * Оставить заглушку значило бы держать на экране обещание, которое
-   * уже выполнено в другом месте: администратор искал бы настройку там,
-   * где её нет.
-   */
-  function hintWhereSetting(){
-    const el = document.getElementById('fl-sub-visibility');
-    if (!el || el.dataset.redirected) return;
-    el.dataset.redirected = '1';
-    el.innerHTML = '<div class="hint" style="margin-bottom:12px;">'
-      + esc(T_('admin.hint.where_field_visibility')) + '</div>'
-      + '<button class="btn primary" type="button" id="goDepositorAccess"></button>';
-    const b = document.getElementById('goDepositorAccess');
-    b.textContent = T_('admin.button.depositor_access');
-    b.onclick = () => { showView('admin'); showAdminSub('depositor-access'); };
-  }
-
   function install(){
     // Строку в списке открывает уже наша карточка: прежняя показывала
     // только склады, и две карточки на один экран не нужны.
     window.portalOpenDepositorWarehouses = window.portalOpenDepositorSettings;
     window.openAdminDepositorAccessEdit = window.portalOpenDepositorSettings;
 
-    PORTAL.onLogin(async () => {
+    // Экран администрирования: склады и доступы по всем клиентам.
+    PORTAL.onSession(async () => {
       try {
         const [warehouseList, access] = await Promise.all([
           api('GET', '/api/admin/warehouses'),
@@ -358,7 +374,6 @@
         DEPVIS.warehouseList = [];
         DEPVIS.access = [];
       }
-      hintWhereSetting();
     });
   }
 

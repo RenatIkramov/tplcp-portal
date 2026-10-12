@@ -27,10 +27,13 @@ public class PasswordService {
 
     private final JdbcClient jdbc;
     private final PasswordEncoder encoder;
+    private final RememberMeService rememberMe;
 
-    public PasswordService(JdbcClient jdbc, PasswordEncoder encoder) {
+    public PasswordService(JdbcClient jdbc, PasswordEncoder encoder,
+                           RememberMeService rememberMe) {
         this.jdbc = jdbc;
         this.encoder = encoder;
+        this.rememberMe = rememberMe;
     }
 
     /** Пользователь меняет свой пароль. Возвращает его же, но уже без флага «сменить». */
@@ -101,6 +104,14 @@ public class PasswordService {
                 .orElse(null);
     }
 
+    /**
+     * Записывает новый пароль и гасит все долгие входы этого человека.
+     *
+     * <p>Гашение здесь, в одном месте на оба пути (своя смена и выдача
+     * администратором), а не у каждого вызывающего: пароль меняют как раз
+     * затем, чтобы отобрать доступ, и «запомнить меня» на старом устройстве
+     * сводило бы смену пароля на нет.
+     */
     private void store(String userId, String password, boolean forceChange) {
         jdbc.sql("SELECT dbo.auth_set_password(:id::uuid, :hash::text, :must)")
                 .param("id", userId)
@@ -108,6 +119,7 @@ public class PasswordService {
                 .param("must", forceChange)
                 .query()
                 .listOfRows();
+        rememberMe.forgetAll(userId);
     }
 
     /**

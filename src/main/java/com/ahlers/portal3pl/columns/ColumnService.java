@@ -274,6 +274,23 @@ public class ColumnService {
                 .listOfRows());
     }
 
+    /**
+     * Поля, которые можно переименовать: список для окна правки.
+     *
+     * <p>Отдаётся на языке администратора — поле выбирают по подписи,
+     * которую видно на экранах, а не по коду в базе. Клиент тут не при
+     * чём: каталог полей один на портал, у клиента своё только название.
+     */
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> fieldCatalog(PortalUser actor) {
+        users.requireAdmin(actor);
+        return SqlRows.toCamelCase(jdbc
+                .sql("SELECT * FROM dbo.admin_field_catalog(:locale::text)")
+                .param("locale", locales.localeOf(actor.login()))
+                .query()
+                .listOfRows());
+    }
+
     /** Пустая подпись возвращает портальное название поля. */
     @Transactional
     public List<Map<String, Object>> saveFieldLabel(PortalUser actor, String depositorId,

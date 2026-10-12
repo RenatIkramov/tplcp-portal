@@ -41,8 +41,10 @@
     button.setAttribute('data-refsub', 'units');
     PORTAL.label(button, 'references.button.units');
     button.onclick = () => showReferencesSub('units');
-    // Рядом с упаковками: товар, его упаковки, его единицы измерения.
-    const after = tabs.querySelector('[data-refsub="packaging"]');
+    // После грузополучателей, последней из рабочих справочников:
+    // единицы измерения ведёт администратор, и каждый день в них
+    // не ходят — в отличие от товаров, упаковок и контрагентов.
+    const after = tabs.querySelector('[data-refsub="consignees"]');
     if (after && after.nextSibling) tabs.insertBefore(button, after.nextSibling);
     else tabs.appendChild(button);
 
@@ -273,7 +275,10 @@
   /* ================= Установка ================= */
 
   function install(){
-    PORTAL.onLogin(() => {
+    // Справочник единиц один на весь портал и от выбранного клиента
+    // не зависит — иначе вкладка появлялась бы только после выбора
+    // поклажедателя, а администратору выбор обязателен.
+    PORTAL.onSession(() => {
       createTab();
       interceptSwitch();
       state.form = null;

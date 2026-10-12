@@ -76,6 +76,7 @@
     safely('подсказки в полях', applyAttributes);
     // разметка, нарисованная кодом до смены языка, тоже должна перевестись
     safely('нарисованные экраны', () => applyTo(document.body));
+    safely('ссылка «О нас»', applyAboutLink);
     rerender();
     markSwitch(code);
   }
@@ -150,38 +151,40 @@
   }
 
   /**
-   * Заголовки колонок. У каждой колонки при сборке появился ключ, и подпись
-   * берётся по нему — одним местом и для шапки таблицы, и для окна
-   * «⚙ Колонки». Переопределение названия поля поклажедателем идёт первым:
-   * клиент назвал поле по-своему, и это важнее языка портала.
+   * Подпись колонки: сначала переименование клиентом, потом перевод.
+   *
+   * Переименование спрашиваем у раскладки с сервера — только она
+   * о нём знает. Если клиент поле не переименовывал, переводим
+   * по ключу, как и раньше.
+   *
+   * Переименование действует на любом языке (решение заказчика):
+   * клиент назвал поле по-своему, и язык интерфейса его слово
+   * не отменяет. Прежний код прятал переименование на всех языках
+   * кроме русского — и это была одна из двух причин, по которым
+   * его не видел никто. Вторая: эта функция присваивалась здесь
+   * целиком, затирая обёртку columns.js, которая о переименовании
+   * знала.
    */
-  /**
-   * Переименование поля поклажедателем задаётся одним текстом, без языков:
-   * свой слой переводов для него ещё не сделан. Поэтому оно действует
-   * на языке, на котором заведено (русский), а на других интерфейс
-   * показывает обычную подпись — иначе посреди английской таблицы
-   * оказывается русское слово.
-   */
-  function patchOwnFieldLabels(){
-    const orig = window.getDepositorFieldLabel;
-    if (typeof orig !== 'function') return;
-    window.getDepositorFieldLabel = function(objectType, fieldId){
-      if (state.code && state.code !== 'ru') return null;
-      return orig(objectType, fieldId);
-    };
-  }
+  const ownLabel = (tableKey, colId) => {
+    if (!tableKey || !colId) return null;
+    const columns = window.PORTAL && PORTAL.columns;
+    return columns && columns.renameOf ? columns.renameOf(tableKey, colId) : null;
+  };
 
   function patchColumnLabels(){
     window.localizeColumnLabel = function(ruLabel, tableKey, colId){
-      if (tableKey && colId && typeof getDepositorFieldLabel === 'function'){
-        const own = getDepositorFieldLabel(tableKey, colId);
-        if (own) return own;
-      }
+      const own = ownLabel(tableKey, colId);
+      if (own) return own;
+
       let key = (tableKey && colId) ? 'col.' + tableKey + '.' + colId : null;
       if (!key && typeof colPickerTable === 'string' && colPickerTable){
         // окно выбора колонок зовёт эту функцию без таблицы — берём открытую
         const c = (tableColumns[colPickerTable] || []).find(x => x.label === ruLabel);
-        if (c && c.key) key = c.key;
+        if (c){
+          const mine = ownLabel(colPickerTable, c.id);
+          if (mine) return mine;
+          if (c.key) key = c.key;
+        }
       }
       const t = key ? state.texts[key] : null;
       // подпись могла прийти готовым русским текстом — из карточек
@@ -195,6 +198,10 @@
     // в разных таблицах с разным переводом.
     window.COLTH = function(c){
       if (!c) return '';
+      const columns = window.PORTAL && PORTAL.columns;
+      const table = columns && columns.tableOfColumn ? columns.tableOfColumn(c) : null;
+      const own = ownLabel(table, c.id);
+      if (own) return own;
       const t = c.key ? state.texts[c.key] : null;
       if (t) return t;
       return window.localizeColumnLabel ? window.localizeColumnLabel(c.label) : c.label;
@@ -216,7 +223,7 @@
      'renderBillingServices', 'renderBillingInvoices', 'renderAdminUsers',
      'renderAdminAccess', 'renderAdminDepositorAccess', 'renderAdminStaffAccess',
      'renderOrderTypes', 'renderDocTypes', 'renderDepositorsDir', 'renderWarehousesDir',
-     'renderReportsConfigTable', 'renderFieldLabelsAdmin', 'renderReportRows',
+     'renderReportsConfigTable', 'renderReportRows',
      'populateReportsConfigDepositorFilter'
     ].forEach(name => {
       if (typeof window[name] === 'function') safely(name, window[name]);
@@ -232,19 +239,107 @@
   }
 
   function markSwitch(code){
-    document.querySelectorAll('.lang span[data-locale]').forEach(s => {
-      s.classList.toggle('active', s.getAttribute('data-locale') === code);
+    document.querySelectorAll('.lang').forEach(box => {
+      const chip = box.querySelector('.lang-current');
+      if (!chip) return;
+      chip.textContent = (code || '').toUpperCase();
+      chip.setAttribute('data-locale', code || '');
+      box.querySelectorAll('.lang-menu [data-locale]').forEach(b => {
+        b.classList.toggle('active', b.getAttribute('data-locale') === code);
+      });
     });
   }
 
+  /**
+   * Выбор языка: чип с кодом текущего языка, по щелчку — список.
+   *
+   * <p>Кнопка на каждый язык занимала место и росла с каждым новым
+   * языком. Обычный `<select>` в шапку не встал: системный вид списка
+   * спорит с оформлением портала. Поэтому вид остался прежним — тот же
+   * чип, что был у активного языка, — а выбор переехал в список,
+   * который открывается по щелчку.
+   *
+   * <p>В списке код и название: код человек узнаёт по шапке, название
+   * нужно тому, кто код не опознал.
+   */
   function fillSwitch(box){
-    box.innerHTML = state.locales.map(l =>
-        '<span data-locale="' + esc(l.code) + '" title="' + esc(l.name) + '">'
-        + esc(l.code.toUpperCase()) + '</span>').join('');
-    box.querySelectorAll('span').forEach(s => {
-      s.style.cursor = 'pointer';
-      s.addEventListener('click', () => window.portalSetLanguage(s.getAttribute('data-locale')));
+    const label = (typeof T === 'function' ? T('common.aria.choose_language')
+                                           : 'Язык интерфейса');
+    box.innerHTML = '<span class="active lang-current" role="button" tabindex="0"'
+      + ' aria-haspopup="listbox" aria-expanded="false"'
+      + ' data-i18n-aria="common.aria.choose_language" aria-label="' + esc(label) + '">'
+      + esc((state.code || defaultCode() || '').toUpperCase()) + '</span>'
+      + '<div class="lang-menu" role="listbox" hidden>'
+      + state.locales.map(l => '<button type="button" role="option"'
+          + ' data-locale="' + esc(l.code) + '">'
+          + '<b>' + esc(l.code.toUpperCase()) + '</b> ' + esc(l.name) + '</button>').join('')
+      + '</div>';
+
+    const chip = box.querySelector('.lang-current');
+    const menu = box.querySelector('.lang-menu');
+    const open = on => {
+      menu.hidden = !on;
+      chip.setAttribute('aria-expanded', on ? 'true' : 'false');
+    };
+    chip.onclick = e => { e.stopPropagation(); open(menu.hidden); };
+    chip.onkeydown = e => {
+      if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); open(menu.hidden); }
+      if (e.key === 'Escape') open(false);
+    };
+    menu.querySelectorAll('[data-locale]').forEach(b => {
+      b.onclick = e => {
+        e.stopPropagation();
+        open(false);
+        window.portalSetLanguage(b.getAttribute('data-locale'));
+      };
     });
+    // Щелчок мимо списка закрывает его: иначе список висит до выбора,
+    // а человек уже занят другим.
+    if (!document.body.dataset.langMenuWired){
+      document.addEventListener('click', () => {
+        document.querySelectorAll('.lang-menu').forEach(m => { m.hidden = true; });
+        document.querySelectorAll('.lang-current').forEach(c =>
+            c.setAttribute('aria-expanded', 'false'));
+      });
+      document.body.dataset.langMenuWired = '1';
+    }
+    markSwitch(state.code || defaultCode());
+  }
+
+  /** Код языка портала по умолчанию из того, что отдал сервер. */
+  function defaultCode(){
+    const d = state.locales.find(l => l.isDefault) || state.locales[0];
+    return d ? d.code : '';
+  }
+
+  /**
+   * Кнопка «О нас» ведёт на сайт оператора, в новой вкладке.
+   *
+   * <p>Своей страницы «О нас» у портала нет: её содержимое — это сайт
+   * оператора, и держать его копию в портале значило бы поддерживать две
+   * версии одного текста. Адрес лежит в таблице переводов под ключом
+   * `about.url`, то есть у каждого языка свой и правится из
+   * «Текстов интерфейса» без пересборки.
+   *
+   * <p>Схема адреса проверяется: значение попадает в `href`, и `javascript:`
+   * оттуда превратил бы кнопку в исполняемый код. Пусто или не http(s) —
+   * кнопки нет совсем, потому что кнопка, ведущая в никуда, хуже её
+   * отсутствия.
+   */
+  function applyAboutLink(){
+    const link = document.querySelector('a[data-i18n="common.text.about_us"]');
+    if (!link) return;
+    const url = String(state.texts['about.url'] || '').trim();
+    const ok = /^https?:\/\//i.test(url);
+    link.style.display = ok ? '' : 'none';
+    if (!ok) return;
+    link.setAttribute('href', url);
+    link.setAttribute('target', '_blank');
+    // rel обязателен: без noopener открытая страница получает доступ
+    // к window.opener нашего портала
+    link.setAttribute('rel', 'noopener noreferrer');
+    link.onclick = null;
+    link.removeAttribute('onclick');
   }
 
   /**
@@ -298,6 +393,31 @@
    * компьютере следующий увидел бы чужую настройку и решил, что портал
    * так устроен.
    */
+  /**
+   * Пересобрать переключатель языка.
+   *
+   * <p>Нужен справочнику языков: включили или выключили язык — список
+   * выбора обязан это показать сразу. Иначе выключенный язык остаётся
+   * в списке до перезагрузки страницы, и его можно выбрать.
+   */
+  state.rebuildSwitch = async () => {
+    try {
+      state.locales = await api('GET', '/api/i18n/locales');
+    } catch (e){
+      return;
+    }
+    document.querySelectorAll('.lang').forEach(fillSwitch);
+    // Если язык, на котором человек работает, только что выключили,
+    // портал переходит на язык по умолчанию — иначе он остался бы
+    // на языке, которого в портале больше нет.
+    const codes = state.locales.map(l => l.code);
+    if (state.code && !codes.includes(state.code)){
+      await apply(defaultCode());
+    } else {
+      markSwitch(state.code);
+    }
+  };
+
   PORTAL.resetLocale = () => {
     state.fromAccount = false;
     const initial = (state.locales.find(l => l.isDefault) || state.locales[0] || {}).code;
@@ -359,6 +479,8 @@
     ensureScreen();
     try {
       state.matrix = await api('GET', '/api/admin/ui-texts');
+      // список всех языков — для колонок таблицы переводов
+      state.allLocales = await api('GET', '/api/admin/locales');
     } catch (e){
       say(e.message);
       return;
@@ -383,7 +505,11 @@
   window.portalUiTextsRender = function(){
     const body = document.getElementById('uiTextsBody');
     if (!body || !state.matrix) return;
-    const codes = state.locales.map(l => l.code);
+    // ВСЕ языки, а не только включённые. Иначе получался замкнутый круг:
+    // выключенному языку нельзя завести переводы, потому что его колонки
+    // нет на экране, а включить его без переводов нельзя — человек
+    // увидел бы портал на языке отката.
+    const codes = (state.allLocales || state.locales).map(l => l.code);
     const head = document.getElementById('uiTextsHead');
     if (head){
       head.innerHTML = '<th style="min-width:90px;">' + T('common.text.key') + '</th><th>Раздел</th><th>Вид</th>'
@@ -449,7 +575,6 @@
 
   function install(){
     patchColumnLabels();
-    patchOwnFieldLabels();
     watchNewNodes();
     // Демо отказывалось переключаться на казахский заглушкой — теперь
     // язык выбирается из того, что есть в базе, и заглушка не нужна.
@@ -469,16 +594,18 @@
     // а не от выбранного поклажедателя. На onLogin администратор, которому
     // доступны все клиенты, не получал ни того, ни другого до выбора.
     PORTAL.onSession(() => {
-      // язык из учётной записи: он мог отличаться от языка формы входа
-      if (PORTAL.session && PORTAL.session.locale){
-        state.fromAccount = true;
-        if (PORTAL.session.locale !== state.code){
-          apply(PORTAL.session.locale).catch(() => {});
-        }
-      }
       if (['admin', 'developer'].includes(PORTAL.session && PORTAL.session.roleCode)){
         addAdminButton();
       }
+      // язык из учётной записи: он мог отличаться от языка формы входа.
+      // Обещание ВОЗВРАЩАЕМ — вход его ждёт, прежде чем собирать подписи.
+      if (PORTAL.session && PORTAL.session.locale){
+        state.fromAccount = true;
+        if (PORTAL.session.locale !== state.code){
+          return apply(PORTAL.session.locale).catch(() => {});
+        }
+      }
+      return null;
     });
   }
 

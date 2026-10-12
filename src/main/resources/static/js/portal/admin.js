@@ -156,8 +156,13 @@
       close();
       if (typeof notify === 'function') notify(T('server.message.password_changed'));
       if (wasRequired){
-        // до смены пароля данные не загружались — делаем это теперь
+        // До смены пароля портал не отдаёт ничего (§6.2): все запросы
+        // отбиваются 403. Поэтому перечитываем и то, что зависит от
+        // клиента (reloadAll), и то, что зависит только от учётной
+        // записи (reloadSession) — экраны администрирования грузятся
+        // именно там, и без этой строки они остались бы пустыми.
         if (PORTAL.session) PORTAL.session.mustChangePassword = false;
+        PORTAL.reloadSession();
         PORTAL.reloadAll();
       }
     } catch (e){
@@ -552,7 +557,11 @@
     window.renderAdminUsers = drawList;
     const create = document.querySelector('#usersRefActions .btn.primary');
     if (create) create.onclick = () => window.portalOpenAdminUser(null);
-    PORTAL.onLogin(loadUsers);
+    // onSession, а не onLogin: справочник пользователей — это портал
+    // целиком, а не данные выбранного клиента. На onLogin он не грузился
+    // до выбора поклажедателя, и администратор, которому выбор обязателен,
+    // видел пустой список.
+    PORTAL.onSession(loadUsers);
   }
 
   if (document.readyState === 'loading'){

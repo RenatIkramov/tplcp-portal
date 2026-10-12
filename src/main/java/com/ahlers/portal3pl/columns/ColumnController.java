@@ -28,6 +28,7 @@ import java.util.Map;
  *   GET    /api/admin/depositor-columns?depositorId=&amp;table=  настройки клиента
  *   PUT    /api/admin/depositor-columns                   сохранить одну колонку
  *   DELETE /api/admin/depositor-columns?depositorId=      вернуть портальные
+ *   GET    /api/admin/field-catalog                       поля, которые можно переименовать
  *   GET    /api/admin/field-labels?depositorId=           переименованные поля
  *   PUT    /api/admin/field-labels                        переименовать поле
  *   POST   /api/admin/users/copy-settings                 скопировать настройки
@@ -122,6 +123,11 @@ public class ColumnController {
     public List<Map<String, Object>> fieldLabels(@RequestParam String depositorId,
                                                  HttpServletRequest request) {
         return columns.fieldLabels(session.requireUser(request), depositorId);
+    }
+
+    @GetMapping("/api/admin/field-catalog")
+    public List<Map<String, Object>> fieldCatalog(HttpServletRequest request) {
+        return columns.fieldCatalog(session.requireUser(request));
     }
 
     public record FieldLabel(String depositorId, String objectCode, String fieldId,

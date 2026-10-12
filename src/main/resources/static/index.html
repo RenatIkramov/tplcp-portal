@@ -5,6 +5,9 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
 <title>3PL Customer Portal — Склад Алматы</title>
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="css/portal.css">
 
 <!-- ===== Перевод строк, собираемых в коде =====
@@ -95,13 +98,13 @@
 </div>
 <div class="header-utility">
 <div class="utility-row">
-<div class="lang"><span class="active">RU</span><span>KZ</span><span>EN</span></div>
+<div class="lang"></div>
 <span>|</span>
 <a data-i18n="common.text.my_account" href="#" onclick="openProfile(); return false;">Личный кабинет</a>
 <span>|</span>
-<a data-i18n="common.text.about_us" href="#" onclick="openAbout(); return false;">О нас</a>
-<span>|</span>
 <a data-i18n="common.text.contacts" href="#" onclick="openContacts(); return false;">Контакты</a>
+<span>|</span>
+<a data-i18n="common.text.about_us" href="#" onclick="openAbout(); return false;">О нас</a>
 <span>|</span>
 <a data-i18n="common.text.log_out" href="#" onclick="logout(); return false;">Выход</a>
 </div>
@@ -775,7 +778,6 @@
 <button class="admin-subtab-btn" data-i18n="admin.button.integration_errors" data-sub="integration" onclick="showAdminSub('integration')">Ошибки интеграции</button>
 <button class="admin-subtab-btn" data-i18n="admin.button.excel_import_errors" data-sub="excel" onclick="showAdminSub('excel')">Ошибки загрузки Excel</button>
 <button data-i18n="admin.button.report_settings" class="admin-subtab-btn" data-sub="reports-config" onclick="showAdminSub('reports-config')">Настройка отчётов</button>
-<button data-i18n="admin.button.depositor_field_settings" class="admin-subtab-btn" data-sub="field-labels" onclick="showAdminSub('field-labels')">Настройка полей поклажедателя</button>
 </div>
 <!-- Доступы менеджеров -->
 <div class="admin-sub active" id="admin-sub-access">
@@ -864,72 +866,7 @@
 </div>
 </div>
 
-<div class="admin-sub" id="admin-sub-field-labels">
-<div class="panel-head" style="margin-bottom:0;">
-<div data-i18n="admin.button.depositor_field_settings" class="section-title" style="margin:0;">Настройка полей поклажедателя</div>
-</div>
-<div class="admin-subtabs" style="margin-top:14px;">
-<button data-i18n="admin.button.custom_field_names" class="admin-subtab-btn fl-subtab-btn active" data-fl-sub="names" onclick="showFieldLabelSub('names')">Пользовательское наименование полей</button>
-<button data-i18n="admin.button.field_visibility_settings" class="admin-subtab-btn fl-subtab-btn" data-fl-sub="visibility" onclick="showFieldLabelSub('visibility')">Настройка видимости полей</button>
-</div>
-
-<div class="fl-sub" id="fl-sub-names" style="margin-top:16px;">
-<div class="panel-head" style="margin-bottom:0;">
-<div class="actions">
-<button data-i18n="admin.button.add" class="btn primary" onclick="openFieldLabelModal(null)">+ Добавить</button>
-</div>
-</div>
-<div class="hint" style="margin-bottom:16px;">Пользовательские названия полей для конкретного поклажедателя — например, «Код» → «Артикул клиента». Приоритет выше языковых настроек: при выборе этого поклажедателя любым пользователем будет показано именно это название, независимо от выбранного языка интерфейса.</div>
-<div class="filters">
-<div class="fgroup"><label for="flFilterDepositor" data-i18n="common.label.depositor">Поклажедатель</label>
-<select id="flFilterDepositor">
-<option data-i18n="common.option.all" value="">Все</option>
-</select>
-</div>
-<div class="fgroup"><label for="flFilterObject" data-i18n="common.label.object">Объект</label>
-<select id="flFilterObject">
-<option data-i18n="common.option.all" value="">Все</option>
-</select>
-</div>
-<div class="fgroup"><label for="flFilterField" data-i18n="common.label.field">Поле</label>
-<input type="text" id="flFilterField" data-i18n-placeholder="admin.placeholder.field_code" placeholder="код поля...">
-</div>
-<div class="spacer"></div>
-<button data-i18n="admin.button.search" class="btn primary" onclick="onFieldLabelFilterChange()">Найти</button>
-<button data-i18n="admin.button.clear_filters" class="btn ghost" onclick="clearFieldLabelFilters()">Очистить фильтры</button>
-</div>
-<div class="table-card">
-<table>
-<thead><tr><th><span data-i18n="admin.column.object_id">ID объекта</span></th><th><span data-i18n="portal.title.depositor">Поклажедатель</span></th><th><span data-i18n="admin.column.object">Объект</span></th><th><span data-i18n="admin.column.field_id">ID поля</span></th><th><span data-i18n="admin.column.custom_field_name">Пользовательское наименование поля</span></th><th></th></tr></thead>
-<tbody id="fieldLabelsBody"></tbody>
-</table>
-</div>
-</div>
-
-<div class="fl-sub" id="fl-sub-visibility" style="margin-top:16px; display:none;">
-<div class="hint">Раздел в разработке.</div>
-</div>
-</div>
-
 </section>
-<div class="col-overlay" id="fieldLabelOverlay" style="align-items:center;justify-content:center;" onclick="if(event.target===this) closeFieldLabelModal()">
-<div class="col-panel" id="fieldLabelPanel" style="width:480px; box-shadow:0 8px 32px rgba(0,0,0,.24); border-radius:10px;">
-<h3 id="fieldLabelModalTitle" style="font-size:17px;"><span data-i18n="common.title.add_override">Добавление переопределения</span></h3>
-<div style="display:flex; flex-direction:column; gap:16px; margin-top:14px;">
-  <div class="kv"><label for="flDepositorSelect" data-i18n="admin.label.depositor">Поклажедатель</label><select class="kv-input kv-input-editable" id="flDepositorSelect"></select></div>
-  <div class="kv"><label for="flObjectSelect" data-i18n="common.label.object">Объект</label><select class="kv-input kv-input-editable" id="flObjectSelect" onchange="onFieldLabelObjectChange()"></select></div>
-  <div class="kv"><label for="flFieldSelect"><span data-i18n="admin.label.field">Поле</span></label><select class="kv-input kv-input-editable" id="flFieldSelect"></select></div>
-  <div class="kv"><label for="flCustomLabel"><span data-i18n="common.label.custom_name">Пользовательское наименование</span></label><input type="text" class="kv-input kv-input-editable" id="flCustomLabel" data-i18n-placeholder="common.placeholder.for_example_customer_sku" placeholder="Например: Артикул клиента"></div>
-</div>
-<div style="display:flex; justify-content:space-between; gap:10px; margin-top:20px;">
-  <button data-i18n="common.button.delete" class="btn ghost" id="flDeleteBtn" style="display:none; color:#c0392b;" onclick="deleteFieldLabelFromModal()">Удалить</button>
-  <div style="display:flex; gap:10px; margin-left:auto;">
-    <button data-i18n="common.button.cancel" class="btn ghost" onclick="closeFieldLabelModal()">Отмена</button>
-    <button data-i18n="common.button.save" class="btn primary" onclick="saveFieldLabelModal()">Сохранить</button>
-  </div>
-</div>
-</div>
-</div>
 <!-- ================= НАСТРОЙКИ РАЗРАБОТЧИКА (только для developer) ================= -->
 <section class="view" id="view-dev-settings">
 <div class="panel-head" style="margin-bottom:0;">
@@ -1117,9 +1054,14 @@
 <div class="login-logo" id="loginLogo"></div>
 <h2 data-i18n="common.title.sign_in_to_the_3pl_customer_portal">Вход в 3PL Customer Portal</h2>
 <p class="login-sub" data-i18n="common.text.enter_your_email_and_password_to_s">Введите логин (email) и пароль для входа</p>
-<div class="login-field"><label for="loginEmail" data-i18n="common.label.email_login">Email / логин</label><input disabled="" id="loginEmail" data-i18n-placeholder="auth.placeholder.user_ahlers_com" placeholder="user@ahlers.com" type="text"/></div>
-<div class="login-field"><label for="loginPassword" data-i18n="common.label.password">Пароль</label><input disabled="" id="loginPassword" placeholder="••••••••" type="password"/></div>
-<button class="btn primary" data-i18n="common.button.sign_in" disabled="" style="width:100%;justify-content:center;margin-top:6px;opacity:.5;cursor:not-allowed;" title="Ручной вход отключён в демо-версии — выберите пользователя ниже">Войти</button>
+<!-- Настоящая форма с name и autocomplete: менеджер паролей Chrome
+     распознаёт вход именно по ней, а не по паре полей рядом. -->
+<form id="loginForm" autocomplete="on">
+<div class="login-field"><label for="loginEmail" data-i18n="common.label.email_login">Email / логин</label><input disabled="" id="loginEmail" name="username" autocomplete="username" data-i18n-placeholder="auth.placeholder.user_ahlers_com" placeholder="user@ahlers.com" type="text"/></div>
+<div class="login-field"><label for="loginPassword" data-i18n="common.label.password">Пароль</label><input disabled="" id="loginPassword" name="password" autocomplete="current-password" placeholder="••••••••" type="password"/></div>
+<label class="login-remember" for="loginRemember" data-i18n-title="auth.hint.remember_me" title="Портал не будет спрашивать пароль, пока вы заходите хотя бы раз в 15 дней. Не включайте на чужом компьютере."><input type="checkbox" id="loginRemember" name="remember"/> <span data-i18n="auth.label.remember_me">Запомнить меня</span></label>
+<button class="btn primary" type="submit" data-i18n="common.button.sign_in" disabled="" style="width:100%;justify-content:center;margin-top:6px;opacity:.5;cursor:not-allowed;" title="Ручной вход отключён в демо-версии — выберите пользователя ниже">Войти</button>
+</form>
 <div class="hint" style="text-align:center;margin-top:8px;">Ручной ввод отключён в демо-версии — выберите пользователя ниже</div>
 <div class="login-divider" data-i18n="common.text.demo_access_select_a_user">Демо-доступ — выберите пользователя</div>
 <div class="demo-user-groups" id="demoUserList"></div>
@@ -1567,6 +1509,7 @@
      разойдётся с карточкой.
 ================================================================= -->
 <script src="js/portal/dep-visibility.js"></script>
+<script src="js/portal/field-labels.js"></script>
 
 
 <!-- ===== Биллинг: три вкладки вместо одного длинного экрана =====
@@ -1586,6 +1529,8 @@
      берёт тексты с сервера, выбранный язык запоминается в учётной
      записи, а переводы ведутся в администрировании.
 ========================================================================= -->
+<script src="js/portal/contacts.js"></script>
+<script src="js/portal/languages.js"></script>
 <script src="js/portal/i18n.js"></script>
 
 

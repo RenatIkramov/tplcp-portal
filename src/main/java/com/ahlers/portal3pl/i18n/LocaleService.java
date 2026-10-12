@@ -55,7 +55,7 @@ public class LocaleService {
      */
     @Transactional(readOnly = true)
     public Map<String, Object> texts(String localeCode) {
-        requireLocale(localeCode);
+        requireKnownLocale(localeCode);
         Map<String, Object> out = new LinkedHashMap<>();
         for (Map<String, Object> row : jdbc.sql("SELECT * FROM dbo.ui_texts(:code::text)")
                 .param("code", localeCode)
@@ -66,13 +66,22 @@ public class LocaleService {
         return out;
     }
 
-    /** Язык пользователя; пусто — язык портала по умолчанию. */
+    /**
+     * Язык пользователя; пусто — язык портала по умолчанию.
+     *
+     * <p>Выключенный язык считается невыбранным. Иначе человек, у которого
+     * в учётной записи записан язык, потом отключённый администратором,
+     * получал бы пустой словарь: переводов для такого языка нет, а откат
+     * на язык портала не срабатывал бы — код языка-то в учётной записи
+     * есть. На экране это выглядит как портал без надписей.
+     */
     @Transactional(readOnly = true)
     public String localeOf(String login) {
         return jdbc.sql("""
                         SELECT COALESCE(l.code, (SELECT code FROM dbo.dictionary_locale WHERE is_default))
                         FROM dbo.app_user u
-                        LEFT JOIN dbo.dictionary_locale l ON l.locale_id = u.locale_id
+                        LEFT JOIN dbo.dictionary_locale l
+                               ON l.locale_id = u.locale_id AND l.is_active
                         WHERE u.login = :login::text
                         """)
                 .param("login", login)
@@ -83,7 +92,7 @@ public class LocaleService {
 
     @Transactional
     public String setLocaleOf(PortalUser user, String localeCode) {
-        requireLocale(localeCode);
+        requireShownLocale(localeCode);
         jdbc.sql("SELECT dbo.user_set_locale(:id::uuid, :code::text)")
                 .param("id", user.userId())
                 .param("code", localeCode)
@@ -136,7 +145,7 @@ public class LocaleService {
     public List<Map<String, Object>> save(PortalUser actor, String textKey, String localeCode,
                                           String value) {
         users.requireAdmin(actor);
-        requireLocale(localeCode);
+        requireKnownLocale(localeCode);
         if (textKey == null || textKey.isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Укажите ключ текста");
         }
@@ -160,12 +169,108 @@ public class LocaleService {
         return matrix(actor);
     }
 
-    private void requireLocale(String code) {
-        boolean known = Boolean.TRUE.equals(jdbc
+    /**
+     * Язык показывается в переключателе — то есть его можно ВЫБРАТЬ себе.
+     *
+     * <p>Отличается от {@link #requireKnownLocale}: выключенный язык
+     * в справочнике есть, переводы для него заводить можно, а работать
+     * на нём нельзя — переводов у него ещё нет, и портал показал бы
+     * язык отката.
+     */
+    private void requireShownLocale(String code) {
+        boolean shown = jdbc
                 .sql("SELECT EXISTS (SELECT 1 FROM dbo.v_locales WHERE code = :code::varchar)")
                 .param("code", code == null ? "" : code)
                 .query(Boolean.class)
-                .single());
+                .single();
+        if (!shown) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Неизвестный язык: " + code);
+        }
+    }
+
+    /* ---------------- Справочник языков ---------------- */
+
+    /**
+     * Все языки, включая выключенные — справочник в администрировании.
+     *
+     * <p>Отдельно от {@link #locales()}: тот отвечает на вопрос «что
+     * показывать в переключателе» и выключенные намеренно скрывает.
+     * Чтобы язык можно было ВКЛЮЧИТЬ обратно, администратору нужен
+     * список целиком.
+     */
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> allLocales(PortalUser actor) {
+        users.requireAdmin(actor);
+        return SqlRows.toCamelCase(jdbc
+                .sql("SELECT * FROM dbo.v_locales_all ORDER BY sort_order NULLS LAST, name")
+                .query()
+                .listOfRows());
+    }
+
+    /**
+     * Показывать язык в переключателе или нет.
+     *
+     * <p>Язык по умолчанию выключить нельзя: на него откатываются все
+     * недостающие переводы, и без него портал остался бы без текстов.
+     * Проверка здесь, а не только на экране: серая галочка — удобство,
+     * а не защита (§6.3 про то же самое).
+     */
+    @Transactional
+    public List<Map<String, Object>> setLocaleShown(PortalUser actor, String code, boolean shown) {
+        users.requireAdmin(actor);
+        requireKnownLocale(code);
+        if (!shown && isDefault(code)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Это язык портала по умолчанию — на него откатываются"
+                            + " недостающие переводы, выключить его нельзя");
+        }
+        jdbc.sql("UPDATE dbo.dictionary_locale SET is_active = :shown WHERE code = :code::varchar")
+                .param("shown", shown)
+                .param("code", code)
+                .update();
+        return allLocales(actor);
+    }
+
+    /**
+     * Сделать язык языком портала по умолчанию.
+     *
+     * <p>Он ровно один — в базе на это стоит уникальный индекс (V25),
+     * поэтому прежний признак снимается в той же транзакции. И заодно
+     * язык включается: выключенный язык по умолчанию — это портал
+     * без запасных текстов.
+     */
+    @Transactional
+    public List<Map<String, Object>> setDefaultLocale(PortalUser actor, String code) {
+        users.requireAdmin(actor);
+        requireKnownLocale(code);
+        jdbc.sql("UPDATE dbo.dictionary_locale SET is_default = NULL WHERE is_default").update();
+        jdbc.sql("""
+                        UPDATE dbo.dictionary_locale
+                           SET is_default = true, is_active = true
+                         WHERE code = :code::varchar
+                        """)
+                .param("code", code)
+                .update();
+        return allLocales(actor);
+    }
+
+    private boolean isDefault(String code) {
+        return jdbc.sql("""
+                        SELECT COALESCE(is_default, false) FROM dbo.dictionary_locale
+                        WHERE code = :code::varchar
+                        """)
+                .param("code", code)
+                .query(Boolean.class)
+                .single();
+    }
+
+    /** Язык существует в справочнике — включённый или нет. */
+    private void requireKnownLocale(String code) {
+        boolean known = jdbc
+                .sql("SELECT EXISTS (SELECT 1 FROM dbo.dictionary_locale WHERE code = :code::varchar)")
+                .param("code", code == null ? "" : code)
+                .query(Boolean.class)
+                .single();
         if (!known) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Неизвестный язык: " + code);
         }

@@ -1,6 +1,7 @@
 package com.ahlers.portal3pl.config;
 
 import com.ahlers.portal3pl.auth.PortalUser;
+import com.ahlers.portal3pl.auth.RememberMeService;
 import com.ahlers.portal3pl.auth.SessionUser;
 import jakarta.servlet.Filter;
 import jakarta.servlet.FilterChain;
@@ -26,9 +27,11 @@ import java.io.IOException;
 public class AuthFilter implements Filter {
 
     private final SessionUser session;
+    private final RememberMeService rememberMe;
 
-    public AuthFilter(SessionUser session) {
+    public AuthFilter(SessionUser session, RememberMeService rememberMe) {
         this.session = session;
+        this.rememberMe = rememberMe;
     }
 
     @Override
@@ -40,6 +43,9 @@ public class AuthFilter implements Filter {
 
         try {
             PortalUser user = session.currentUser(http);
+            if (user == null) {
+                user = restoreRemembered(http, resp);
+            }
             if (user != null) {
                 DepositorContext.set(user.login(), session.depositorId(http));
             }
@@ -77,6 +83,30 @@ public class AuthFilter implements Filter {
                 || path.equals("/api/me")
                 || path.equals("/api/me/password")
                 || path.startsWith("/api/i18n/");
+    }
+
+    /**
+     * Сеанса нет — пробуем признак «запомнить меня».
+     *
+     * <p>Только для обращений к API: на каждую картинку и каждый .js
+     * ходить в базу незачем, а первым делом экран всё равно спрашивает
+     * у портала, кто вошёл.
+     *
+     * <p>Удачное восстановление заводит обычную серверную сессию и
+     * выдаёт НОВЫЙ токен: использованный уже погашен, и украденная
+     * cookie второй раз не сработает.
+     */
+    private PortalUser restoreRemembered(HttpServletRequest http, HttpServletResponse resp) {
+        if (!http.getRequestURI().startsWith("/api/")) {
+            return null;
+        }
+        PortalUser user = rememberMe.restore(http, resp);
+        if (user == null) {
+            return null;
+        }
+        session.setUser(http, user);
+        rememberMe.remember(http, resp, user.userId());
+        return user;
     }
 
     private static boolean requiresLogin(String path) {

@@ -4938,7 +4938,7 @@ function renderDevSettingsContent(){
     ];
     document.getElementById('devSettingsContent').innerHTML = `
       <div class="section-title" style="margin-top:0;">Название таблицы в БД: <code>depositor_field_label</code></div>
-      <div class="hint" style="margin-bottom:16px;">Пользовательские названия полей таблиц/списков индивидуально под каждого поклажедателя. Уникальность: (<code>depositor_id</code>, <code>object_type_id</code>, <code>field_id</code>). Приоритет выше языковых настроек (<code>translation</code>) — при чтении заголовка колонки сначала проверяется эта таблица по текущему поклажедателю, и только если override не найден — берётся перевод/значение по умолчанию. Настраивается в разделе «Администрирование → Настройка полей поклажедателя».</div>
+      <div class="hint" style="margin-bottom:16px;">Пользовательские названия полей таблиц/списков индивидуально под каждого поклажедателя. Уникальность: (<code>depositor_id</code>, <code>object_type_id</code>, <code>field_id</code>). Приоритет выше языковых настроек (<code>translation</code>) — при чтении заголовка колонки сначала проверяется эта таблица по текущему поклажедателю, и только если override не найден — берётся перевод/значение по умолчанию. Настраивается в разделе «Администрирование → Доступы поклажедателей» → карточка поклажедателя → вкладка «Пользовательское наименование полей».</div>
       <div class="section-title">Поля таблицы</div>
       ${renderDevFieldTable(rows)}
     `;
@@ -5291,163 +5291,27 @@ function showAdminSub(sub){
   document.querySelectorAll('.admin-subtab-btn[data-sub]').forEach(b=>b.classList.toggle('active', b.dataset.sub===sub));
   document.querySelectorAll('.admin-sub[id^="admin-sub-"]').forEach(s=>s.classList.toggle('active', s.id==='admin-sub-'+sub));
   if(sub === 'reports-config') renderReportsConfigTable();
-  if(sub === 'field-labels') renderFieldLabelsAdmin();
 }
-function showFieldLabelSub(sub){
-  document.querySelectorAll('.fl-subtab-btn').forEach(b=>b.classList.toggle('active', b.dataset.flSub===sub));
-  document.querySelectorAll('.fl-sub').forEach(s=>{ s.style.display = (s.id === 'fl-sub-'+sub) ? '' : 'none'; });
-  if(sub === 'names') renderFieldLabelsAdmin();
-}
+/* ============ Пользовательское наименование полей ============
 
-/* ============ Настройка полей поклажедателя ============ */
-const FIELD_LABEL_OBJECT_TYPES = [
-  {id:'sku', label:T('references.title.products'), tableColumnsKey:'sku'},
-  {id:'stock', label:T('stock.title.stock'), tableColumnsKey:'stock'},
-  {id:'receipts', label:T('common.button.receipts'), tableColumnsKey:'receipts'},
-  {id:'orders', label:T('common.button.orders'), tableColumnsKey:'orders'},
-  {id:'transfers', label:T('transfers.title.transfers'), tableColumnsKey:'transfers'},
-];
-let DEPOSITOR_FIELD_LABELS = [
-  {id:1, depositorId:'rogaikopyta', objectType:'sku', fieldId:'code', customLabel:'Артикул клиента'},
-  {id:2, depositorId:'boltygaiki', objectType:'orders', fieldId:'erpNo', customLabel:'Номер заявки 1С'},
-];
+   Раздел «Администрирование → Настройка полей поклажедателя» был
+   макетом: список переименований лежал в массиве на странице, и окно
+   правки правило этот же массив. Теперь это вкладка карточки
+   поклажедателя (js/portal/field-labels.js), данные — в таблице
+   depositor_field_label, а подписи приходят с сервера уже
+   переименованными.
+
+   Функция ниже осталась: ею обёрнуты подписи в отрисовке списков
+   и карточек прототипа. Теперь она спрашивает подпись у раскладки
+   с сервера — там переименование уже разрешено, — а при отсутствии
+   раскладки отдаёт null, и подпись остаётся портальной.              */
 function getDepositorFieldLabel(objectType, fieldId){
-  const rec = DEPOSITOR_FIELD_LABELS.find(r=>r.depositorId===currentDepositorId && r.objectType===objectType && r.fieldId===fieldId);
-  return rec ? rec.customLabel : null;
-}
-let fieldLabelsFiltersActive = false;
-function renderFieldLabelsAdmin(){
-  const filterDepSel = document.getElementById('flFilterDepositor');
-  const filterObjSel = document.getElementById('flFilterObject');
-  if(filterDepSel && !filterDepSel.dataset.filled){
-    filterDepSel.innerHTML = '<option value="">' + T('admin.option.all') + '</option>' + Object.values(DEPOSITORS).map(d=>`<option value="${d.id}">${d.name}</option>`).join('');
-    filterDepSel.dataset.filled = '1';
-  }
-  if(filterObjSel && !filterObjSel.dataset.filled){
-    filterObjSel.innerHTML = '<option value="">' + T('admin.option.all') + '</option>' + FIELD_LABEL_OBJECT_TYPES.map(o=>`<option value="${o.id}">${o.label}</option>`).join('');
-    filterObjSel.dataset.filled = '1';
-  }
-  let rows = DEPOSITOR_FIELD_LABELS;
-  if(fieldLabelsFiltersActive){
-    const depF = document.getElementById('flFilterDepositor').value;
-    const objF = document.getElementById('flFilterObject').value;
-    const fieldF = (document.getElementById('flFilterField').value || '').trim().toLowerCase();
-    rows = rows.filter(r=>{
-      if(depF && r.depositorId !== depF) return false;
-      if(objF && r.objectType !== objF) return false;
-      if(fieldF && !r.fieldId.toLowerCase().includes(fieldF)) return false;
-      return true;
-    });
-  }
-  const body = document.getElementById('fieldLabelsBody');
-  if(!body) return;
-  body.innerHTML = rows.length ? rows.map(r=>{
-    const objMeta = FIELD_LABEL_OBJECT_TYPES.find(o=>o.id===r.objectType);
-    return `<tr style="cursor:pointer;" onclick="openFieldLabelModal(${r.id})">
-      <td><code>${r.objectType}</code></td>
-      <td>${DEPOSITORS[r.depositorId]?.name || r.depositorId}</td>
-      <td>${objMeta ? objMeta.label : r.objectType}</td>
-      <td><code>${r.fieldId}</code></td>
-      <td>${r.customLabel}</td>
-      <td><button class="btn ghost" onclick="event.stopPropagation(); quickDeleteFieldLabel(${r.id})">${T('common.button.delete')}</button></td>
-    </tr>`;
-  }).join('') : `<tr><td colspan="6" style="color:var(--muted);">${T('stock.text.nothing_found')}</td></tr>`;
-}
-function onFieldLabelFilterChange(){
-  fieldLabelsFiltersActive = true;
-  renderFieldLabelsAdmin();
-}
-function clearFieldLabelFilters(){
-  document.getElementById('flFilterDepositor').value = '';
-  document.getElementById('flFilterObject').value = '';
-  document.getElementById('flFilterField').value = '';
-  fieldLabelsFiltersActive = false;
-  renderFieldLabelsAdmin();
-}
-function onFieldLabelObjectChange(){
-  const objSel = document.getElementById('flObjectSelect');
-  const fieldSel = document.getElementById('flFieldSelect');
-  if(!objSel || !fieldSel) return;
-  const meta = FIELD_LABEL_OBJECT_TYPES.find(o=>o.id===objSel.value);
-  const cols = meta ? tableColumns[meta.tableColumnsKey] : [];
-  fieldSel.innerHTML = (cols || []).map(c=>`<option value="${c.id}">${c.label} (${c.id})</option>`).join('');
-}
-let fieldLabelEditId = null;
-function openFieldLabelModal(id){
-  fieldLabelEditId = id || null;
-  const depSel = document.getElementById('flDepositorSelect');
-  const objSel = document.getElementById('flObjectSelect');
-  if(!depSel.dataset.filled){
-    depSel.innerHTML = Object.values(DEPOSITORS).map(d=>`<option value="${d.id}">${d.name}</option>`).join('');
-    depSel.dataset.filled = '1';
-  }
-  if(!objSel.dataset.filled){
-    objSel.innerHTML = FIELD_LABEL_OBJECT_TYPES.map(o=>`<option value="${o.id}">${o.label}</option>`).join('');
-    objSel.dataset.filled = '1';
-  }
-  const rec = fieldLabelEditId ? DEPOSITOR_FIELD_LABELS.find(r=>r.id===fieldLabelEditId) : null;
-  document.getElementById('fieldLabelModalTitle').textContent = rec ? 'Редактирование переопределения' : T('common.title.add_override');
-  document.getElementById('flDeleteBtn').style.display = rec ? '' : 'none';
-  if(rec){
-    depSel.value = rec.depositorId;
-    objSel.value = rec.objectType;
-    onFieldLabelObjectChange();
-    document.getElementById('flFieldSelect').value = rec.fieldId;
-    document.getElementById('flCustomLabel').value = rec.customLabel;
-  }else{
-    depSel.selectedIndex = 0;
-    objSel.selectedIndex = 0;
-    onFieldLabelObjectChange();
-    document.getElementById('flCustomLabel').value = '';
-  }
-  document.getElementById('fieldLabelOverlay').classList.add('active');
-}
-function closeFieldLabelModal(){
-  document.getElementById('fieldLabelOverlay').classList.remove('active');
-  fieldLabelEditId = null;
-}
-function saveFieldLabelModal(){
-  const depositorId = document.getElementById('flDepositorSelect').value;
-  const objectType = document.getElementById('flObjectSelect').value;
-  const fieldId = document.getElementById('flFieldSelect').value;
-  const customLabel = document.getElementById('flCustomLabel').value.trim();
-  if(!depositorId || !objectType || !fieldId || !customLabel){ notify(T('common.message.fill_in_all_fields')); return; }
-  if(fieldLabelEditId){
-    const rec = DEPOSITOR_FIELD_LABELS.find(r=>r.id===fieldLabelEditId);
-    if(rec){ rec.depositorId = depositorId; rec.objectType = objectType; rec.fieldId = fieldId; rec.customLabel = customLabel; }
-  }else{
-    const dup = DEPOSITOR_FIELD_LABELS.find(r=>r.depositorId===depositorId && r.objectType===objectType && r.fieldId===fieldId);
-    if(dup){
-      dup.customLabel = customLabel;
-    }else{
-      const nextId = DEPOSITOR_FIELD_LABELS.reduce((m,r)=>Math.max(m,r.id),0) + 1;
-      DEPOSITOR_FIELD_LABELS.push({id:nextId, depositorId, objectType, fieldId, customLabel});
-    }
-  }
-  closeFieldLabelModal();
-  renderFieldLabelsAdmin();
-  fcRefreshAllListsForFieldLabels();
-  notify(T('portal.text.saved'));
-}
-function deleteFieldLabelFromModal(){
-  if(fieldLabelEditId){
-    DEPOSITOR_FIELD_LABELS = DEPOSITOR_FIELD_LABELS.filter(r=>r.id!==fieldLabelEditId);
-  }
-  closeFieldLabelModal();
-  renderFieldLabelsAdmin();
-  fcRefreshAllListsForFieldLabels();
-}
-function quickDeleteFieldLabel(id){
-  DEPOSITOR_FIELD_LABELS = DEPOSITOR_FIELD_LABELS.filter(r=>r.id!==id);
-  renderFieldLabelsAdmin();
-  fcRefreshAllListsForFieldLabels();
-}
-function fcRefreshAllListsForFieldLabels(){
-  if(typeof renderReceipts === 'function' && document.getElementById('receiptsHead')) renderReceipts();
-  if(typeof renderOrders === 'function' && document.getElementById('ordersHead')) renderOrders();
-  if(typeof renderStock === 'function' && document.getElementById('stockHead')) renderStock();
-  if(typeof renderSku === 'function' && document.getElementById('skuHead')) renderSku();
-  if(typeof renderTransfers === 'function' && document.getElementById('transfersHead')) renderTransfers();
+  const columns = window.PORTAL && PORTAL.columns;
+  if (!columns || !columns.renameOf) return null;
+  // objectType здесь совпадает с ключом таблицы ('sku', 'stock',
+  // 'receipts', 'orders', 'transfers'), а fieldId — с идентификатором
+  // колонки: в этих таблицах поле и колонка зовутся одинаково.
+  return columns.renameOf(objectType, fieldId);
 }
 
 
