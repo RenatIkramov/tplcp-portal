@@ -1,13 +1,12 @@
 package com.ahlers.portal3pl.auth;
 
+import com.ahlers.portal3pl.common.Fail;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 /**
  * Смена пароля — своим пользователем и администратором.
@@ -49,11 +48,10 @@ public class PasswordService {
         log.info("Смена пароля {}: чтение {} мс, сверка пароля {} мс",
                 user.login(), readAt - startedAt, verifiedAt - readAt);
         if (!matched) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Текущий пароль указан неверно");
+            throw Fail.forbidden("error.password.current_wrong");
         }
         if (encoder.matches(newPassword, hash)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Новый пароль совпадает с текущим");
+            throw Fail.badRequest("error.password.same_as_current");
         }
         validate(newPassword, user.login());
         store(user.userId(), newPassword, false);
@@ -133,11 +131,11 @@ public class PasswordService {
      */
     private void validate(String password, String login) {
         if (password == null || password.isBlank()) {
-            rejectPassword("Введите новый пароль");
+            throw Fail.badRequest("error.password.required");
         }
         if (password.length() < MIN_LENGTH) {
-            rejectPassword("Пароль должен быть не короче " + MIN_LENGTH + " символов, в этом — "
-                    + password.length());
+            throw Fail.badRequest("error.password.too_short",
+                    "min", MIN_LENGTH, "length", password.length());
         }
         boolean lower = false, upper = false, digit = false, symbol = false, nonLatin = false;
         for (char c : password.toCharArray()) {
@@ -154,23 +152,20 @@ public class PasswordService {
             }
         }
         if (nonLatin) {
-            rejectPassword("В пароле можно использовать только латинские буквы");
+            throw Fail.badRequest("error.password.latin_only");
         }
         if (!lower || !upper) {
-            rejectPassword("В пароле нужны латинские буквы и заглавные, и строчные");
+            throw Fail.badRequest("error.password.needs_both_cases");
         }
         if (!digit && !symbol) {
-            rejectPassword("Добавьте в пароль цифру или знак (например - _ . ! #)");
+            throw Fail.badRequest("error.password.needs_digit_or_symbol");
         }
         if (login != null && !login.isBlank()) {
             String base = login.split("@")[0].toLowerCase();
             if (base.length() >= 4 && password.toLowerCase().contains(base)) {
-                rejectPassword("Пароль не должен содержать логин («" + base + "»)");
+                throw Fail.badRequest("error.password.contains_login", "login", base);
             }
         }
     }
 
-    private static void rejectPassword(String message) {
-        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
-    }
 }

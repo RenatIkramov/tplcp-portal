@@ -2,15 +2,14 @@ package com.ahlers.portal3pl.i18n;
 
 import com.ahlers.portal3pl.auth.PortalUser;
 import com.ahlers.portal3pl.auth.SessionUser;
+import com.ahlers.portal3pl.common.Fail;
 import jakarta.servlet.http.HttpServletRequest;
-import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.Map;
@@ -80,8 +79,7 @@ public class LocaleController {
             return locales.setDefaultLocale(actor, code);
         }
         if (body.shown() == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Нечего менять: укажите «показывать» или «сделать основным»");
+            throw Fail.badRequest("error.locale.nothing_to_change");
         }
         return locales.setLocaleShown(actor, code, body.shown());
     }

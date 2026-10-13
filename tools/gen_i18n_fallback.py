@@ -69,7 +69,13 @@ SQL = ("SELECT json_object_agg(k.text_key, t.value) "
        "FROM dbo.ui_text_key k "
        "JOIN dbo.ui_text t ON t.text_key = k.text_key "
        "JOIN dbo.dictionary_locale l ON l.locale_id = t.locale_id "
-       "WHERE l.code = 'ru'")
+       "WHERE l.code = 'ru' AND k.scope <> 'server'")
+
+# Сообщения сервера в запасном словаре не нужны: их собирает сервер
+# (PortalMessages) и присылает уже фразой, экран ключа не видит.
+# Фильтруем по корню ключа, а не только запросом: тексты могут прийти
+# и от работающего портала (--url), и из файла (--from-json).
+SERVER_PREFIXES = ('error.', 'info.')
 
 
 def say(message: str) -> None:
@@ -200,6 +206,11 @@ def keys_in_static() -> set:
     found = set()
     pattern = re.compile(r"""['"]([a-z][a-z0-9_]*\.[a-z0-9_]+\.[a-z0-9_]+)['"]""")
     for f in list(STATIC.rglob('*.js')) + [STATIC / 'index.html']:
+        # Сам запасной словарь пропускаем: в нём перечислены ВСЕ ключи,
+        # и по нему любой ключ выглядел бы используемым - в том числе
+        # тот, который из кода давно убрали.
+        if f.name == FALLBACK.name:
+            continue
         found |= set(pattern.findall(f.read_text(encoding='utf-8')))
     html = (STATIC / 'index.html').read_text(encoding='utf-8')
     found |= set(re.findall(r'data-i18n(?:-placeholder)?="([^"]+)"', html))
@@ -219,6 +230,9 @@ def main() -> int:
                    help='база (по умолчанию из PGDATABASE)')
     p.add_argument('--user', default=os.environ.get('PGUSER', ''),
                    help='пользователь (по умолчанию из PGUSER)')
+    p.add_argument('--prune', action='store_true',
+                   help='убрать из словаря ключи, которых нет в базе '
+                        '(после удаления ненужных текстов)')
     p.add_argument('--dry-run', action='store_true',
                    help='только показать, что изменилось бы')
     args = p.parse_args()
@@ -232,6 +246,7 @@ def main() -> int:
         texts = from_psql(args)
     else:
         texts = from_portal(args.url)
+    texts = {k: v for k, v in texts.items() if not k.startswith(SERVER_PREFIXES)}
     say(f'текстов получено: {len(texts)}')
 
     content = FALLBACK.read_text(encoding='utf-8')
@@ -260,13 +275,27 @@ def main() -> int:
         say(f'  добавлен  {key}')
     if len(changed) + len(added) > 20:
         say(f'  ... и ещё {len(changed) + len(added) - 20}')
+    removed = []
+    if missing and args.prune:
+        # Чистка после удаления ненужных текстов: ключа нет ни в базе,
+        # ни в коде - значит и в запасном словаре ему делать нечего.
+        # Ключи, оставшиеся в коде, не трогаем: подпись пропала бы
+        # совсем, а это хуже устаревшего текста.
+        in_code = keys_in_static()
+        removed = [k for k in missing if k not in in_code]
+        for key in removed:
+            ru.pop(key, None)
+        say(f'убрано ключей: {len(removed)}')
+        missing = [k for k in missing if k in in_code]
     if missing:
         # Не удаляем: ключ мог остаться в коде, а текст - исчезнуть
         # из базы по ошибке. Молча терять подпись хуже, чем сказать.
         say(f'ВНИМАНИЕ: в базе нет русских текстов для {len(missing)} ключей '
             f'словаря, например: {", ".join(missing[:5])}')
+        if not args.prune:
+            say('  --prune уберёт те из них, которых нет и в коде')
 
-    if not changed and not added:
+    if not changed and not added and not removed:
         say('словарь уже совпадает с базой, файл не менялся')
         return 0
     if args.dry_run:

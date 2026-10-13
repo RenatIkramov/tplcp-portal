@@ -154,7 +154,7 @@
       const wasRequired = required;
       required = false;
       close();
-      if (typeof notify === 'function') notify(T('server.message.password_changed'));
+      if (typeof notify === 'function') notify(T('info.password.changed'));
       if (wasRequired){
         // До смены пароля портал не отдаёт ничего (§6.2): все запросы
         // отбиваются 403. Поэтому перечитываем и то, что зависит от
@@ -195,6 +195,13 @@
   const admin = {users: [], roles: [], depositors: [], error: null};
 
   async function loadUsers(){
+    // Справочник пользователей видит только администратор.
+    if (!PORTAL.isAdmin()){
+      admin.users = [];
+      admin.error = null;
+      drawList();
+      return;
+    }
     try {
       const [list, roles, depositors] = await Promise.all([
         api('GET', '/api/admin/users'),

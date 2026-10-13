@@ -2,14 +2,13 @@ package com.ahlers.portal3pl.columns;
 
 import com.ahlers.portal3pl.admin.AdminUserService;
 import com.ahlers.portal3pl.auth.PortalUser;
+import com.ahlers.portal3pl.common.Fail;
 import com.ahlers.portal3pl.common.SqlRows;
 import com.ahlers.portal3pl.config.DepositorScope;
 import com.ahlers.portal3pl.i18n.LocaleService;
-import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -86,8 +85,7 @@ public class ColumnService {
         depositorScope.apply();
         requireTable(tableKey);
         if (columns == null || columns.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Оставьте хотя бы одну колонку");
+            throw Fail.badRequest("error.columns.at_least_one");
         }
         // повторы в списке сделали бы порядок бессмысленным, а ключ —
         // неуникальным; сохраняем первое вхождение каждой колонки
@@ -107,8 +105,8 @@ public class ColumnService {
             if (!allowed.contains(column)) {
                 // либо такой колонки нет, либо она запрещена поклажедателю —
                 // в обоих случаях показывать её нельзя
-                throw new ResponseStatusException(HttpStatus.NOT_FOUND,
-                        "Колонка «" + column + "» в таблице «" + tableKey + "» недоступна");
+                throw Fail.notFound("error.columns.not_available",
+                        "column", column, "table", tableKey);
             }
         }
 
@@ -130,8 +128,7 @@ public class ColumnService {
                 .query(String.class)
                 .list();
         if (!pinned.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "Эти колонки убрать нельзя: " + String.join(", ", pinned));
+            throw Fail.conflict("error.columns.pinned", "columns", String.join(", ", pinned));
         }
 
         jdbc.sql("SELECT dbo.user_columns_save(:user::uuid, :table::text, :cols::text[])")
@@ -298,7 +295,7 @@ public class ColumnService {
                                                     String label) {
         users.requireAdmin(actor);
         if (fieldId == null || fieldId.isBlank()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Укажите поле");
+            throw Fail.badRequest("error.field.required");
         }
         boolean knownObject = jdbc
                 .sql("SELECT EXISTS (SELECT 1 FROM dbo.enum_object_type WHERE code = :code::varchar)")
@@ -306,8 +303,7 @@ public class ColumnService {
                 .query(Boolean.class)
                 .single();
         if (!knownObject) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND,
-                    "Неизвестный тип объекта: " + objectCode);
+            throw Fail.notFound("error.object.unknown", "code", objectCode);
         }
         // переименовывать можно только то, что где-то показывается:
         // иначе в справочнике появятся подписи, которых никто не увидит
@@ -322,8 +318,8 @@ public class ColumnService {
                 .query(Boolean.class)
                 .single();
         if (!shown) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND,
-                    "Поле «" + fieldId + "» у объекта «" + objectCode + "» нигде не показывается");
+            throw Fail.notFound("error.field.shown_nowhere",
+                    "field", fieldId, "object", objectCode);
         }
         jdbc.sql("""
                         SELECT dbo.admin_field_label_save(
@@ -352,12 +348,10 @@ public class ColumnService {
     public void copySettings(PortalUser actor, String fromUserId, String toUserId) {
         users.requireAdmin(actor);
         if (fromUserId == null || fromUserId.isBlank() || toUserId == null || toUserId.isBlank()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Укажите, у кого и кому копировать настройки");
+            throw Fail.badRequest("error.settings.copy_both_required");
         }
         if (fromUserId.equals(toUserId)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Это один и тот же пользователь");
+            throw Fail.badRequest("error.settings.copy_same_user");
         }
         requireUser(fromUserId);
         requireUser(toUserId);
@@ -377,8 +371,7 @@ public class ColumnService {
                 .query(Boolean.class)
                 .single();
         if (!known) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND,
-                    "Таблицы «" + tableKey + "» в справочнике колонок нет");
+            throw Fail.notFound("error.columns.table_unknown", "table", tableKey);
         }
     }
 
@@ -393,8 +386,8 @@ public class ColumnService {
                 .query(Boolean.class)
                 .single();
         if (!known) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND,
-                    "Колонки «" + columnId + "» в таблице «" + tableKey + "» нет");
+            throw Fail.notFound("error.columns.column_unknown",
+                    "column", columnId, "table", tableKey);
         }
     }
 
@@ -427,8 +420,7 @@ public class ColumnService {
                 .findFirst()
                 .orElse(Map.of());
         if (Boolean.TRUE.equals(row.get("is_locked"))) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "Поле «" + row.get("label") + "» нельзя скрыть от поклажедателя");
+            throw Fail.conflict("error.field.locked", "field", row.get("label"));
         }
     }
 
@@ -439,7 +431,7 @@ public class ColumnService {
                 .query(Boolean.class)
                 .single();
         if (!known) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Пользователь не найден");
+            throw Fail.notFound("error.user.not_found");
         }
     }
 }

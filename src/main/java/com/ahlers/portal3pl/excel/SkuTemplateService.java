@@ -3,6 +3,7 @@ package com.ahlers.portal3pl.excel;
 import com.ahlers.portal3pl.auth.PortalUser;
 import com.ahlers.portal3pl.catalog.SkuWriteService;
 import com.ahlers.portal3pl.columns.ColumnService;
+import com.ahlers.portal3pl.common.Fail;
 import com.ahlers.portal3pl.config.DepositorScope;
 import com.ahlers.portal3pl.excel.SkuTemplateFields.Field;
 import org.apache.poi.ss.usermodel.Cell;
@@ -29,11 +30,9 @@ import org.apache.poi.xssf.usermodel.XSSFTable;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.openxmlformats.schemas.spreadsheetml.x2006.main.CTDataValidation;
 import org.openxmlformats.schemas.spreadsheetml.x2006.main.CTDataValidations;
-import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -127,8 +126,7 @@ public class SkuTemplateService {
                 .filter(f -> labels.containsKey(f.catalogId()))
                 .toList();
         if (fields.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "Для этого поклажедателя не осталось доступных колонок товара");
+            throw Fail.conflict("error.template.no_columns");
         }
 
         Map<String, List<String>> dictionaries = dictionaryValues();
@@ -137,8 +135,7 @@ public class SkuTemplateService {
             byte[] bytes = write(wb, fields, labels, dictionaries, depositorCode);
             return new Template(fileName(orgName), bytes);
         } catch (IOException e) {
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
-                    "Не удалось собрать шаблон");
+            throw Fail.internal("error.template.build_failed");
         }
     }
 

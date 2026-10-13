@@ -1,5 +1,6 @@
 package com.ahlers.portal3pl.auth;
 
+import com.ahlers.portal3pl.common.Fail;
 import com.ahlers.portal3pl.i18n.LocaleService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -10,7 +11,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -87,8 +87,7 @@ public class AuthController {
                                                HttpServletRequest request) {
         PortalUser user = session.requireUser(request);
         if (!auth.mayAccess(user.login(), body.depositorId())) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                    "Этот поклажедатель недоступен вашей учётной записи");
+            throw Fail.forbidden("error.depositor.not_available");
         }
         session.selectDepositor(request, body.depositorId());
         return sessionState(user, auth.availableDepositors(user.login()), body.depositorId());

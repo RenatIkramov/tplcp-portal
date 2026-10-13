@@ -2,12 +2,11 @@ package com.ahlers.portal3pl.i18n;
 
 import com.ahlers.portal3pl.admin.AdminUserService;
 import com.ahlers.portal3pl.auth.PortalUser;
+import com.ahlers.portal3pl.common.Fail;
 import com.ahlers.portal3pl.common.SqlRows;
-import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -147,7 +146,7 @@ public class LocaleService {
         users.requireAdmin(actor);
         requireKnownLocale(localeCode);
         if (textKey == null || textKey.isBlank()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Укажите ключ текста");
+            throw Fail.badRequest("error.text.key_required");
         }
         boolean exists = Boolean.TRUE.equals(jdbc
                 .sql("SELECT EXISTS (SELECT 1 FROM dbo.ui_text_key WHERE text_key = :key::varchar)")
@@ -157,8 +156,7 @@ public class LocaleService {
         if (!exists) {
             // Ключи приходят из вёрстки: выдумывать их в администрировании
             // нельзя — такой текст всё равно негде показать.
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND,
-                    "Ключ «" + textKey + "» в интерфейсе не используется");
+            throw Fail.notFound("error.text.key_unused", "key", textKey);
         }
         jdbc.sql("SELECT dbo.ui_text_save(:key::text, :code::text, :value::text)")
                 .param("key", textKey)
@@ -184,7 +182,7 @@ public class LocaleService {
                 .query(Boolean.class)
                 .single();
         if (!shown) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Неизвестный язык: " + code);
+            throw Fail.notFound("error.locale.unknown", "code", code);
         }
     }
 
@@ -220,9 +218,7 @@ public class LocaleService {
         users.requireAdmin(actor);
         requireKnownLocale(code);
         if (!shown && isDefault(code)) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "Это язык портала по умолчанию — на него откатываются"
-                            + " недостающие переводы, выключить его нельзя");
+            throw Fail.conflict("error.locale.default_cannot_hide");
         }
         jdbc.sql("UPDATE dbo.dictionary_locale SET is_active = :shown WHERE code = :code::varchar")
                 .param("shown", shown)
@@ -272,7 +268,7 @@ public class LocaleService {
                 .query(Boolean.class)
                 .single();
         if (!known) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Неизвестный язык: " + code);
+            throw Fail.notFound("error.locale.unknown", "code", code);
         }
     }
 }

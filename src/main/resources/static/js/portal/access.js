@@ -29,6 +29,13 @@
   const store = {users: [], depositors: [], warehouseList: [], depositorAccess: []};
 
   async function load(){
+    // Раздел доступов — только для администратора. Без этой проверки
+    // четыре запроса уходили у каждого клиента и возвращались отказом.
+    if (!PORTAL.isAdmin()){
+      store.users = [];
+      store.depositorAccess = [];
+      return;
+    }
     try {
       const [users, depositors, warehouseList, access] = await Promise.all([
         api('GET', '/api/admin/users'),

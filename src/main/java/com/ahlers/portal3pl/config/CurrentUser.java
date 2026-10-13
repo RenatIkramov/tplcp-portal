@@ -1,9 +1,8 @@
 package com.ahlers.portal3pl.config;
 
-import org.springframework.http.HttpStatus;
+import com.ahlers.portal3pl.common.Fail;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Component;
-import org.springframework.web.server.ResponseStatusException;
 
 /**
  * Кто выполняет действие. Логин берётся из сессии (см. AuthFilter),
@@ -24,14 +23,13 @@ public class CurrentUser {
     public String requireUserId() {
         String login = DepositorContext.userLogin();
         if (login == null || login.isBlank()) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Требуется вход в портал");
+            throw Fail.unauthorized("error.auth.sign_in_required");
         }
         return jdbc.sql("SELECT user_id::text FROM dbo.app_user WHERE login = :login AND is_active")
                 .param("login", login)
                 .query(String.class)
                 .optional()
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN,
-                        "Пользователь не найден или заблокирован"));
+                .orElseThrow(() -> Fail.forbidden("error.user.not_found_or_blocked"));
     }
 
     /** Разрешено ли пользователю править транспортный раздел (решение Р5). */
@@ -71,7 +69,7 @@ public class CurrentUser {
         };
         String login = DepositorContext.userLogin();
         if (login == null || login.isBlank()) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Требуется вход в портал");
+            throw Fail.unauthorized("error.auth.sign_in_required");
         }
         boolean allowed = jdbc.sql("""
                         SELECT COALESCE(s.%s, true)
@@ -84,8 +82,7 @@ public class CurrentUser {
                 .optional()
                 .orElse(false);
         if (!allowed) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                    "Загрузка из Excel для вас отключена");
+            throw Fail.forbidden("error.excel.upload_disabled");
         }
     }
 

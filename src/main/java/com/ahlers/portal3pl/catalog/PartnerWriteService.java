@@ -1,15 +1,16 @@
 package com.ahlers.portal3pl.catalog;
 
+import com.ahlers.portal3pl.common.Fail;
+import com.ahlers.portal3pl.common.MsgRef;
+import com.ahlers.portal3pl.common.PortalException;
 import com.ahlers.portal3pl.common.SqlRows;
 import com.ahlers.portal3pl.config.CurrentUser;
 import com.ahlers.portal3pl.config.DepositorContext;
 import com.ahlers.portal3pl.config.DepositorScope;
 import org.springframework.dao.DuplicateKeyException;
-import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -111,8 +112,7 @@ public class PartnerWriteService {
         // отправке означало бы стирание нужного значения.
         for (String field : PartnerKind.REQUIRED) {
             if (clean.containsKey(field) && isBlank(clean.get(field))) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                        "Поле «" + field + "» не может быть пустым");
+                throw Fail.badRequest("error.field.empty", "field", field);
             }
         }
         String assignments = clean.keySet().stream()
@@ -163,17 +163,15 @@ public class PartnerWriteService {
                                 .param("id", id).query().listOfRows())
                 .getFirst();
 
-        List<String> where = new ArrayList<>();
-        kind.usageLabels().forEach((column, label) -> {
+        List<MsgRef> where = new ArrayList<>();
+        kind.usageLabels().forEach((column, key) -> {
             Object count = usage.get(column);
             if (count != null && ((Number) count).longValue() > 0) {
-                where.add(label + " (" + count + ")");
+                where.add(MsgRef.of(key, "count", count));
             }
         });
         if (!where.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    kind.nominative() + " используется в " + String.join(", ", where)
-                            + ". Его можно перевести в архив, но не удалить");
+            throw Fail.conflict(kind.error("in_use"), "where", where);
         }
         if (kind == PartnerKind.CONSIGNEE) {
             // адреса принадлежат карточке и живут только вместе с ней
@@ -208,7 +206,7 @@ public class PartnerWriteService {
 
         String address = text(values.get("address"));
         if (address == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Укажите адрес доставки");
+            throw Fail.badRequest("error.address.required");
         }
         // Первый адрес сразу становится основным: иначе у грузополучателя
         // с единственным адресом заказ подставлять нечего.
@@ -228,8 +226,7 @@ public class PartnerWriteService {
                     .param("sortOrder", intOrNull(values.get("sortOrder")))
                     .update();
         } catch (DuplicateKeyException e) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "Такой адрес у этого грузополучателя уже есть");
+            throw Fail.conflict("error.address.duplicate");
         }
         return addresses(consigneeId);
     }
@@ -242,7 +239,7 @@ public class PartnerWriteService {
 
         String address = text(values.get("address"));
         if (address == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Укажите адрес доставки");
+            throw Fail.badRequest("error.address.required");
         }
         try {
             jdbc.sql("""
@@ -255,8 +252,7 @@ public class PartnerWriteService {
                     .param("id", addressId)
                     .update();
         } catch (DuplicateKeyException e) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "Такой адрес у этого грузополучателя уже есть");
+            throw Fail.conflict("error.address.duplicate");
         }
         return addresses(consigneeId);
     }
@@ -285,8 +281,7 @@ public class PartnerWriteService {
                 .query(Long.class)
                 .single();
         if (orders != null && orders > 0) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "Адрес указан в заказах (" + orders + "), удалить его нельзя");
+            throw Fail.conflict("error.address.in_use", "count", orders);
         }
         boolean wasDefault = Boolean.TRUE.equals(jdbc
                 .sql("SELECT COALESCE(is_default, false) FROM dbo.delivery_point WHERE address_id = :id::uuid")
@@ -331,8 +326,7 @@ public class PartnerWriteService {
     private static void requireFields(Map<String, Object> clean, PartnerKind kind) {
         for (String field : PartnerKind.REQUIRED) {
             if (!clean.containsKey(field) || isBlank(clean.get(field))) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                        "Чтобы создать " + kind.accusative() + ", заполните поле «" + field + "»");
+                throw Fail.badRequest(kind.error("create_field_required"), "field", field);
             }
         }
     }
@@ -352,7 +346,7 @@ public class PartnerWriteService {
         try {
             return Integer.valueOf(String.valueOf(value).trim());
         } catch (NumberFormatException e) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Порядок — это число");
+            throw Fail.badRequest("error.sort_order.not_a_number");
         }
     }
 
@@ -373,7 +367,7 @@ public class PartnerWriteService {
                 .param("id", addressId)
                 .query(String.class)
                 .optional()
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Адрес не найден"));
+                .orElseThrow(() -> Fail.notFound("error.address.not_found"));
     }
 
     /** Кто ведёт справочники. Кладовщик и разработчик — только смотрят. */
@@ -384,8 +378,7 @@ public class PartnerWriteService {
                 .optional()
                 .orElse("");
         if (!List.of("depositor", "manager", "admin").contains(role)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                    "Справочники контрагентов доступны поклажедателю, менеджеру и администратору");
+            throw Fail.forbidden("error.access.partners");
         }
         currentUser.requireUserId();   // заодно убеждаемся, что учётка активна
     }
@@ -398,14 +391,12 @@ public class PartnerWriteService {
         return rows;
     }
 
-    private static ResponseStatusException notFound(PartnerKind kind) {
+    private static PortalException notFound(PartnerKind kind) {
         // чужая карточка неотличима от несуществующей — так же, как у документов
-        return new ResponseStatusException(HttpStatus.NOT_FOUND,
-                kind.nominative() + " не найден");
+        return Fail.notFound(kind.error("not_found"));
     }
 
-    private static ResponseStatusException duplicateCode(PartnerKind kind, Object code) {
-        return new ResponseStatusException(HttpStatus.CONFLICT,
-                kind.nominative() + " с кодом «" + code + "» у этого поклажедателя уже есть");
+    private static PortalException duplicateCode(PartnerKind kind, Object code) {
+        return Fail.conflict(kind.error("code_taken"), "code", code);
     }
 }

@@ -1,5 +1,6 @@
 package com.ahlers.portal3pl;
 
+import com.ahlers.portal3pl.common.MsgRef;
 import com.ahlers.portal3pl.documents.DocumentType;
 import com.ahlers.portal3pl.documents.DraftService;
 import org.junit.jupiter.api.AfterEach;
@@ -111,7 +112,7 @@ class DraftTest extends PortalTestBase {
         signIn();
         String docId = header(draft(Map.of())).get("docId").toString();
 
-        List<String> problems = drafts.validateForConfirm(DocumentType.RECEIPTS, docId);
+        List<MsgRef> problems = drafts.validateForConfirm(DocumentType.RECEIPTS, docId);
         assertFalse(problems.isEmpty());
         expectRejection(422, () -> drafts.confirm(DocumentType.RECEIPTS, docId));
     }
@@ -156,7 +157,10 @@ class DraftTest extends PortalTestBase {
                     Map.of("sku_id", skuId, "expected_qty", 50));
 
             assertEquals(Boolean.TRUE, header(card).get("hasUnknownSku"));
-            assertTrue(problems(card).stream().anyMatch(p -> p.contains("неизвестные WMS")));
+            assertTrue(drafts.validateForConfirm(DocumentType.RECEIPTS, docId).stream()
+                            .anyMatch(p -> "error.ready.unknown_sku".equals(p.key())),
+                    "причина должна называться ключом, а не текстом: "
+                            + drafts.validateForConfirm(DocumentType.RECEIPTS, docId));
             expectRejection(422, () -> drafts.confirm(DocumentType.RECEIPTS, docId));
         } finally {
             inContext("UPDATE dbo.sku SET is_in_wms = true WHERE code = 'RK-KOP-01'");

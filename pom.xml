@@ -84,6 +84,13 @@
          это единственная правка, которая выходит за линию версий
          родительского pom. -->
     <logback.version>1.6.5</logback.version>
+
+    <!-- Playwright — браузер для проверок интерфейса (только тесты).
+         Родительский pom эту библиотеку не ведёт, поэтому версия задана
+         здесь. Первый запуск скачивает Chromium в кэш пользователя
+         (~130 МБ); без сети проверки помечаются пропущенными,
+         см. BrowserTestBase. -->
+    <playwright.version>1.54.0</playwright.version>
   </properties>
 
   <dependencies>
@@ -148,6 +155,15 @@
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+
+    <!-- Проверки интерфейса настоящим браузером. Область test: в портал
+         эта библиотека не попадает и в поставке её нет. -->
+    <dependency>
+      <groupId>com.microsoft.playwright</groupId>
+      <artifactId>playwright</artifactId>
+      <version>${playwright.version}</version>
       <scope>test</scope>
     </dependency>
   </dependencies>

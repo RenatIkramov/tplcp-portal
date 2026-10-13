@@ -2139,10 +2139,25 @@ const STATIC_TAB_KIND = {
 };
 const FC_COMPOSITION_SECTION_ID = {receipts:'receiptCompositionSection', orders:'orderCompositionSection', transfers:'transferCompositionSection'};
 const EXTRA_INFO_FIELDS = Array.from({length:10}, (_,i)=>'customField'+(i+1));
-const EXTRA_INFO_LABELS = Object.fromEntries(EXTRA_INFO_FIELDS.map((f,i)=>[f, T('common.label.custom_field')+' '+(i+1)]));
+// Префикс поля на экране однозначно говорит, чья это карточка.
+const EXTRA_INFO_TABLE = {rf:'receipts', of:'orders', tf:'transfers'};
 function fcExtraInfoFieldHtml(prefix, doc, dbField, isDraft){
   const id = prefix + '_' + dbField;
-  const label = EXTRA_INFO_LABELS[dbField];
+  // Подпись собирается ПРИ ОТРИСОВКЕ, а не при загрузке файла: раньше
+  // десять подписей вычислялись один раз на верхнем уровне скрипта,
+  // то есть до входа, и оставались на языке, который был в тот момент.
+  //
+  // С V51 эти поля есть в справочнике колонок, поэтому у каждого свой
+  // ключ текста (col.receipts.customField3) и своё переименование
+  // под клиента. Запасной вариант — общая подпись с номером — остаётся
+  // на случай, если ключа в каталоге текстов почему-то нет: пустая
+  // подпись хуже обобщённой.
+  const table = EXTRA_INFO_TABLE[prefix];
+  const key = 'col.' + table + '.' + dbField;
+  const known = typeof T === 'function' && T(key) !== key;
+  const label = (window.PORTAL && PORTAL.fieldLabel && known)
+    ? PORTAL.fieldLabel(table, dbField, key)
+    : T('common.label.custom_field') + ' ' + dbField.replace('customField', '');
   return kvField(label, doc[dbField], {id, editable:isDraft});
 }
 function fcRenderDocTabs(docType, doc, isDraft, specialFn, buttonsId, contentId){

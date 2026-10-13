@@ -37,7 +37,7 @@
   */
   const KINDS = {
     suppliers: {
-      path: 'suppliers', key: 'supplierId', titleKey: 'server.message.supplier',
+      path: 'suppliers', key: 'supplierId', titleKey: 'col.receipts.supplier',
       newTitleKey: 'partners.text.new_supplier', body: 'suppliersBody', count: 'suppliersCount',
       columns: 7, addresses: false
     },
@@ -305,8 +305,8 @@
   };
 
   window.portalPartnerDelete = async function(){
-    if (!window.confirm('Удалить «' + (state.row.name || '') + '» без возможности восстановления?\n'
-        + T('partners.text.if_the_partner_appears_in_document'))) return;
+    if (!window.confirm(T('common.message.confirm_delete_forever', { name: state.row.name || '' })
+        + '\n' + T('partners.text.if_the_partner_appears_in_document'))) return;
     try {
       await api('DELETE', '/api/' + state.kind + '/' + state.id);
       await reload(state.kind);
@@ -363,7 +363,8 @@
 
   window.portalAddressDelete = async function(id){
     const a = state.addresses.find(x => x.addressId === id);
-    if (!window.confirm('Удалить адрес «' + (a ? a.address : id) + '»?')) return;
+    if (!window.confirm(T('partners.message.confirm_delete_address',
+        { address: a ? a.address : id }))) return;
     try {
       state.addresses = await api('DELETE', '/api/addresses/' + id);
       await reload('consignees');

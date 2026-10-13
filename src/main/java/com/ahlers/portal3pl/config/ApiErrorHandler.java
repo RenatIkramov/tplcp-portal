@@ -1,5 +1,7 @@
 package com.ahlers.portal3pl.config;
 
+import com.ahlers.portal3pl.common.ActorText;
+import com.ahlers.portal3pl.common.PortalException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -13,7 +15,9 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * Ответы об ошибках в одном формате: {"message": "человеческий текст"}.
+ * Ответы об ошибках в одном формате:
+ * {"status": 409, "key": "error.unit.in_use", "params": {...},
+ *  "message": "человеческий текст на языке вошедшего"}.
  * <p>
  * Зачем это нужно. Spring по умолчанию не включает текст ошибки в тело
  * ответа (защита от того, чтобы наружу не утекли подробности), поэтому
@@ -38,6 +42,29 @@ import java.util.Map;
 public class ApiErrorHandler {
 
     private static final Logger log = LoggerFactory.getLogger(ApiErrorHandler.class);
+
+    private final ActorText texts;
+
+    public ApiErrorHandler(ActorText texts) {
+        this.texts = texts;
+    }
+
+    /**
+     * Отказ портала: текст собирается по ключу на языке вошедшего.
+     *
+     * <p>Ключ и подстановки уходят в ответ рядом с текстом. Экрану они
+     * не нужны — он показывает message, — но по ним разбирают отказ
+     * тесты и журнал, и не приходится сличать строки.
+     */
+    @ExceptionHandler(PortalException.class)
+    public ResponseEntity<Map<String, Object>> portalRejection(PortalException e) {
+        Map<String, Object> body = body(texts.text(e.key(), e.params()), e.getStatusCode());
+        body.put("key", e.key());
+        if (!e.params().isEmpty()) {
+            body.put("params", e.params());
+        }
+        return ResponseEntity.status(e.getStatusCode()).body(body);
+    }
 
     @ExceptionHandler(ResponseStatusException.class)
     public ResponseEntity<Map<String, Object>> rejection(ResponseStatusException e) {
@@ -68,7 +95,7 @@ public class ApiErrorHandler {
     public ResponseEntity<Map<String, Object>> badRequest(Exception e) {
         log.warn("Неверный запрос: {}", e.getMessage());
         return ResponseEntity.badRequest()
-                .body(body("Запрос не распознан порталом", HttpStatus.BAD_REQUEST));
+                .body(body(texts.of("error.request.unreadable"), HttpStatus.BAD_REQUEST));
     }
 
     @ExceptionHandler(Exception.class)
@@ -76,8 +103,7 @@ public class ApiErrorHandler {
         // наружу — общий текст, в журнал — всё, иначе ошибку не найти
         log.error("Внутренняя ошибка портала", e);
         return ResponseEntity.internalServerError()
-                .body(body("Внутренняя ошибка портала. Обратитесь к администратору",
-                        HttpStatus.INTERNAL_SERVER_ERROR));
+                .body(body(texts.of("error.internal"), HttpStatus.INTERNAL_SERVER_ERROR));
     }
 
     private static Map<String, Object> body(String message, HttpStatusCode status) {
@@ -87,16 +113,24 @@ public class ApiErrorHandler {
         return response;
     }
 
-    /** Если текст почему-то не задан — подставляем понятный по смыслу кода. */
-    private static String byStatus(HttpStatusCode status) {
-        return switch (status.value()) {
-            case 401 -> "Требуется вход в портал";
-            case 403 -> "Действие недоступно вашей учётной записи";
-            case 404 -> "Запись не найдена";
-            case 409 -> "Действие сейчас невозможно";
-            case 422 -> "Данные заполнены не полностью";
-            case 429 -> "Слишком много попыток. Повторите позже";
-            default -> "Запрос не выполнен";
+    /**
+     * Если текст почему-то не задан — подставляем понятный по смыслу кода.
+     *
+     * <p>Так отвечают отказы не портала, а самого Spring (не тот метод,
+     * не тот Content-Type): своего текста у них нет, а «400» человеку
+     * ничего не говорит. Ключи те же, что у остальных сообщений, —
+     * и переводятся тем же экраном.
+     */
+    private String byStatus(HttpStatusCode status) {
+        String key = switch (status.value()) {
+            case 401 -> "error.auth.sign_in_required";
+            case 403 -> "error.status.forbidden";
+            case 404 -> "error.status.not_found";
+            case 409 -> "error.status.conflict";
+            case 422 -> "error.status.unprocessable";
+            case 429 -> "error.status.too_many";
+            default -> "error.status.failed";
         };
+        return texts.of(key);
     }
 }

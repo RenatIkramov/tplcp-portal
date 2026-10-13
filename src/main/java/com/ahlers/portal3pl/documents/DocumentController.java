@@ -132,7 +132,7 @@ public class DocumentController {
     /** Проверить готовность к отправке, не отправляя. */
     @GetMapping("/{docId}/validate")
     public Map<String, Object> validate(@PathVariable String docType, @PathVariable String docId) {
-        List<String> problems = drafts.validateForConfirm(DocumentType.ofPath(docType), docId);
+        List<String> problems = drafts.problemTexts(DocumentType.ofPath(docType), docId);
         return Map.of("canConfirm", problems.isEmpty(), "problems", problems);
     }
 

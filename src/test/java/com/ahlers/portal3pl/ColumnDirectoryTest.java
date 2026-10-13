@@ -91,11 +91,23 @@ class ColumnDirectoryTest extends PortalTestBase {
         signInAs(ADMIN, DEPOSITOR);
         List<Map<String, Object>> tables = columns.tables(admin);
         assertEquals(12, tables.size(), "таблиц в справочнике двенадцать");
+        assertTrue(tables.stream()
+                        .allMatch(t -> ((Number) t.get("columnCount")).intValue() > 0),
+                "таблица без колонок — это незаполненный раздел экрана настройки");
+
+        // Сверяем не с запомненным числом, а с самим каталогом: число
+        // колонок растёт от миграции к миграции (V51 добавила доп. поля
+        // шапки документов), и снимок падал бы от каждого нового поля,
+        // ничего при этом не проверяя. Правило же вот какое: разделы
+        // экрана настройки показывают ВЕСЬ каталог, ни одна колонка
+        // не теряется при группировке по таблицам.
         int total = tables.stream()
                 .mapToInt(t -> ((Number) t.get("columnCount")).intValue())
                 .sum();
-        assertEquals(257, total,
-                "колонок столько же, сколько в прототипе: 204 из V29 плюс 53 из V34");
+        Integer rows = jdbc.sql("SELECT count(*)::int FROM dbo.table_column")
+                .query(Integer.class)
+                .single();
+        assertEquals(rows.intValue(), total, "в разделах видны все колонки каталога");
     }
 
     @Test
@@ -103,8 +115,16 @@ class ColumnDirectoryTest extends PortalTestBase {
         signIn();
         PortalUser user = authService.authenticate(USER, USER_PASSWORD);
         List<Map<String, Object>> layout = columns.layout(user, TABLE);
-        assertEquals(33, layout.size(), "в выдаче все колонки — и скрытые тоже, для окна выбора");
+        // Числом каталог не меряем: он растёт от миграции к миграции,
+        // и такая проверка падает не от ошибки, а от нового поля
+        // (V51 добавила приходу десять доп. полей шапки). Проверяем
+        // правило: в выдаче есть и скрытые колонки — окно «⚙ Колонки»
+        // без них нечем наполнить.
         assertEquals(14, shown(layout).size(), "по умолчанию показываются четырнадцать");
+        assertTrue(layout.size() > shown(layout).size(),
+                "в выдаче все колонки — и скрытые тоже, для окна выбора");
+        assertTrue(layout.stream().anyMatch(r -> "customField1".equals(r.get("columnId"))),
+                "доп. поля шапки документа тоже предлагаются в окне выбора");
     }
 
     @Test
@@ -209,8 +229,10 @@ class ColumnDirectoryTest extends PortalTestBase {
         signIn();
         PortalUser user = authService.authenticate(USER, USER_PASSWORD);
         List<Map<String, Object>> layout = columns.layout(user, TABLE);
-        assertEquals(32, layout.size(), "запрещённая колонка не попадает даже в окно выбора");
-        assertTrue(layout.stream().noneMatch(r -> "supplier".equals(r.get("columnId"))));
+        // Проверяем отсутствие колонки, а не длину списка: длина зависит
+        // от каталога, который растёт, и падала бы от новых полей.
+        assertTrue(layout.stream().noneMatch(r -> "supplier".equals(r.get("columnId"))),
+                "запрещённая колонка не попадает даже в окно выбора");
 
         // и включить её себе пользователь не может — на этом держится
         // сокрытие себестоимости и цен
@@ -371,7 +393,8 @@ class ColumnDirectoryTest extends PortalTestBase {
 
         signIn();
         PortalUser user = authService.authenticate(USER, USER_PASSWORD);
-        assertEquals(33, columns.layout(user, TABLE).size(),
+        assertTrue(columns.layout(user, TABLE).stream()
+                        .anyMatch(r -> "supplier".equals(r.get("columnId"))),
                 "запрещённая колонка вернулась в выдачу");
     }
 
@@ -490,6 +513,38 @@ class ColumnDirectoryTest extends PortalTestBase {
                     String.valueOf(field.get("objectCode")),
                     String.valueOf(field.get("fieldId")), "");
         }
+    }
+
+    /**
+     * Обязательные поля документов (V54).
+     *
+     * <p>Заказчик назвал поля, без которых документ бесполезен: по чему
+     * его найти, с кем он и чем закрыт. Проверяем не список целиком —
+     * он ещё будет меняться, — а правило: такое поле скрыть нельзя,
+     * и отказ приходит от СЕРВЕРА, а не от серой галочки на экране.
+     */
+    @Test
+    void requiredDocumentFieldsCannotBeHiddenFromTheDepositor() {
+        PortalUser admin = portalAdmin();
+        signInAs(ADMIN, DEPOSITOR);
+        String depositorId = depositorId(ADMIN, DEPOSITOR);
+
+        for (String[] field : new String[][]{
+                {"receipts", "status"}, {"receipts", "no"},
+                {"receiptComposition", "accepted"}, {"receiptLineDetail", "exp"},
+                {"orders", "consignee"}, {"orderComposition", "picked"},
+                {"transfers", "fromWarehouse"}, {"transferComposition", "qty"}}) {
+            expectRejection(409, () -> columns.saveDepositorColumn(
+                    admin, depositorId, field[0], field[1], false, true));
+        }
+
+        // А необязательное рядом — скрывается как и раньше
+        columns.saveDepositorColumn(admin, depositorId, "receipts", "gtd", false, true);
+        assertTrue(columns.depositorColumns(admin, depositorId, "receipts").stream()
+                        .anyMatch(r -> "gtd".equals(r.get("columnId"))
+                                && Boolean.FALSE.equals(r.get("isAvailable"))),
+                "необязательное поле по-прежнему можно закрыть клиенту");
+        columns.resetDepositorColumns(admin, depositorId, "receipts");
     }
 
     @Test

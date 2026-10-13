@@ -3,12 +3,12 @@ package com.ahlers.portal3pl.admin;
 import com.ahlers.portal3pl.auth.PasswordService;
 import com.ahlers.portal3pl.auth.PortalUser;
 import com.ahlers.portal3pl.auth.RememberMeService;
+import com.ahlers.portal3pl.common.ActorText;
+import com.ahlers.portal3pl.common.Fail;
 import com.ahlers.portal3pl.common.SqlRows;
-import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.Map;
@@ -25,12 +25,14 @@ public class AdminUserService {
     private final JdbcClient jdbc;
     private final PasswordService passwords;
     private final RememberMeService rememberMe;
+    private final ActorText texts;
 
     public AdminUserService(JdbcClient jdbc, PasswordService passwords,
-                            RememberMeService rememberMe) {
+                            RememberMeService rememberMe, ActorText texts) {
         this.jdbc = jdbc;
         this.passwords = passwords;
         this.rememberMe = rememberMe;
+        this.texts = texts;
     }
 
     @Transactional(readOnly = true)
@@ -60,8 +62,7 @@ public class AdminUserService {
         // orDefault возвращает примитив, поэтому обёртка Boolean.FALSE.equals
         // только заворачивала его обратно в объект
         if (!orDefault(s.isActive(), true) && actor.userId().equals(userId)) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "Нельзя заблокировать свою учётную запись");
+            throw Fail.conflict("error.user.cannot_block_self");
         }
 
         jdbc.sql("""
@@ -105,9 +106,9 @@ public class AdminUserService {
     @Transactional
     public Map<String, Object> create(PortalUser actor, Profile p, String password) {
         requireAdmin(actor);
-        String login = requireText(p.login(), "Укажите логин");
+        String login = requireText(p.login(), "error.user.login_required");
         requireLoginFree(login, null);
-        requireText(p.fullName(), "Укажите ФИО");
+        requireText(p.fullName(), "error.user.full_name_required");
         requireRoleExists(p.roleCode());
 
         String finalPassword = password == null || password.isBlank()
@@ -132,14 +133,12 @@ public class AdminUserService {
                     .single();
         } catch (org.springframework.dao.DuplicateKeyException e) {
             // гонка: логин заняли между проверкой и вставкой
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "Логин «" + login + "» уже занят");
+            throw Fail.conflict("error.user.login_taken", "login", login);
         }
         setDepositorAccess(userId, p.depositorIds());
 
         return Map.of("userId", userId, "password", finalPassword,
-                "message", "Пользователь создан. Пароль нужно передать ему — "
-                        + "при первом входе портал попросит задать свой");
+                "message", texts.of("info.user.created"));
     }
 
     /** Правка анкеты, роли, логина и доступов к поклажедателям. */
@@ -147,14 +146,13 @@ public class AdminUserService {
     public List<Map<String, Object>> saveProfile(PortalUser actor, String userId, Profile p) {
         requireAdmin(actor);
         Map<String, Object> currentRow = userRow(userId);
-        requireText(p.fullName(), "Укажите ФИО");
+        requireText(p.fullName(), "error.user.full_name_required");
         requireRoleExists(p.roleCode());
 
         // Себе роль не меняем: администратор, случайно ставший поклажедателем,
         // потеряет доступ к этому разделу и не сможет вернуть его обратно.
         if (actor.userId().equals(userId) && !actor.roleCode().equals(p.roleCode())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "Нельзя изменить роль своей учётной записи");
+            throw Fail.conflict("error.user.cannot_change_own_role");
         }
 
         jdbc.sql("""
@@ -245,8 +243,7 @@ public class AdminUserService {
                 .query(Boolean.class)
                 .single();
         if (taken) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "Логин «" + login + "» уже занят");
+            throw Fail.conflict("error.user.login_taken", "login", login);
         }
     }
 
@@ -259,13 +256,13 @@ public class AdminUserService {
                 .query(Boolean.class)
                 .single();
         if (!exists) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Выберите роль пользователя");
+            throw Fail.badRequest("error.user.role_required");
         }
     }
 
-    private static String requireText(String value, String message) {
+    private static String requireText(String value, String messageKey) {
         if (value == null || value.isBlank()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
+            throw Fail.badRequest(messageKey);
         }
         return value.trim();
     }
@@ -285,8 +282,7 @@ public class AdminUserService {
                 .listOfRows()
                 .stream()
                 .findFirst()
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
-                        "Пользователь не найден"));
+                .orElseThrow(() -> Fail.notFound("error.user.not_found"));
     }
 
     /** Та же проверка для соседних экранов администрирования (доступы). */
@@ -297,8 +293,7 @@ public class AdminUserService {
                 .optional()
                 .orElse("");
         if (!"admin".equals(role) && !"developer".equals(role)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                    "Раздел доступен только администратору портала");
+            throw Fail.forbidden("error.access.admin_only");
         }
     }
 

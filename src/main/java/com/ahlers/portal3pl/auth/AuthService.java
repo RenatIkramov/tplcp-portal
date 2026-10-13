@@ -1,6 +1,6 @@
 package com.ahlers.portal3pl.auth;
 
-import org.springframework.http.HttpStatus;
+import com.ahlers.portal3pl.common.Fail;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -50,8 +50,7 @@ public class AuthService {
 
         OffsetDateTime lockedUntil = (OffsetDateTime) row.get("locked_until");
         if (lockedUntil != null && lockedUntil.isAfter(OffsetDateTime.now())) {
-            throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS,
-                    "Вход временно заблокирован из-за неудачных попыток. Повторите позже");
+            throw Fail.tooManyRequests("error.auth.locked_out");
         }
         if (!Boolean.TRUE.equals(row.get("is_active"))) {
             // §6.2: заблокированный пользователь не входит никаким путём
@@ -106,6 +105,6 @@ public class AuthService {
     }
 
     private static ResponseStatusException unauthorized() {
-        return new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Неверный логин или пароль");
+        return Fail.unauthorized("error.auth.bad_credentials");
     }
 }

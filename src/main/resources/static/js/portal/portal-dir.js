@@ -304,8 +304,8 @@
 
   window.portalDirDelete = async function(){
     const name = (state.row && (state.row.name || state.row.orgName)) || '';
-    if (!window.confirm('Удалить «' + name + '» без возможности восстановления?\n'
-        + T('portal.text.if_the_record_is_used_anywhere_the'))) return;
+    if (!window.confirm(T('common.message.confirm_delete_forever', { name: name })
+        + '\n' + T('portal.text.if_the_record_is_used_anywhere_the'))) return;
     try {
       await api('DELETE', DIRS[state.dir].base + '/' + encodeURIComponent(state.id));
       await reload(state.dir);
@@ -520,7 +520,8 @@
 
   window.portalEnumDelete = async function(name, id){
     const r = (enumState.rows[name] || []).find(x => x.id === id);
-    if (!window.confirm('Удалить «' + (r ? r.name : id) + '»?')) return;
+    if (!window.confirm(T('common.message.confirm_delete_named',
+        { name: r ? r.name : id }))) return;
     try {
       enumState.rows[name] = await api('DELETE', '/api/admin/' + ENUMS[name].path + '/' + id);
       renderEnum(name);

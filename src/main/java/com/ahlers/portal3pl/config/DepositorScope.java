@@ -1,9 +1,8 @@
 package com.ahlers.portal3pl.config;
 
-import org.springframework.http.HttpStatus;
+import com.ahlers.portal3pl.common.Fail;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Component;
-import org.springframework.web.server.ResponseStatusException;
 
 /**
  * Единственное место, где приложение «включает» изоляцию данных: выставляет
@@ -33,13 +32,12 @@ public class DepositorScope {
     public void apply() {
         String login = DepositorContext.userLogin();
         if (login == null) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Требуется вход в портал");
+            throw Fail.unauthorized("error.auth.sign_in_required");
         }
         String depositorId = DepositorContext.depositorId();
         if (depositorId == null || depositorId.isBlank()) {
             // §6.4: пока поклажедатель не выбран, никакие данные не отдаются
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "Не выбран поклажедатель");
+            throw Fail.conflict("error.depositor.not_chosen");
         }
         jdbc.sql("SELECT set_config('app.depositor_id', :id, true)")
                 .param("id", depositorId)

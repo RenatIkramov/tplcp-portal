@@ -1,10 +1,9 @@
 package com.ahlers.portal3pl.documents;
 
+import com.ahlers.portal3pl.common.Fail;
 import com.ahlers.portal3pl.config.DepositorScope;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -20,10 +19,13 @@ public class DocumentService {
 
     private final DepositorScope depositorScope;
     private final DocumentRepository repository;
+    private final DraftService drafts;
 
-    public DocumentService(DepositorScope depositorScope, DocumentRepository repository) {
+    public DocumentService(DepositorScope depositorScope, DocumentRepository repository,
+                           DraftService drafts) {
         this.depositorScope = depositorScope;
         this.repository = repository;
+        this.drafts = drafts;
     }
 
     @Transactional(readOnly = true)
@@ -41,12 +43,27 @@ public class DocumentService {
         if (header.isEmpty()) {
             // Чужой документ выглядит так же, как несуществующий — это намеренно:
             // по коду ответа нельзя узнать, есть ли такой документ у другого клиента.
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Документ не найден");
+            throw Fail.notFound("error.document.not_found");
         }
+        Map<String, Object> head = header.getFirst();
         return Map.of(
-                "header", header.getFirst(),
+                "header", head,
                 "lines", repository.lines(type, docId),
-                "lineDetails", repository.lineDetails(type, docId, null));
+                "lineDetails", repository.lineDetails(type, docId, null),
+                // Причины, по которым документ нельзя отправить.
+                //
+                // Их отдавал только ответ на запись (DraftService.card),
+                // а эта карточка — чтение, и ею открывается документ
+                // из списка. Из-за этого человек видел пустой баннер
+                // и активную кнопку «Подтвердить» у черновика, который
+                // отправить нельзя: отказ приходил уже после нажатия.
+                //
+                // Считаем только для черновика: у отправленного документа
+                // причин не бывает, а два лишних запроса на каждое
+                // открытие карточки — заметно.
+                "problems", "draft".equals(head.get("statusCode"))
+                        ? drafts.problemTexts(type, docId)
+                        : List.of());
     }
 
     @Transactional(readOnly = true)

@@ -1,7 +1,6 @@
 package com.ahlers.portal3pl.documents;
 
-import org.springframework.http.HttpStatus;
-import org.springframework.web.server.ResponseStatusException;
+import com.ahlers.portal3pl.common.Fail;
 
 /**
  * Три типа документов портала. Перечисление заодно защищает от подстановки
@@ -42,7 +41,7 @@ public enum DocumentType {
                 return t;
             }
         }
-        throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Неизвестный тип документа: " + path);
+        throw Fail.notFound("error.document.unknown_type", "path", path);
     }
 
     public String headerView() {

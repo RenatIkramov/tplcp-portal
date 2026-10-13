@@ -30,7 +30,13 @@
   // тех, которых нет в вёрстке. Именно это и есть «доступно клиенту»:
   // запрещённую колонку table_columns не отдаёт совсем.
   const raw = {};
-  PORTAL.columns = {layout: layout, raw: raw};
+  // Всё, что отдал сервер по таблице, строками целиком. Отличается
+  // от layout: туда попадают только колонки, которые прототип умеет
+  // рисовать. Поля, которые живут в карточке, а не в таблице —
+  // например доп. поля шапки документа, — в layout не попадают,
+  // но переименование у них есть, и искать его надо здесь.
+  const all = {};
+  PORTAL.columns = {layout: layout, raw: raw, all: all};
 
   /* ============ Применение раскладки к состоянию прототипа ============ */
 
@@ -52,6 +58,7 @@
 
   function applyTable(tableKey, rows){
     raw[tableKey] = rows.map(r => r.columnId);
+    all[tableKey] = rows;
     if (!hasGlobal('tableColumnState') || !tableColumnState[tableKey]) return;
     const known = new Set((tableColumns[tableKey] || []).map(c => c.id));
     // колонка могла пропасть из вёрстки, но остаться в базе — рисовать
@@ -95,9 +102,13 @@
    * назвал поле по-своему, и язык интерфейса его слово не отменяет.
    * Поэтому раскладку после смены языка перечитывать не нужно —
    * разница между подписями останется той же.
+   *
+   * Ищем в полном ответе сервера, а не в раскладке: раскладка — это то,
+   * что рисует таблица, а переименовать можно и поле, которое
+   * показывается только в карточке (доп. поля шапки документа).
    */
   function renameOf(tableKey, columnId){
-    const rows = layout[tableKey];
+    const rows = all[tableKey];
     if (!rows) return null;
     const row = rows.find(r => r.columnId === columnId);
     if (!row || !row.portalLabel) return null;
@@ -226,189 +237,30 @@
     };
   }
 
-  /* ============ Администрирование: колонки поклажедателя ============ */
-
-  const admin = {depositorId: null, table: null, tables: [], rows: []};
-
-  const isAdmin = () => ['admin', 'developer'].includes(
-      PORTAL.session && PORTAL.session.roleCode);
-  const mayEdit = () => PORTAL.session && PORTAL.session.roleCode === 'admin';
-
-  function tablesHtml(){
-    return '<div style="display:flex; gap:18px; align-items:flex-start; flex-wrap:wrap;">'
-      + '<div style="min-width:220px;">'
-      + admin.tables.map(t =>
-          '<div class="col-item" style="cursor:pointer;'
-          + (t.tableKey === admin.table ? ' font-weight:700;' : '') + '"'
-          + ' onclick="portalDepositorColumnsTable(\'' + esc(t.tableKey) + '\')">'
-          + esc(t.objectName || t.tableKey) + ' <span class="count">'
-          + esc(t.tableKey) + ', ' + t.columnCount + '</span></div>').join('')
-      + '</div>'
-      + '<div style="flex:1; min-width:320px;" id="depColList"></div>'
-      + '</div>';
-  }
-
-  function columnsHtml(){
-    if (!admin.rows.length) return '<div class="hint">' + T('references.text.pick_a_section_on_the_left') + '</div>';
-    const ro = mayEdit() ? '' : ' disabled';
-    return '<table class="table"><thead><tr>'
-      + '<th>' + T('references.column.column') + '</th>'
-      + '<th>' + T('references.column.label_for_client') + '</th>'
-      + '<th style="text-align:center;">' + T('references.column.available') + '</th>'
-      + '<th style="text-align:center;">' + T('references.column.show_at_once') + '</th>'
-      + '</tr></thead><tbody>'
-      + admin.rows.map(r => {
-          const renamed = r.label !== r.portalLabel;
-          return '<tr><td>' + esc(r.columnId) + '</td><td>' + esc(r.label)
-            + (renamed ? ' <span class="count">(' + T('references.text.instead_of') + ' «'
-                + esc(r.portalLabel) + '»)</span>' : '')
-            + '</td>'
-            + '<td style="text-align:center;"><input type="checkbox"' + ro
-            + (r.isAvailable ? ' checked' : '')
-            + ' onchange="portalDepositorColumnSave(\'' + esc(r.columnId)
-            + '\', this.checked, null)"></td>'
-            + '<td style="text-align:center;"><input type="checkbox"' + ro
-            + (r.isDefault ? ' checked' : '') + (r.isAvailable ? '' : ' disabled')
-            + ' onchange="portalDepositorColumnSave(\'' + esc(r.columnId)
-            + '\', null, this.checked)"></td></tr>';
-        }).join('')
-      + '</tbody></table>'
-      + (mayEdit()
-          ? '<div style="margin-top:12px;"><button class="btn" type="button"'
-            + ' onclick="portalDepositorColumnsReset()">'
-            + T('references.button.restore_portal_defaults') + '</button></div>'
-          : '')
-      + '<div class="hint" style="margin-top:10px;">'
-      + '' + T('references.hint.unavailable_column_is_hidden') + '</div>';
-  }
-
-  window.portalDepositorColumnsTable = async function(tableKey){
-    admin.table = tableKey;
-    try {
-      admin.rows = await api('GET', '/api/admin/depositor-columns?depositorId='
-          + encodeURIComponent(admin.depositorId) + '&table=' + encodeURIComponent(tableKey));
-    } catch (e){
-      admin.rows = [];
-      say(e.message);
-    }
-    const host = document.getElementById('depColBody');
-    if (host) host.innerHTML = tablesHtml();
-    const list = document.getElementById('depColList');
-    if (list) list.innerHTML = columnsHtml();
-  };
-
-  // Строки хранятся только там, где настройка отличается от портальной,
-  // поэтому «вернуть как у портала» — это убрать их. Сбрасываем весь
-  // раздел: по одной колонке это и так делается галочками.
-  window.portalDepositorColumnsReset = async function(){
-    if (!admin.depositorId || !admin.table) return;
-    try {
-      admin.rows = await api('DELETE', '/api/admin/depositor-columns?depositorId='
-          + encodeURIComponent(admin.depositorId)
-          + '&table=' + encodeURIComponent(admin.table));
-      const list = document.getElementById('depColList');
-      if (list) list.innerHTML = columnsHtml();
-      say(T('common.message.columns_reset_to_default'));
-    } catch (e){
-      say(e.message);
-    }
-  };
-
-  window.portalDepositorColumnSave = async function(columnId, available, byDefault){
-    const row = admin.rows.find(r => r.columnId === columnId);
-    if (!row) return;
-    try {
-      admin.rows = await api('PUT', '/api/admin/depositor-columns', {
-        depositorId: admin.depositorId,
-        table: admin.table,
-        columnId: columnId,
-        isAvailable: available === null ? row.isAvailable : available,
-        isDefault: byDefault === null ? row.isDefault : byDefault
-      });
-      const list = document.getElementById('depColList');
-      if (list) list.innerHTML = columnsHtml();
-    } catch (e){
-      say(e.message);
-      portalDepositorColumnsTable(admin.table);
-    }
-  };
-
-  /** Вкладка «Колонки» в карточке поклажедателя. */
-  async function openDepositorColumns(depositorId){
-    admin.depositorId = depositorId;
-    admin.table = null;
-    admin.rows = [];
-    try {
-      if (!admin.tables.length) admin.tables = await api('GET', '/api/admin/column-tables');
-    } catch (e){
-      say(e.message);
-      return;
-    }
-    const host = document.getElementById('depColBody');
-    if (host) host.innerHTML = tablesHtml();
-    if (admin.tables.length) portalDepositorColumnsTable(admin.tables[0].tableKey);
-  }
-
-  // Карточка поклажедателя в прототипе без вкладок, поэтому полоску
-  // вкладок добавляем сами, а не переписываем карточку целиком.
-  function wrapDepositorCard(){
-    const state = {tab: 'card'};
-
-    function decorate(){
-      if (!PORTAL.columns.currentDir || PORTAL.columns.currentDir !== 'depositorsDir') return;
-      const body = document.getElementById('portalDirBody');
-      if (!body || document.getElementById('depTabs')) return;
-      const id = PORTAL.columns.currentId;
-      if (!id) return;
-      const strip = document.createElement('div');
-      strip.className = 'admin-subtabs';
-      strip.id = 'depTabs';
-      strip.style.marginBottom = '12px';
-      strip.innerHTML =
-          '<button class="admin-subtab-btn ' + (state.tab === 'card' ? 'active' : '') + '"'
-          + ' onclick="portalDepositorTab(\'card\')">' + T('partners.title.card') + '</button>'
-          + '<button class="admin-subtab-btn ' + (state.tab === 'columns' ? 'active' : '') + '"'
-          + ' onclick="portalDepositorTab(\'columns\')">' + T('references.title.columns') + '</button>';
-      body.parentNode.insertBefore(strip, body);
-      const pane = document.createElement('div');
-      pane.id = 'depColBody';
-      pane.style.display = state.tab === 'columns' ? '' : 'none';
-      body.parentNode.insertBefore(pane, body.nextSibling);
-      body.style.display = state.tab === 'columns' ? 'none' : '';
-      if (state.tab === 'columns') openDepositorColumns(id);
-    }
-
-    window.portalDepositorTab = function(tab){
-      state.tab = tab;
-      const body = document.getElementById('portalDirBody');
-      const pane = document.getElementById('depColBody');
-      const strip = document.getElementById('depTabs');
-      if (!body || !pane || !strip) return;
-      body.style.display = tab === 'columns' ? 'none' : '';
-      pane.style.display = tab === 'columns' ? '' : 'none';
-      strip.querySelectorAll('.admin-subtab-btn').forEach((b, i) => {
-        b.classList.toggle('active', (i === 0) === (tab === 'card'));
-      });
-      if (tab === 'columns') openDepositorColumns(PORTAL.columns.currentId);
-    };
-
-    const openOrig = window.portalOpenPortalDir;
-    if (typeof openOrig === 'function'){
-      window.portalOpenPortalDir = async function(dirName, id){
-        PORTAL.columns.currentDir = dirName;
-        PORTAL.columns.currentId = id;
-        state.tab = 'card';
-        const strip = document.getElementById('depTabs');
-        if (strip) strip.remove();
-        const pane = document.getElementById('depColBody');
-        if (pane) pane.remove();
-        await openOrig.apply(this, arguments);
-        if (isAdmin() && dirName === 'depositorsDir') decorate();
-      };
-    }
-  }
+  /* ============ Колонки поклажедателя: экран переехал ============ */
+  /*
+   * Здесь была вкладка «Колонки» карточки поклажедателя в справочниках:
+   * двенадцать таблиц слева, колонки с галочками справа.
+   *
+   * Она настраивала ровно то же, что вкладка «Поля» в карточке доступов
+   * поклажедателя, и писала в те же строки depositor_table_column.
+   * Два экрана на одну настройку рано или поздно расходятся: на одном
+   * появляется признак, которого нет на другом, и человек перестаёт
+   * понимать, какой из них главный. Решение заказчика: всё про одного
+   * клиента — в его карточке в «Доступах поклажедателей», там же, где
+   * склады, разделы и переименование полей.
+   *
+   * API (/api/admin/depositor-columns) не тронут: им пользуется та самая
+   * вкладка. Удалён только второй вход в него.
+   */
 
   /* ============ Копирование настроек пользователю ============ */
+
+  // Право решает сервер; здесь — только показывать ли блок вовсе.
+  // Разработчик ходит по порталу в режиме чтения, ему править нельзя.
+  const mayEdit = () => ['admin'].includes(
+      PORTAL.session && PORTAL.session.roleCode);
+
 
   function wrapUserCard(){
     const openOrig = window.portalOpenAdminUser;
@@ -466,7 +318,6 @@
 
   function install(){
     wrapPicker();
-    wrapDepositorCard();
     wrapUserCard();
 
     PORTAL.onLogin(() => {

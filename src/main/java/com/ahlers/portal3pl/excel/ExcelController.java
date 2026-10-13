@@ -1,14 +1,14 @@
 package com.ahlers.portal3pl.excel;
 
-import com.ahlers.portal3pl.config.CurrentUser;
 import com.ahlers.portal3pl.auth.PortalUser;
 import com.ahlers.portal3pl.auth.SessionUser;
+import com.ahlers.portal3pl.common.Fail;
+import com.ahlers.portal3pl.config.CurrentUser;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -18,7 +18,6 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -92,14 +91,13 @@ public class ExcelController {
                                            HttpServletRequest request) {
         PortalUser user = session.requireUser(request);
         if (file == null || file.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Файл не выбран");
+            throw Fail.badRequest("error.file.not_chosen");
         }
         byte[] content;
         try {
             content = file.getBytes();
         } catch (IOException e) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Не удалось прочитать переданный файл");
+            throw Fail.badRequest("error.file.unreadable");
         }
         String importId = imports.check(user, file.getOriginalFilename(), content);
         return imports.result(importId);

@@ -144,8 +144,8 @@
     400: T('stock.text.request_rejected_check_the_fields'),
     401: T('stock.text.please_sign_in_again'),
     403: T('stock.text.this_action_is_not_available_to_yo'),
-    404: T('server.message.record_not_found'),
-    409: T('server.message.this_action_is_not_possible_right'),
+    404: T('error.status.not_found'),
+    409: T('error.status.conflict'),
     422: T('stock.text.some_required_data_is_missing'),
     429: T('stock.text.too_many_attempts_try_again_later'),
     500: T('stock.text.portal_could_not_complete_the'),
@@ -180,6 +180,19 @@
     }
     return resp.status === 204 ? null : resp.json();
   };
+
+  /**
+   * Видит ли вошедший разделы администрирования.
+   *
+   * <p>Право решает сервер (AdminUserService.requireAdmin — admin
+   * и developer). Здесь это нужно для другого: не ходить за данными,
+   * которых всё равно не дадут. Раньше экраны администрирования
+   * грузились у всех, и сеанс обычного клиента начинался с девяти
+   * отказов 403 — они ничего не ломали, но каждый был лишним походом
+   * на сервер и строкой отказа в журнале.
+   */
+  PORTAL.isAdmin = () => ['admin', 'developer'].includes(
+      (PORTAL.session && PORTAL.session.roleCode) || '');
 
   PORTAL.onLogin = fn => { PORTAL.loaders.push(fn); };
   PORTAL.reloadAll = () => { PORTAL.loaders.forEach(fn => { try { fn(); } catch (e) {} }); };
@@ -244,6 +257,44 @@
     el.setAttribute('data-i18n', key);
     el.textContent = (typeof T === 'function' ? T(key) : key);
     return el;
+  };
+
+  /**
+   * Подпись ПОЛЯ: имя клиента, если он его переименовал, иначе перевод.
+   *
+   * <p>Правило одно на весь портал: где у подписи есть идентификатор
+   * колонки, там действует переименование поклажедателем. Раньше каждое
+   * место решало само — списки брали подпись из раскладки, карточка
+   * просмотра из разметки, форма правки из ключа текста, — и выходило,
+   * что на просмотре поле зовётся «Артикул клиента», а в правке снова
+   * «Коммерческий код».
+   *
+   * <p>Имя колонки принимается в любом виде: формы правки хранят имена
+   * колонок базы (`weight_gross`), а справочник колонок — имена
+   * раскладки (`weightGross`). Приводим здесь, чтобы вызывающий
+   * об этом не думал.
+   *
+   * <p>Важно, ЧТО возвращается: переименование — готовый текст без
+   * `data-i18n`, перевод — span с ключом. Повесить `data-i18n` на
+   * переименованную подпись нельзя: смена языка нашла бы этот узел
+   * и вернула бы портальное название.
+   */
+  const camel = name => String(name == null ? '' : name)
+      .replace(/_([a-z0-9])/g, (m, c) => c.toUpperCase());
+
+  PORTAL.fieldRename = (tableKey, column) => {
+    const columns = PORTAL.columns;
+    if (!columns || !columns.renameOf) return null;
+    return columns.renameOf(tableKey, camel(column));
+  };
+
+  PORTAL.fieldLabel = (tableKey, column, textKey) => {
+    const own = PORTAL.fieldRename(tableKey, column);
+    if (own) {
+      return String(own).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+                        .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+    return PORTAL.t(textKey);
   };
 
   /**

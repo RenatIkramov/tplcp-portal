@@ -1,15 +1,16 @@
 package com.ahlers.portal3pl.catalog;
 
+import com.ahlers.portal3pl.common.Fail;
+import com.ahlers.portal3pl.common.MsgRef;
+import com.ahlers.portal3pl.common.PortalException;
 import com.ahlers.portal3pl.common.SqlRows;
 import com.ahlers.portal3pl.config.CurrentUser;
 import com.ahlers.portal3pl.config.DepositorContext;
 import com.ahlers.portal3pl.config.DepositorScope;
 import org.springframework.dao.DuplicateKeyException;
-import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -54,7 +55,7 @@ public class SkuWriteService {
         depositorScope.apply();
         requireEditor();
         Map<String, Object> clean = filter(values, SkuColumns.SKU);
-        requireFields(clean, SkuColumns.SKU_REQUIRED, "товар");
+        requireFields(clean, SkuColumns.SKU_REQUIRED, "error.sku.create_field_required");
 
         List<String> columns = new ArrayList<>(clean.keySet());
         String names = String.join(", ", columns);
@@ -97,8 +98,7 @@ public class SkuWriteService {
         // отправке означало бы стирание нужного значения.
         for (String field : SkuColumns.SKU_REQUIRED) {
             if (clean.containsKey(field) && isBlank(clean.get(field))) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                        "Поле «" + field + "» не может быть пустым");
+                throw Fail.badRequest("error.field.empty", "field", field);
             }
         }
 
@@ -158,16 +158,14 @@ public class SkuWriteService {
                                 .param("id", skuId).query().listOfRows())
                 .getFirst();
 
-        List<String> where = new ArrayList<>();
-        addUsage(where, usage.get("receipts"), "поступлениях");
-        addUsage(where, usage.get("orders"), "заказах");
-        addUsage(where, usage.get("transfers"), "перемещениях");
-        addUsage(where, usage.get("stockRows"), "остатках");
-        addUsage(where, usage.get("packagings"), "упаковках");
+        List<MsgRef> where = new ArrayList<>();
+        addUsage(where, usage.get("receipts"), "error.usage.receipts");
+        addUsage(where, usage.get("orders"), "error.usage.orders");
+        addUsage(where, usage.get("transfers"), "error.usage.transfers");
+        addUsage(where, usage.get("stockRows"), "error.usage.stock");
+        addUsage(where, usage.get("packagings"), "error.usage.packagings");
         if (!where.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "Товар используется в " + String.join(", ", where)
-                            + ". Его можно перевести в архив, но не удалить");
+            throw Fail.conflict("error.sku.in_use", "where", where);
         }
         jdbc.sql("DELETE FROM dbo.sku WHERE sku_id = :id::uuid").param("id", skuId).update();
     }
@@ -224,7 +222,7 @@ public class SkuWriteService {
         requireSkuExists(skuId);
 
         Map<String, Object> clean = filter(values, SkuColumns.PACKAGING);
-        requireFields(clean, SkuColumns.PACKAGING_REQUIRED, "упаковку");
+        requireFields(clean, SkuColumns.PACKAGING_REQUIRED, "error.packaging.create_field_required");
 
         List<String> columns = new ArrayList<>(clean.keySet());
         String names = String.join(", ", columns);
@@ -244,8 +242,8 @@ public class SkuWriteService {
         try {
             spec.update();
         } catch (DuplicateKeyException e) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "Упаковка с кодом «" + clean.get("packaging_code") + "» у этого товара уже есть");
+            throw Fail.conflict("error.packaging.code_taken",
+                    "code", clean.get("packaging_code"));
         }
         return packagings(skuId);
     }
@@ -274,8 +272,7 @@ public class SkuWriteService {
         try {
             spec.update();
         } catch (DuplicateKeyException e) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "Упаковка с таким кодом у этого товара уже есть");
+            throw Fail.conflict("error.packaging.duplicate");
         }
         return packagings(skuId);
     }
@@ -364,9 +361,10 @@ public class SkuWriteService {
         return out;
     }
 
-    private static void addUsage(List<String> where, Object count, String what) {
+    /** Место использования — тоже текст портала, поэтому ключом, а не словом. */
+    private static void addUsage(List<MsgRef> where, Object count, String key) {
         if (count != null && ((Number) count).longValue() > 0) {
-            where.add(what + " (" + count + ")");
+            where.add(MsgRef.of(key, "count", count));
         }
     }
 
@@ -385,11 +383,10 @@ public class SkuWriteService {
     }
 
     private static void requireFields(Map<String, Object> clean, java.util.Set<String> required,
-                                      String what) {
+                                      String messageKey) {
         for (String field : required) {
             if (!clean.containsKey(field) || isBlank(clean.get(field))) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                        "Чтобы создать " + what + ", заполните поле «" + field + "»");
+                throw Fail.badRequest(messageKey, "field", field);
             }
         }
     }
@@ -414,8 +411,7 @@ public class SkuWriteService {
                 .param("id", packagingId)
                 .query(String.class)
                 .optional()
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
-                        "Упаковка не найдена"));
+                .orElseThrow(() -> Fail.notFound("error.packaging.not_found"));
     }
 
     /**
@@ -429,8 +425,7 @@ public class SkuWriteService {
                 .optional()
                 .orElse("");
         if (!List.of("depositor", "manager", "admin").contains(role)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                    "Справочник товаров доступен поклажедателю, менеджеру и администратору");
+            throw Fail.forbidden("error.access.sku");
         }
         currentUser.requireUserId();   // заодно убеждаемся, что учётка активна
     }
@@ -440,13 +435,12 @@ public class SkuWriteService {
         return DepositorContext.userLogin();
     }
 
-    private static ResponseStatusException notFound() {
+    private static PortalException notFound() {
         // чужой товар неотличим от несуществующего — так же, как у документов
-        return new ResponseStatusException(HttpStatus.NOT_FOUND, "Товар не найден");
+        return Fail.notFound("error.sku.not_found");
     }
 
-    private static ResponseStatusException duplicateCode(Object code) {
-        return new ResponseStatusException(HttpStatus.CONFLICT,
-                "Товар с кодом «" + code + "» у этого поклажедателя уже есть");
+    private static PortalException duplicateCode(Object code) {
+        return Fail.conflict("error.sku.code_taken", "code", code);
     }
 }

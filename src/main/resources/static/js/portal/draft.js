@@ -96,6 +96,10 @@
     const html = options.map(o =>
         '<option value="' + esc(o.value) + '"' +
         (String(o.value) === selected ? ' selected' : '') + '>' + esc(o.text) + '</option>').join('');
+    // Подпись может прийти готовой русской строкой — от прототипа,
+    // который зовёт kvField напрямую; её по-прежнему переводим. Для
+    // подписей, уже разрешённых через PORTAL.fieldLabel, это пустая
+    // операция: ни ключа, ни колонки тут нет, и текст возвращается как есть.
     const label2 = (typeof localizeColumnLabel === 'function') ? localizeColumnLabel(label) : label;
     return '<div class="kv"><label>' + label2 + '</label>'
          + '<select class="kv-input kv-input-editable" ' + idAttr + '>'
@@ -237,7 +241,7 @@
     if (doc && doc.statusCode === 'draft' && problems.length){
       banner.innerHTML = '<div class="hint" style="background:#fdf2f2; border-left:3px solid #c0392b;'
         + ' padding:10px 14px; border-radius:6px; color:#8a2b2b;">'
-        + 'Документ пока нельзя отправить в WMS: ' + problems.join('; ') + '</div>';
+        + T('sku.text.document_not_ready_yet') + ' ' + problems.join('; ') + '</div>';
     } else {
       banner.innerHTML = '';
     }
@@ -249,39 +253,48 @@
       button.disabled = block;
       button.style.opacity = block ? '.5' : '';
       button.style.cursor = block ? 'not-allowed' : '';
-      button.title = block ? 'Сначала устраните: ' + problems.join('; ') : T('sku.text.send_document_to_wms');
+      button.title = block
+        ? T('sku.text.fix_problems_first') + ' ' + problems.join('; ')
+        : T('sku.text.send_document_to_wms');
     }
   }
 
   /* ---------------- поля шапки: выпадающие списки из API ---------------- */
 
   function wrapHeaderFields(){
-    const wrap = (functionName, rules) => {
+    // В правилах лежат КЛЮЧИ текстов, а не готовые подписи: готовая
+    // вычислялась бы при загрузке файла, до входа — то есть до того, как
+    // известен язык учётной записи и переименования полей клиентом.
+    const wrap = (functionName, tableKey, rules) => {
       const original = window[functionName];
       if (typeof original !== 'function') return;
       window[functionName] = function(dbField, doc, editable){
         const rule = rules[dbField];
+        // Подпись поля — общим правилом портала: имя клиента, если он
+        // поле переименовал, иначе перевод. Эти же поля в режиме
+        // просмотра рисует прототип, и зваться они должны одинаково.
+        const label = rule ? PORTAL.fieldLabel(tableKey, dbField, rule.key) : null;
         if (rule && editable){
-          return kvField(rule.label, doc[rule.value],
+          return kvField(label, doc[rule.value],
               {id: rule.id, editable: true, type: 'select', options: rule.options()});
         }
         if (rule && !editable){
-          return kvField(rule.label, dash(doc[rule.name]), {id: rule.id});
+          return kvField(label, dash(doc[rule.name]), {id: rule.id});
         }
         return original(dbField, doc, editable);
       };
     };
 
-    wrap('fcReceiptSpecialFieldHtml', {
-      warehouse: {id:'rf_warehouse', label:T('sku.label.warehouse'), value:'warehouse', name:'warehouseName',
+    wrap('fcReceiptSpecialFieldHtml', 'receipts', {
+      warehouse: {id:'rf_warehouse', key:'sku.label.warehouse', value:'warehouse', name:'warehouseName',
                   options:() => refs.warehouses},
-      supplier:  {id:'rf_supplier', label:T('server.message.supplier'), value:'supplier', name:'supplierName',
+      supplier:  {id:'rf_supplier', key:'col.receipts.supplier', value:'supplier', name:'supplierName',
                   options:() => refs.suppliers}
     });
-    wrap('fcOrderSpecialFieldHtml', {
-      warehouse: {id:'of_warehouse', label:T('sku.label.warehouse'), value:'warehouse', name:'warehouseName',
+    wrap('fcOrderSpecialFieldHtml', 'orders', {
+      warehouse: {id:'of_warehouse', key:'sku.label.warehouse', value:'warehouse', name:'warehouseName',
                   options:() => refs.warehouses},
-      consignee: {id:'of_consignee', label:T('partners.title.consignee'), value:'consignee', name:'consigneeName',
+      consignee: {id:'of_consignee', key:'partners.title.consignee', value:'consignee', name:'consigneeName',
                   options:() => refs.consignees}
     });
   }

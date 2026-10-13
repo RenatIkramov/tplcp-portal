@@ -256,7 +256,8 @@
 
   window.portalUnitDelete = async function(id){
     const r = state.rows.find(x => String(x.unitId) === String(id));
-    if (!window.confirm('Удалить «' + (r ? r.name : id) + '»?')) return;
+    if (!window.confirm(T('common.message.confirm_delete_named',
+        { name: r ? r.name : id }))) return;
     try {
       apply(await api('DELETE', '/api/units/' + encodeURIComponent(id)));
       render();

@@ -32,12 +32,17 @@
   // галочки иначе потерялись бы при переключении.
   const state = {
     depositorId: null, depositor: null,
-    tab: 'sections',          // sections | fields
-    group: null,              // активная подвкладка полей
+    tab: 'sections',          // sections | fields | labels
+    object: 'sku',            // объект на вкладке полей
+    group: null,              // подвкладка карточки товара
     warehouses: [],           // выданные склады
     settings: {hideTransfersTab: false},
-    columns: [],              // строки admin_depositor_columns по товару
-    draft: {}                 // columnId -> доступно ли (правки до сохранения)
+    columns: [],              // строки admin_depositor_columns по ВСЕМ таблицам
+    // Правки до сохранения. Ключ — «таблица.колонка»: одно имя колонки
+    // живёт в разных таблицах («вес» есть и в заказе, и в его строке),
+    // и по одному columnId они бы слиплись.
+    draft: {},                // доступно ли поле клиенту
+    defaults: {}              // показывать ли его сразу
   };
 
   const readOnly = () => currentUserRole === 'developer';
@@ -86,7 +91,7 @@
       + ' type="button" data-dep-tab="' + id + '">' + esc(T_(textKey)) + '</button>';
     return '<div class="admin-subtabs" id="depVisTabs">'
       + button('sections', 'admin.tab.sections_and_warehouses')
-      + button('fields', 'admin.tab.product_fields')
+      + button('fields', 'admin.tab.fields')
       // Переименование полей переехало сюда из отдельного раздела
       // администрирования: настройка одного клиента должна лежать
       // в одном месте.
@@ -132,63 +137,193 @@
       + '</div>';
   }
 
-  /* ================== Вкладка «Поля товаров» ================== */
+  /* ================== Вкладка «Поля» ================== */
 
-  /** Подвкладки в порядке карточки товара: порядок задаёт сама база. */
-  function groups(){
-    const out = [];
-    const seen = new Set();
-    state.columns.forEach(c => {
-      const key = c.groupKey || '';
-      if (!seen.has(key)){
-        seen.add(key);
-        out.push({key: key, label: c.groupLabel || key});
-      }
-    });
-    return out;
+  /**
+   * Объект поля по имени таблицы.
+   *
+   * Не берём из v_column_tables: там объект таблицы вычисляется как
+   * самый частый объект её колонок (mode), и состав перемещения
+   * попадает в «Товар» — колонок товара в нём больше, чем колонок
+   * самого перемещения. Для раскладки экрана это неверно: состав
+   * перемещения настраивают вместе с перемещением.
+   */
+  const OBJECT_OF_TABLE = {
+    sku: 'sku',
+    receipts: 'receipts', receiptComposition: 'receipts', receiptLineDetail: 'receipts',
+    orders: 'orders', orderComposition: 'orders', orderLineDetail: 'orders',
+    transfers: 'transfers', transferComposition: 'transfers',
+    transferLineDetail: 'transfers',
+    stock: 'stock', stockBatch: 'stock'
+  };
+
+  /** Порядок объектов на экране — от самого частого к редкому. */
+  const OBJECTS = [
+    {code: 'sku', key: 'references.title.products'},
+    {code: 'receipts', key: 'common.button.receipts'},
+    {code: 'orders', key: 'common.button.orders'},
+    {code: 'transfers', key: 'transfers.title.transfers'},
+    {code: 'stock', key: 'stock.title.stock'}
+  ];
+
+  const columnsOf = objectCode =>
+    state.columns.filter(c => OBJECT_OF_TABLE[c.tableKey] === objectCode);
+
+  /** Ключ правки: таблица и колонка — одно имя колонки живёт в разных таблицах. */
+  const draftKey = c => c.tableKey + '.' + c.columnId;
+
+  const isAvailable = c => {
+    const own = state.draft[draftKey(c)];
+    return own === undefined ? c.isAvailable !== false : own;
+  };
+
+  /** Сколько полей объекта закрыто клиенту — видно прямо на подвкладке. */
+  function hiddenCount(objectCode){
+    return columnsOf(objectCode).filter(c => !isAvailable(c)).length;
   }
 
-  function productFields(){
-    const groupList = groups();
-    if (!groupList.length){
+  function objectTabs(){
+    const available = OBJECTS.filter(o => columnsOf(o.code).length);
+    if (!available.some(o => o.code === state.object)){
+      state.object = (available[0] || {}).code;
+    }
+    return '<div class="admin-subtabs" style="margin-top:4px;">'
+      + available.map(o => {
+          const hidden = hiddenCount(o.code);
+          return '<button class="admin-subtab-btn'
+            + (o.code === state.object ? ' active' : '') + '" type="button"'
+            + ' data-dep-object="' + esc(o.code) + '">' + esc(T_(o.key))
+            + (hidden ? ' <span class="count">' + hidden + ' '
+                + esc(T_('admin.text.object_fields_count')) + '</span>' : '')
+            + '</button>';
+        }).join('')
+      + '</div>';
+  }
+
+  /**
+   * Строка поля: две галочки, как на прежнем экране колонок клиента.
+   *
+   * «Доступно» — видит ли клиент поле вообще. «Показывать сразу» —
+   * попадёт ли оно в таблицу по умолчанию; это разные вопросы, и
+   * раньше они были на разных экранах. Недоступное поле «показывать
+   * сразу» не может по определению, поэтому вторая галочка гаснет.
+   */
+  function fieldRow(c){
+    const available = isAvailable(c);
+    const byDefault = state.defaults[draftKey(c)] === undefined
+      ? c.isDefault !== false : state.defaults[draftKey(c)];
+    const locked = c.isLocked === true;
+    const box = (kind, checked, disabled) =>
+      '<input type="checkbox" data-field="' + kind + '"'
+      + ' data-column-id="' + esc(c.columnId) + '"'
+      + ' data-table-key="' + esc(c.tableKey) + '"'
+      + (checked ? ' checked' : '') + (disabled ? ' disabled' : '') + '>';
+    return '<div style="display:flex;align-items:center;gap:18px;font-size:13.5px;'
+      + 'padding:9px 0;border-bottom:1px solid var(--line);'
+      + (locked ? 'color:var(--muted);' : '') + '">'
+      + '<label style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;">'
+      + box('available', available, locked)
+      + '<span style="color:var(--ink);">' + esc(c.label) + '</span>'
+      + (locked
+          ? ' <span style="color:var(--muted);">· '
+            + esc(T_('admin.text.required_field_locked')) + '</span>'
+          : '')
+      + (c.label !== c.portalLabel
+          ? ' <span style="color:var(--muted);">· ' + esc(c.portalLabel) + '</span>'
+          : '')
+      + '</label>'
+      + '<label style="display:flex;align-items:center;gap:8px;color:var(--muted);'
+      + 'white-space:nowrap;">'
+      + box('default', byDefault, !available)
+      + esc(T_('references.column.show_at_once')) + '</label>'
+      + '</div>';
+  }
+
+  /**
+   * Подвкладки объекта — вкладки его карточки.
+   *
+   * У товара это восемь вкладок карточки товара (V35), у документа —
+   * общая информация, транспорт, доп. поля, состав и детали строки
+   * (V53). Правило одно: администратор настраивает поле там же, где
+   * клиент его видит, а не в списке «все поля подряд».
+   *
+   * Порядок задаём явно. По данным его не вывести: строки приходят
+   * отсортированными по имени таблицы, и состав поступления оказался бы
+   * раньше самого поступления просто потому, что receiptComposition
+   * идёт по алфавиту прежде receipts.
+   */
+  const GROUP_ORDER = [
+    'common.title.general_information',
+    'common.title.transport_section',
+    'common.title.additional_information',
+    'receipts.title.receipt_contents',
+    'orders.title.order_contents',
+    'transfers.title.transfer_contents',
+    'admin.table.line_details',
+    'admin.table.stock_lines',
+    'admin.table.details'
+  ];
+
+  function groups(objectCode){
+    const out = [];
+    const seen = new Set();
+    columnsOf(objectCode).forEach(c => {
+      const key = c.groupKey || '';
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push({key: key, label: c.groupLabel || key});
+    });
+    // Товар оставляем в порядке карточки — он задан сортировкой колонок
+    // в базе; остальные объекты расставляем по списку выше.
+    if (objectCode === 'sku') return out;
+    return out.sort((a, b) => {
+      const ia = GROUP_ORDER.indexOf(a.key);
+      const ib = GROUP_ORDER.indexOf(b.key);
+      return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+    });
+  }
+
+  /** Сколько полей вкладки закрыто клиенту. */
+  function hiddenInGroup(objectCode, groupKey){
+    return columnsOf(objectCode)
+      .filter(c => (c.groupKey || '') === groupKey && !isAvailable(c)).length;
+  }
+
+  function objectFields(objectCode){
+    const groupList = groups(objectCode);
+    if (!groupList.some(g => g.key === state.group)){
+      state.group = (groupList[0] || {}).key;
+    }
+    const subtabs = '<div class="admin-subtabs" style="margin-top:4px;">'
+      + groupList.map(g => {
+          const hidden = hiddenInGroup(objectCode, g.key);
+          return '<button class="admin-subtab-btn'
+            + (g.key === state.group ? ' active' : '') + '" type="button"'
+            + ' data-dep-group="' + esc(g.key) + '">' + esc(g.label)
+            + (hidden ? ' <span class="count">' + hidden + '</span>' : '')
+            + '</button>';
+        }).join('')
+      + '</div>';
+
+    const fields = columnsOf(objectCode).filter(c => (c.groupKey || '') === state.group);
+    return subtabs
+      + '<div class="table-card" style="padding:18px 20px;">'
+      + (fields.length
+          ? fields.map(fieldRow).join('')
+          : '<div style="color:var(--muted);font-size:13.5px;">'
+            + esc(T_('common.text.list_is_empty')) + '</div>')
+      + '</div>';
+  }
+
+  function fields(){
+    if (!state.columns.length){
       return '<div style="color:var(--muted);font-size:13.5px;">'
         + esc(T_('common.text.list_is_empty')) + '</div>';
     }
-    if (!groupList.some(g => g.key === state.group)) state.group = groupList[0].key;
-
-    const subtabs = '<div class="admin-subtabs" style="margin-top:4px;">'
-      + groupList.map(g => '<button class="admin-subtab-btn'
-          + (g.key === state.group ? ' active' : '') + '" type="button"'
-          + ' data-dep-group="' + esc(g.key) + '">' + esc(g.label) + '</button>').join('')
-      + '</div>';
-
-    const fields = state.columns.filter(c => (c.groupKey || '') === state.group);
-    const row = c => {
-      const available = state.draft[c.columnId] !== undefined
-        ? state.draft[c.columnId] : c.isAvailable !== false;
-      const locked = c.isLocked === true;
-      return '<label style="display:flex;align-items:center;gap:8px;font-size:13.5px;'
-        + 'padding:9px 0;border-bottom:1px solid var(--line);'
-        + (locked ? 'color:var(--muted);' : '') + '">'
-        + '<input type="checkbox" data-column-id="' + esc(c.columnId) + '"'
-        + (available ? ' checked' : '') + (locked ? ' disabled' : '') + '> '
-        + '<span style="color:var(--ink);">' + esc(c.label) + '</span>'
-        + (locked
-            ? ' <span style="color:var(--muted);">· '
-              + esc(T_('admin.text.required_field_locked')) + '</span>'
-            : '')
-        + (c.label !== c.portalLabel
-            ? ' <span style="color:var(--muted);">· ' + esc(c.portalLabel) + '</span>'
-            : '')
-        + '</label>';
-    };
-
-    return subtabs
-      + '<div class="table-card" style="padding:18px 20px;">'
-      + '  <div class="hint" style="margin:-4px 0 10px;">'
-      + esc(T_('admin.hint.product_fields')) + '</div>'
-      + fields.map(row).join('')
-      + '</div>';
+    return objectTabs()
+      + '<div class="hint" style="margin:10px 0 0;max-width:760px;">'
+      + esc(T_('admin.hint.depositor_fields')) + '</div>'
+      + objectFields(state.object);
   }
 
   /* ================== Сборка карточки ================== */
@@ -209,7 +344,7 @@
     const labels = state.tab === 'labels';
     const body = labels
       ? (PORTAL.fieldLabels ? PORTAL.fieldLabels.html() : '')
-      : (state.tab === 'fields' ? productFields() : warehousesAndSections());
+      : (state.tab === 'fields' ? fields() : warehousesAndSections());
     el.innerHTML = ''
       + '<div class="detail-head"><div>'
       + '  <h2>' + esc(d.orgName || '') + '</h2>'
@@ -224,6 +359,25 @@
     });
     el.querySelectorAll('[data-dep-group]').forEach(b => {
       b.onclick = () => { remember(); state.group = b.getAttribute('data-dep-group'); render(); };
+    });
+    el.querySelectorAll('[data-dep-object]').forEach(b => {
+      b.onclick = () => {
+        remember();
+        state.object = b.getAttribute('data-dep-object');
+        state.group = null;       // у нового объекта свои подвкладки
+        render();
+      };
+    });
+    // «Показывать сразу» без «Доступно» не бывает: гасим вторую галочку
+    // сразу, не дожидаясь перерисовки, иначе человек щёлкает и не видит
+    // отклика.
+    el.querySelectorAll('input[data-field="available"]').forEach(cb => {
+      cb.onchange = () => {
+        const pair = el.querySelector('input[data-field="default"][data-column-id="'
+          + cb.getAttribute('data-column-id') + '"][data-table-key="'
+          + cb.getAttribute('data-table-key') + '"]');
+        if (pair) pair.disabled = !cb.checked;
+      };
     });
 
     if (labels){
@@ -267,7 +421,9 @@
     if (!el) return;
     el.querySelectorAll('input[data-column-id]').forEach(cb => {
       if (cb.disabled) return;          // обязательные не трогаем
-      state.draft[cb.getAttribute('data-column-id')] = cb.checked;
+      const key = cb.getAttribute('data-table-key') + '.' + cb.getAttribute('data-column-id');
+      if (cb.getAttribute('data-field') === 'default') state.defaults[key] = cb.checked;
+      else state.draft[key] = cb.checked;
     });
     const warehouseList = [...el.querySelectorAll('input[data-warehouse-id]')];
     if (warehouseList.length) state.warehouses = warehouseList.filter(c => c.checked)
@@ -292,14 +448,26 @@
       // потому что база заводит запись лишь при отличии от портальной
       // настройки и сама убирает её, когда отличие исчезло.
       const changed = state.columns.filter(c => {
-        const before = c.isAvailable !== false;
-        const now = state.draft[c.columnId];
-        return now !== undefined && now !== before;
+        const key = c.tableKey + '.' + c.columnId;
+        const available = state.draft[key];
+        const byDefault = state.defaults[key];
+        return (available !== undefined && available !== (c.isAvailable !== false))
+            || (byDefault !== undefined && byDefault !== (c.isDefault !== false));
       });
       for (const c of changed){
+        const key = c.tableKey + '.' + c.columnId;
+        const available = state.draft[key] === undefined
+          ? c.isAvailable !== false : state.draft[key];
         await api('PUT', '/api/admin/depositor-columns', {
-          depositorId: state.depositorId, table: 'sku', columnId: c.columnId,
-          isAvailable: state.draft[c.columnId], isDefault: c.isDefault !== false
+          depositorId: state.depositorId,
+          // таблица своя у каждой строки: одно и то же поле настраивается
+          // отдельно в документе, в его составе и в деталях строки
+          table: c.tableKey,
+          columnId: c.columnId,
+          isAvailable: available,
+          // недоступное поле «показывать сразу» не может по определению
+          isDefault: available && (state.defaults[key] === undefined
+            ? c.isDefault !== false : state.defaults[key])
         });
       }
 
@@ -328,15 +496,19 @@
     state.depositorId = depositorId;
     state.depositor = d || {};
     state.tab = 'sections';
+    state.object = 'sku';
     state.group = null;
     state.draft = {};
+    state.defaults = {};
     try {
       const [warehouseList, issued, prefs, columnList] = await Promise.all([
         DEPVIS.warehouseList.length ? Promise.resolve(DEPVIS.warehouseList)
                              : api('GET', '/api/admin/warehouses'),
         api('GET', '/api/admin/depositors/' + encodeURIComponent(depositorId) + '/warehouses'),
         api('GET', '/api/admin/depositors/' + encodeURIComponent(depositorId) + '/settings'),
-        api('GET', '/api/admin/depositor-columns?table=sku&depositorId='
+        // Без table — вся раскладка клиента разом, по всем двенадцати
+        // таблицам: вкладка настраивает не только товар.
+        api('GET', '/api/admin/depositor-columns?depositorId='
             + encodeURIComponent(depositorId)),
         // наименования полей — третья вкладка этой же карточки
         PORTAL.fieldLabels ? PORTAL.fieldLabels.load(depositorId) : Promise.resolve()
@@ -363,6 +535,11 @@
 
     // Экран администрирования: склады и доступы по всем клиентам.
     PORTAL.onSession(async () => {
+      if (!PORTAL.isAdmin()){
+        DEPVIS.warehouseList = [];
+        DEPVIS.access = [];
+        return;
+      }
       try {
         const [warehouseList, access] = await Promise.all([
           api('GET', '/api/admin/warehouses'),

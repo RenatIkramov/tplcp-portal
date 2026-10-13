@@ -3,6 +3,7 @@ package com.ahlers.portal3pl.config;
 import com.ahlers.portal3pl.auth.PortalUser;
 import com.ahlers.portal3pl.auth.RememberMeService;
 import com.ahlers.portal3pl.auth.SessionUser;
+import com.ahlers.portal3pl.common.ActorText;
 import jakarta.servlet.Filter;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -22,16 +23,25 @@ import java.io.IOException;
  * интерфейса (на них написана сама форма входа). Всё остальное
  * под /api/ требует сессии и отвечает 401, если её нет, — экран по этому коду
  * показывает форму входа.
+ * <p>
+ * Фильтр отвечает сам, до контроллеров, поэтому общий обработчик отказов
+ * ({@code ApiErrorHandler}) сюда не достаёт: текст по ключу он собирает
+ * здесь же, через {@link ActorText}. Язык берётся из учётной записи, если
+ * пользователь уже известен (пароль выдан администратором и его надо
+ * сменить), иначе — язык портала по умолчанию: спрашивать язык у того,
+ * кто ещё не вошёл, не у кого.
  */
 @Component
 public class AuthFilter implements Filter {
 
     private final SessionUser session;
     private final RememberMeService rememberMe;
+    private final ActorText texts;
 
-    public AuthFilter(SessionUser session, RememberMeService rememberMe) {
+    public AuthFilter(SessionUser session, RememberMeService rememberMe, ActorText texts) {
         this.session = session;
         this.rememberMe = rememberMe;
+        this.texts = texts;
     }
 
     @Override
@@ -52,7 +62,7 @@ public class AuthFilter implements Filter {
 
             if (requiresLogin(path) && user == null) {
                 response(resp, HttpServletResponse.SC_UNAUTHORIZED,
-                        "{\"message\":\"Требуется вход в портал\"}");
+                        "{\"message\":" + json(texts.of("error.auth.sign_in_required")) + "}");
                 return;
             }
 
@@ -60,7 +70,8 @@ public class AuthFilter implements Filter {
             // не получает никаких данных — только экран смены пароля.
             if (user != null && user.mustChangePassword() && !allowedBeforePasswordChange(path)) {
                 response(resp, HttpServletResponse.SC_FORBIDDEN,
-                        "{\"message\":\"Требуется сменить пароль\",\"mustChangePassword\":true}");
+                        "{\"message\":" + json(texts.of("error.auth.password_change_required"))
+                                + ",\"mustChangePassword\":true}");
                 return;
             }
             chain.doFilter(request, response);
@@ -74,6 +85,28 @@ public class AuthFilter implements Filter {
         resp.setStatus(status);
         resp.setContentType("application/json; charset=utf-8");
         resp.getWriter().write(body);
+    }
+
+    /** Строка в JSON: тело здесь собирается руками, без Jackson. */
+    private static String json(String text) {
+        StringBuilder out = new StringBuilder("\"");
+        for (char c : text.toCharArray()) {
+            switch (c) {
+                case '"' -> out.append("\\\"");
+                case '\\' -> out.append("\\\\");
+                case '\n' -> out.append("\\n");
+                case '\r' -> out.append("\\r");
+                case '\t' -> out.append("\\t");
+                default -> {
+                    if (c < 0x20) {
+                        out.append(String.format("\\u%04x", (int) c));
+                    } else {
+                        out.append(c);
+                    }
+                }
+            }
+        }
+        return out.append('"').toString();
     }
 
     /** Что доступно, пока пароль не сменён: сам вход, выход, «кто я» и смена пароля. */

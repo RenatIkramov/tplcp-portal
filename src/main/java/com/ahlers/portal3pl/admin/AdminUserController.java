@@ -2,6 +2,7 @@ package com.ahlers.portal3pl.admin;
 
 import com.ahlers.portal3pl.auth.PortalUser;
 import com.ahlers.portal3pl.auth.SessionUser;
+import com.ahlers.portal3pl.common.ActorText;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -21,10 +22,12 @@ public class AdminUserController {
 
     private final AdminUserService users;
     private final SessionUser session;
+    private final ActorText texts;
 
-    public AdminUserController(AdminUserService users, SessionUser session) {
+    public AdminUserController(AdminUserService users, SessionUser session, ActorText texts) {
         this.users = users;
         this.session = session;
+        this.texts = texts;
     }
 
     @GetMapping
@@ -87,7 +90,7 @@ public class AdminUserController {
                                            @RequestBody PasswordRequest body,
                                            HttpServletRequest request) {
         users.setPassword(actor(request), userId, body.newPassword());
-        return Map.of("message", "Пароль задан. Пользователь сменит его при первом входе");
+        return Map.of("message", texts.of("info.user.password_set"));
     }
 
     private PortalUser actor(HttpServletRequest request) {

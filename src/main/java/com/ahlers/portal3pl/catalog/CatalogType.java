@@ -1,7 +1,6 @@
 package com.ahlers.portal3pl.catalog;
 
-import org.springframework.http.HttpStatus;
-import org.springframework.web.server.ResponseStatusException;
+import com.ahlers.portal3pl.common.Fail;
 
 import java.util.List;
 
@@ -43,7 +42,7 @@ public enum CatalogType {
                 return t;
             }
         }
-        throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Неизвестный справочник: " + path);
+        throw Fail.notFound("error.directory.unknown", "path", path);
     }
 
     public String view() {

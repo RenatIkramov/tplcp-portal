@@ -63,79 +63,100 @@
     currency_id: 'currency', hazard_class_id: 'hazardClass',
     hazard_group_id: 'hazardGroup'
   };
-  function fieldAllowed(column){
-    const id = COL_OF[column]
+  /** Колонка формы правки → колонка справочника колонок. */
+  function columnId(column){
+    return COL_OF[column]
       || column.replace(/_([a-z0-9])/g, (m, c) => c.toUpperCase());
-    return !PORTAL.fieldAllowed || PORTAL.fieldAllowed(id);
   }
 
+  function fieldAllowed(column){
+    return !PORTAL.fieldAllowed || PORTAL.fieldAllowed(columnId(column));
+  }
+
+  /**
+   * Подпись поля на экране правки.
+   *
+   * <p>Через общий PORTAL.fieldLabel: переименование клиентом сильнее
+   * перевода, и просмотр с правкой зовут поле одинаково. Номер
+   * доп. параметра приписывается после — переименовывают поле,
+   * а не его номер.
+   */
+  function fieldLabel(field){
+    return PORTAL.fieldLabel('sku', columnId(field.col), field.key)
+      + (field.suffix ? esc(field.suffix) : '');
+  }
+
+  // В списке лежат КЛЮЧИ текстов, а не готовые подписи. Готовая
+  // подпись здесь вычислялась бы при загрузке файла — до входа, то
+  // есть до того, как известен язык учётной записи и переименования
+  // полей клиентом. Разрешаем их в момент отрисовки, в fieldLabel().
   const TABS = {
     'sku.text.general_information': [
-      {col: 'item_code', label: T('col.sku.itemCode')},
-      {col: 'code', label: T('sku.text.commercial_code'), required: true},
-      {col: 'name', label: T('col.sku.name'), required: true},
-      {col: 'item_full_name', label: T('sku.label.full_item_name')},
+      {col: 'item_code', key: 'col.sku.itemCode'},
+      {col: 'code', key: 'sku.text.commercial_code', required: true},
+      {col: 'name', key: 'col.sku.name', required: true},
+      {col: 'item_full_name', key: 'sku.label.full_item_name'},
       // Справочников групп и типов больше нет (V38): это свободный
       // текст. Подсказка — значения, которые у этого клиента уже
       // встречаются, чтобы «Сырьё» не превратилось в «сырье», «Сырьё.»
       // и «Сырье » тремя разными группами.
-      {col: 'item_group', label: T('sku.label.product_group'), suggest: 'group',
+      {col: 'item_group', key: 'sku.label.product_group', suggest: 'group',
        readCol: 'itemGroupName'},
-      {col: 'item_type', label: T('stock.label.item_type'), suggest: 'type',
+      {col: 'item_type', key: 'stock.label.item_type', suggest: 'type',
        readCol: 'itemTypeName'},
-      {col: 'uom_id', label: T('sku.text.base_unit_of_measure'), dict: 'uom', required: true},
-      {col: 'barcode', label: T('sku.text.barcode')}
+      {col: 'uom_id', key: 'sku.text.base_unit_of_measure', dict: 'uom', required: true},
+      {col: 'barcode', key: 'sku.text.barcode'}
     ],
     'sku.text.physical_properties': [
-      {col: 'length', label: T('sku.label.length_cm'), num: true},
-      {col: 'width', label: T('references.column.width_cm'), num: true},
-      {col: 'height', label: T('sku.text.height_cm'), num: true},
-      {col: 'volume', label: T('sku.label.volume_m'), num: true},
-      {col: 'weight_gross', label: T('sku.text.gross_weight_kg'), num: true},
-      {col: 'weight_net', label: T('sku.label.net_weight_kg'), num: true},
-      {col: 'color', label: T('col.sku.color')},
-      {col: 'size', label: T('col.sku.size')}
+      {col: 'length', key: 'sku.label.length_cm', num: true},
+      {col: 'width', key: 'references.column.width_cm', num: true},
+      {col: 'height', key: 'sku.text.height_cm', num: true},
+      {col: 'volume', key: 'sku.label.volume_m', num: true},
+      {col: 'weight_gross', key: 'sku.text.gross_weight_kg', num: true},
+      {col: 'weight_net', key: 'sku.label.net_weight_kg', num: true},
+      {col: 'color', key: 'col.sku.color'},
+      {col: 'size', key: 'col.sku.size'}
     ],
     'sku.text.storage_conditions': [
-      {col: 'hazard_class_id', label: T('col.sku.hazardClass'), dict: 'hazard_class'},
-      {col: 'hazard_group_id', label: T('sku.text.hazard_group'), dict: 'hazard_group'},
-      {col: 'max_storage_temp', label: T('sku.text.max_storage_temperature_c'), num: true},
-      {col: 'min_storage_temp', label: T('sku.text.min_storage_temperature_c'), num: true},
-      {col: 'max_humidity', label: T('sku.label.max_storage_humidity'), num: true},
-      {col: 'min_humidity', label: T('sku.label.min_storage_humidity'), num: true},
-      {col: 'min_days_for_receipt', label: T('sku.text.minimum_days_for_receiving'), num: true},
-      {col: 'min_days_for_reservation', label: T('sku.label.minimum_days_for_reservation'), num: true},
-      {col: 'shelf_life_days', label: T('col.sku.shelfLifeDays'), num: true}
+      {col: 'hazard_class_id', key: 'col.sku.hazardClass', dict: 'hazard_class'},
+      {col: 'hazard_group_id', key: 'sku.text.hazard_group', dict: 'hazard_group'},
+      {col: 'max_storage_temp', key: 'sku.text.max_storage_temperature_c', num: true},
+      {col: 'min_storage_temp', key: 'sku.text.min_storage_temperature_c', num: true},
+      {col: 'max_humidity', key: 'sku.label.max_storage_humidity', num: true},
+      {col: 'min_humidity', key: 'sku.label.min_storage_humidity', num: true},
+      {col: 'min_days_for_receipt', key: 'sku.text.minimum_days_for_receiving', num: true},
+      {col: 'min_days_for_reservation', key: 'sku.label.minimum_days_for_reservation', num: true},
+      {col: 'shelf_life_days', key: 'col.sku.shelfLifeDays', num: true}
     ],
     'sku.text.manufacturer_and_classification': [
-      {col: 'manufacturer', label: T('sku.text.manufacturer')},
-      {col: 'country_origin', label: T('col.sku.countryOrigin')},
-      {col: 'brand', label: T('sku.label.brand')},
-      {col: 'abc_class', label: T('sku.label.abc_class')},
-      {col: 'xyz_class', label: T('sku.label.xyz_class')}
+      {col: 'manufacturer', key: 'sku.text.manufacturer'},
+      {col: 'country_origin', key: 'col.sku.countryOrigin'},
+      {col: 'brand', key: 'sku.label.brand'},
+      {col: 'abc_class', key: 'sku.label.abc_class'},
+      {col: 'xyz_class', key: 'sku.label.xyz_class'}
     ],
     'sku.text.codes_and_identifiers': [
-      {col: 'hs_code', label: T('sku.text.hs_code')},
-      {col: 'enstru_code', label: T('sku.text.enstru_code')},
-      {col: 'currency_id', label: T('col.sku.currency'), dict: 'currency'},
-      {col: 'cost', label: T('sku.text.cost'), num: true}
+      {col: 'hs_code', key: 'sku.text.hs_code'},
+      {col: 'enstru_code', key: 'sku.text.enstru_code'},
+      {col: 'currency_id', key: 'col.sku.currency', dict: 'currency'},
+      {col: 'cost', key: 'sku.text.cost', num: true}
     ],
     'sku.text.attributes_and_tracking': [
-      {col: 'is_fragile', label: T('sku.label.fragile'), bool: true},
-      {col: 'is_serial_tracked', label: T('sku.text.serial_number_tracking'), bool: true},
-      {col: 'batch_tracking', label: T('sku.label.batch_tracking'), yesNoText: true},
-      {col: 'expiry_tracking', label: T('col.sku.expiryTracking'), yesNoText: true},
-      {col: 'is_kit', label: T('col.sku.isKit'), bool: true},
-      {col: 'is_marking_required', label: T('sku.label.mandatory_labelling'), bool: true},
-      {col: 'is_excise', label: T('sku.label.excisable_goods'), bool: true},
-      {col: 'is_controlled', label: T('sku.label.controlled_licensed_goods'), bool: true}
+      {col: 'is_fragile', key: 'sku.label.fragile', bool: true},
+      {col: 'is_serial_tracked', key: 'sku.text.serial_number_tracking', bool: true},
+      {col: 'batch_tracking', key: 'sku.label.batch_tracking', yesNoText: true},
+      {col: 'expiry_tracking', key: 'col.sku.expiryTracking', yesNoText: true},
+      {col: 'is_kit', key: 'col.sku.isKit', bool: true},
+      {col: 'is_marking_required', key: 'sku.label.mandatory_labelling', bool: true},
+      {col: 'is_excise', key: 'sku.label.excisable_goods', bool: true},
+      {col: 'is_controlled', key: 'sku.label.controlled_licensed_goods', bool: true}
     ],
     'sku.text.system_information': [
-      {col: 'comment', label: T('sku.label.comment')}
+      {col: 'comment', key: 'sku.label.comment'}
     ],
     // Доп. параметров в базе десять, и правятся все десять.
     'sku.text.custom_attributes': [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(i => ({
-      col: 'custom_attr' + i, label: T('sku.label.custom_attribute')+' '+i
+      col: 'custom_attr' + i, key: 'sku.label.custom_attribute', suffix: ' ' + i
     }))
   };
 
@@ -199,7 +220,7 @@
         + (field.num ? ' step="any"' : '') + ' value="' + esc(v === null || v === undefined ? '' : v)
         + '" ' + name + '/>';
     }
-    return '<div class="kv"><label>' + esc(field.label) + (field.required ? ' *' : '')
+    return '<div class="kv"><label>' + fieldLabel(field) + (field.required ? ' *' : '')
       + '</label><div style="min-width:280px;">' + input + '</div></div>';
   }
 
@@ -449,8 +470,8 @@
 
   window.portalSkuDelete = async function(){
     // Подтверждение нужно: удаление необратимо, в отличие от архива
-    if (!window.confirm('Удалить товар «' + state.row.code + '» без возможности восстановления?\n'
-        + T('sku.text.if_it_is_used_anywhere_the_portal'))) return;
+    if (!window.confirm(T('sku.message.confirm_delete_item', { code: state.row.code })
+        + '\n' + T('sku.text.if_it_is_used_anywhere_the_portal'))) return;
     try {
       await api('DELETE', '/api/sku/' + state.skuId);
       await reloadList();
@@ -514,7 +535,8 @@
 
   window.portalPackagingDelete = async function(id){
     const r = state.packagings.find(p => p.packagingId === id);
-    if (!window.confirm('Удалить упаковку «' + (r ? r.packagingCode : id) + '»?')) return;
+    if (!window.confirm(T('sku.message.confirm_delete_packaging',
+        { code: r ? r.packagingCode : id }))) return;
     try {
       state.packagings = await api('DELETE', '/api/packagings/' + id);
       await reloadPackagingScreen();

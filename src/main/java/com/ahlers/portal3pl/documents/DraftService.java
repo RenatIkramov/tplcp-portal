@@ -1,11 +1,12 @@
 package com.ahlers.portal3pl.documents;
 
+import com.ahlers.portal3pl.common.ActorText;
+import com.ahlers.portal3pl.common.Fail;
+import com.ahlers.portal3pl.common.MsgRef;
 import com.ahlers.portal3pl.config.CurrentUser;
 import com.ahlers.portal3pl.config.DepositorScope;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -23,14 +24,17 @@ public class DraftService {
     private final DraftRepository drafts;
     private final DocumentRepository documents;
     private final WmsGateway wms;
+    private final ActorText texts;
 
     public DraftService(DepositorScope depositorScope, CurrentUser currentUser,
-                        DraftRepository drafts, DocumentRepository documents, WmsGateway wms) {
+                        DraftRepository drafts, DocumentRepository documents, WmsGateway wms,
+                        ActorText texts) {
         this.depositorScope = depositorScope;
         this.currentUser = currentUser;
         this.drafts = drafts;
         this.documents = documents;
         this.wms = wms;
+        this.texts = texts;
     }
 
     @Transactional
@@ -64,14 +68,12 @@ public class DraftService {
         String userId = currentUser.requireUserId();
 
         if (!currentUser.mayEditTransport()) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                    "Пользователю не разрешено редактировать транспортный раздел");
+            throw Fail.forbidden("error.transport.not_allowed");
         }
         Map<String, Object> state = state(type, docId);
         if (!Boolean.TRUE.equals(state.get("allowsTransportEdit"))) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "В статусе «" + state.getOrDefault("statusCode", "?")
-                            + "» транспортный раздел не редактируется");
+            throw Fail.conflict("error.transport.status_locked",
+                    "status", state.getOrDefault("statusCode", "?"));
         }
 
         drafts.updateHeader(type, docId, transport, DocumentType.transportColumns(), userId, false);
@@ -86,7 +88,7 @@ public class DraftService {
         currentUser.requireUserId();
         requireDraft(type, docId);
         if (drafts.deleteDraft(type, docId) == 0) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Черновик не найден");
+            throw Fail.notFound("error.draft.not_found");
         }
     }
 
@@ -113,7 +115,7 @@ public class DraftService {
             requirePositiveQty(type, line);
         }
         if (drafts.updateLine(type, docId, lineNumber, line) == 0) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Строка не найдена");
+            throw Fail.notFound("error.line.not_found");
         }
         return card(type, docId);
     }
@@ -166,10 +168,10 @@ public class DraftService {
         currentUser.requireUserId();
         requireDraft(type, docId);
 
-        List<String> problems = validateForConfirm(type, docId);
+        List<String> problems = problemTexts(type, docId);
         if (!problems.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_CONTENT,
-                    "Документ не готов к отправке: " + String.join("; ", problems));
+            throw Fail.unprocessable("error.document.not_ready",
+                    "problems", String.join("; ", problems));
         }
 
         String depositorId = depositorScope.currentDepositorId();
@@ -188,31 +190,48 @@ public class DraftService {
 
     /**
      * Что мешает подтвердить документ. Пустой список — можно отправлять.
-     * <p>
-     * Метод вызывают и снаружи (экран спрашивает, активна ли кнопка), и изнутри.
-     * Поэтому контекст поклажедателя выставляется здесь же: без него своя
-     * же транзакция не увидит документ — RLS отработает честно и вернёт пусто.
+     *
+     * <p>Метод вызывают и снаружи (экран спрашивает, активна ли кнопка),
+     * и изнутри. Поэтому контекст поклажедателя выставляется здесь же:
+     * без него своя же транзакция не увидит документ — RLS отработает
+     * честно и вернёт пусто.
+     *
+     * <p>Возвращаются ключи с подстановками, а не готовые фразы: причина —
+     * это ответ «чего не хватает», и он один для всех языков. Во фразу его
+     * превращает {@link #problemTexts}, когда известно, кому отвечаем.
      */
     @Transactional(readOnly = true)
-    public List<String> validateForConfirm(DocumentType type, String docId) {
+    public List<MsgRef> validateForConfirm(DocumentType type, String docId) {
         depositorScope.apply();
         Map<String, Object> state = state(type, docId);
-        List<String> problems = new ArrayList<>();
+        List<MsgRef> problems = new ArrayList<>();
 
         List<String> missing = drafts.missingRequired(type, docId);
         if (!missing.isEmpty()) {
-            problems.add("не заполнены поля: " + String.join(", ", missing));
+            problems.add(MsgRef.of("error.ready.fields_missing",
+                    "fields", String.join(", ", missing)));
         }
         if (number(state.get("lineCount")) == 0) {
-            problems.add("нет ни одной строки");
+            problems.add(MsgRef.of("error.ready.no_lines"));
         }
         if (number(state.get("badQtyCount")) > 0) {
-            problems.add("есть строки с нулевым или пустым количеством");
+            problems.add(MsgRef.of("error.ready.bad_quantity"));
         }
         if (number(state.get("unknownSkuCount")) > 0) {
-            problems.add("есть позиции, неизвестные WMS (" + number(state.get("unknownSkuCount")) + ")");
+            problems.add(MsgRef.of("error.ready.unknown_sku",
+                    "count", number(state.get("unknownSkuCount"))));
         }
         return problems;
+    }
+
+    /** Те же причины фразами на языке того, кто смотрит документ. */
+    @Transactional(readOnly = true)
+    public List<String> problemTexts(DocumentType type, String docId) {
+        List<String> out = new ArrayList<>();
+        for (MsgRef problem : validateForConfirm(type, docId)) {
+            out.add(texts.text(problem.key(), problem.params()));
+        }
+        return out;
     }
 
     @Transactional(readOnly = true)
@@ -220,19 +239,19 @@ public class DraftService {
         depositorScope.apply();
         List<Map<String, Object>> header = documents.header(type, docId);
         if (header.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Документ не найден");
+            throw Fail.notFound("error.document.not_found");
         }
         return Map.of(
                 "header", header.getFirst(),
                 "lines", documents.lines(type, docId),
                 "lineDetails", documents.lineDetails(type, docId, null),
-                "problems", validateForConfirm(type, docId));
+                "problems", problemTexts(type, docId));
     }
 
     private Map<String, Object> state(DocumentType type, String docId) {
         Map<String, Object> state = drafts.state(type, docId);
         if (state.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Документ не найден");
+            throw Fail.notFound("error.document.not_found");
         }
         return state;
     }
@@ -242,16 +261,14 @@ public class DraftService {
         Map<String, Object> state = state(type, docId);
         boolean draft = "draft".equals(state.get("statusCode")) && "portal".equals(state.get("origin"));
         if (!draft) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "Документ уже отправлен в WMS и из портала не редактируется");
+            throw Fail.conflict("error.document.sent_to_wms");
         }
     }
 
     private void requirePositiveQty(DocumentType type, Map<String, Object> line) {
         Object qty = line.get(type.plannedQtyColumn());
         if (qty == null || Double.parseDouble(qty.toString()) <= 0) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Количество должно быть больше нуля");
+            throw Fail.badRequest("error.quantity.must_be_positive");
         }
     }
 

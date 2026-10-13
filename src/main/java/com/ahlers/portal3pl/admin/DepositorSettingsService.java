@@ -1,11 +1,10 @@
 package com.ahlers.portal3pl.admin;
 
 import com.ahlers.portal3pl.auth.PortalUser;
-import org.springframework.http.HttpStatus;
+import com.ahlers.portal3pl.common.Fail;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -77,7 +76,7 @@ public class DepositorSettingsService {
      */
     private void requireDepositor(String depositorId) {
         if (depositorId == null || depositorId.isBlank()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Укажите поклажедателя");
+            throw Fail.badRequest("error.depositor.required");
         }
         boolean known = Boolean.TRUE.equals(jdbc.sql("""
                         SELECT EXISTS (SELECT 1 FROM dbo.admin_depositor_access()
@@ -87,7 +86,7 @@ public class DepositorSettingsService {
                 .query(Boolean.class)
                 .single());
         if (!known) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Поклажедатель не найден");
+            throw Fail.notFound("error.depositor.not_found");
         }
     }
 }

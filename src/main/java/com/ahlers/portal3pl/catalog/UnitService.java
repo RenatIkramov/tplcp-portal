@@ -1,13 +1,13 @@
 package com.ahlers.portal3pl.catalog;
 
+import com.ahlers.portal3pl.common.Fail;
+import com.ahlers.portal3pl.common.MsgRef;
 import com.ahlers.portal3pl.common.SqlRows;
 import com.ahlers.portal3pl.config.DepositorContext;
 import org.springframework.dao.DuplicateKeyException;
-import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -73,16 +73,14 @@ public class UnitService {
     public Map<String, Object> save(Integer id, Unit unit) {
         requireAdmin();
         if (isBlank(unit.symbol()) || isBlank(unit.name())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Заполните обозначение и наименование единицы измерения");
+            throw Fail.badRequest("error.unit.symbol_and_name_required");
         }
         if (isBlank(unit.mkeiCode())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Заполните код МКЕИ — по нему единицу опознают внешние системы");
+            throw Fail.badRequest("error.unit.mkei_required");
         }
-        requireFits("mkei_code", "Код МКЕИ", unit.mkeiCode());
-        requireFits("symbol", "Обозначение", unit.symbol());
-        requireFits("name", "Наименование", unit.name());
+        requireFits("mkei_code", "references.column.mkei_code", unit.mkeiCode());
+        requireFits("symbol", "references.column.unit_symbol", unit.symbol());
+        requireFits("name", "references.column.name", unit.name());
         requireUnique(id, unit);
         try {
             if (id == null) {
@@ -121,8 +119,7 @@ public class UnitService {
             // Сюда попадаем, только если строку завели одновременно
             // в двух сеансах: проверка выше уже прошла, а ограничение
             // в базе (V39) всё равно сработало.
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "Такая единица измерения уже есть в справочнике");
+            throw Fail.conflict("error.unit.duplicate");
         }
         return list();
     }
@@ -152,19 +149,17 @@ public class UnitService {
                 .findFirst()
                 .orElse(Map.of());
 
-        List<String> where = new ArrayList<>();
+        List<MsgRef> where = new ArrayList<>();
         long skuCount = count(usage.get("sku_count"));
         long stockCount = count(usage.get("stock_count"));
         if (skuCount > 0) {
-            where.add("в товарах (" + skuCount + ")");
+            where.add(MsgRef.of("error.usage.items", "count", skuCount));
         }
         if (stockCount > 0) {
-            where.add("в запасах (" + stockCount + ")");
+            where.add(MsgRef.of("error.usage.stock", "count", stockCount));
         }
         if (!where.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "Единица измерения используется " + String.join(", ", where)
-                            + ". Её можно отключить, но не удалить");
+            throw Fail.conflict("error.unit.in_use", "where", where);
         }
 
         jdbc.sql("DELETE FROM dbo.enum_uom WHERE id = :id")
@@ -193,7 +188,7 @@ public class UnitService {
      * <p>Ограничение читается из базы, а не вписано числом: иначе
      * проверка и схема однажды разойдутся.
      */
-    private void requireFits(String column, String label, String value) {
+    private void requireFits(String column, String labelKey, String value) {
         if (value == null) {
             return;
         }
@@ -208,8 +203,8 @@ public class UnitService {
                 .optional()
                 .orElse(null);
         if (limit != null && value.trim().length() > limit) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    label + ": не больше " + limit + " знаков");
+            throw Fail.badRequest("error.field.too_long",
+                    "field", MsgRef.of(labelKey), "limit", limit);
         }
     }
 
@@ -239,13 +234,10 @@ public class UnitService {
                 .query()
                 .listOfRows()) {
             if (String.valueOf(row.get("symbol")).equalsIgnoreCase(text(unit.symbol()))) {
-                throw new ResponseStatusException(HttpStatus.CONFLICT,
-                        "Единица измерения «" + text(unit.symbol())
-                                + "» уже есть в справочнике");
+                throw Fail.conflict("error.unit.symbol_taken", "symbol", text(unit.symbol()));
             }
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "Код МКЕИ " + text(unit.mkeiCode()) + " уже занят единицей «"
-                            + row.get("symbol") + "»");
+            throw Fail.conflict("error.unit.mkei_taken",
+                    "code", text(unit.mkeiCode()), "symbol", row.get("symbol"));
         }
     }
 
@@ -256,7 +248,7 @@ public class UnitService {
                 .query(Boolean.class)
                 .single());
         if (!exists) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Единица измерения не найдена");
+            throw Fail.notFound("error.unit.not_found");
         }
     }
 
@@ -270,9 +262,7 @@ public class UnitService {
 
     private void requireAdmin() {
         if (!isAdmin()) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                    "Единицы измерения общие для всех поклажедателей,"
-                            + " их ведёт администратор портала");
+            throw Fail.forbidden("error.access.units");
         }
     }
 

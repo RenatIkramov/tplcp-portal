@@ -1,13 +1,13 @@
 package com.ahlers.portal3pl.admin;
 
 import com.ahlers.portal3pl.auth.PortalUser;
+import com.ahlers.portal3pl.common.Fail;
+import com.ahlers.portal3pl.common.MsgRef;
 import com.ahlers.portal3pl.common.SqlRows;
 import org.springframework.dao.DuplicateKeyException;
-import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -87,10 +87,9 @@ public class PortalDirectoryService {
         Map<String, Object> clean = filter(values, WAREHOUSE_COLUMNS);
         String id = text(values.get("warehouse_id"));
         if (id == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Укажите идентификатор склада — тот же, что в WMS");
+            throw Fail.badRequest("error.warehouse.wms_id_required");
         }
-        requireFields(clean, List.of("code", "name"), "склад");
+        requireFields(clean, List.of("code", "name"), "error.warehouse.create_field_required");
 
         List<String> columns = new ArrayList<>(clean.keySet());
         String names = String.join(", ", columns);
@@ -110,8 +109,7 @@ public class PortalDirectoryService {
         try {
             spec.update();
         } catch (DuplicateKeyException e) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "Склад с таким идентификатором или кодом уже есть");
+            throw Fail.conflict("error.warehouse.duplicate");
         }
         return warehouseRow(id);
     }
@@ -128,8 +126,7 @@ public class PortalDirectoryService {
         }
         for (String field : List.of("code", "name")) {
             if (clean.containsKey(field) && isBlank(clean.get(field))) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                        "Поле «" + field + "» не может быть пустым");
+                throw Fail.badRequest("error.field.empty", "field", field);
             }
         }
         String assignments = clean.keySet().stream()
@@ -146,7 +143,7 @@ public class PortalDirectoryService {
         try {
             spec.update();
         } catch (DuplicateKeyException e) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Такой код склада уже есть");
+            throw Fail.conflict("error.warehouse.code_taken");
         }
         return warehouseRow(warehouseId);
     }
@@ -168,14 +165,14 @@ public class PortalDirectoryService {
         warehouseRow(warehouseId);
 
         Map<String, Object> usage = usage("warehouse_usage", warehouseId, "varchar");
-        List<String> where = new ArrayList<>();
-        addUsage(where, usage.get("receipts"), "поступлениях");
-        addUsage(where, usage.get("orders"), "заказах");
-        addUsage(where, usage.get("transfers"), "перемещениях");
-        addUsage(where, usage.get("stockRows"), "остатках");
-        addUsage(where, usage.get("depositors"), "доступах поклажедателей");
-        addUsage(where, usage.get("staff"), "доступах сотрудников");
-        requireUnused(where, "Склад");
+        List<MsgRef> where = new ArrayList<>();
+        addUsage(where, usage.get("receipts"), "error.usage.receipts");
+        addUsage(where, usage.get("orders"), "error.usage.orders");
+        addUsage(where, usage.get("transfers"), "error.usage.transfers");
+        addUsage(where, usage.get("stockRows"), "error.usage.stock");
+        addUsage(where, usage.get("depositors"), "error.usage.depositor_access");
+        addUsage(where, usage.get("staff"), "error.usage.staff_access");
+        requireUnused(where, "error.warehouse.in_use");
 
         jdbc.sql("DELETE FROM dbo.warehouse WHERE warehouse_id = :id::varchar")
                 .param("id", warehouseId)
@@ -208,8 +205,7 @@ public class PortalDirectoryService {
     public Map<String, Object> saveDepositor(PortalUser actor, String depositorId, Depositor d) {
         users.requireAdmin(actor);
         if (isBlank(d.code()) || isBlank(d.orgName())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "У поклажедателя обязательны код и наименование организации");
+            throw Fail.badRequest("error.depositor.code_and_name_required");
         }
         if (depositorId != null) {
             depositorRow(depositorId);    // есть ли такой — иначе 404
@@ -233,8 +229,7 @@ public class PortalDirectoryService {
                     .query(String.class)
                     .single();
         } catch (DuplicateKeyException e) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "Поклажедатель с кодом «" + d.code() + "» уже есть");
+            throw Fail.conflict("error.depositor.code_taken", "code", d.code());
         }
         return depositorRow(id);
     }
@@ -257,13 +252,13 @@ public class PortalDirectoryService {
         depositorRow(depositorId);
 
         Map<String, Object> usage = usage("depositor_usage", depositorId, "uuid");
-        List<String> where = new ArrayList<>();
-        addUsage(where, usage.get("users"), "выданных доступах");
-        addUsage(where, usage.get("items"), "товарах");
-        addUsage(where, usage.get("receipts"), "поступлениях");
-        addUsage(where, usage.get("orders"), "заказах");
-        addUsage(where, usage.get("stockRows"), "остатках");
-        requireUnused(where, "Поклажедатель");
+        List<MsgRef> where = new ArrayList<>();
+        addUsage(where, usage.get("users"), "error.usage.granted_access");
+        addUsage(where, usage.get("items"), "error.usage.items");
+        addUsage(where, usage.get("receipts"), "error.usage.receipts");
+        addUsage(where, usage.get("orders"), "error.usage.orders");
+        addUsage(where, usage.get("stockRows"), "error.usage.stock");
+        requireUnused(where, "error.depositor.in_use");
 
         jdbc.sql("SELECT dbo.admin_delete_depositor(:id::uuid)")
                 .param("id", depositorId)
@@ -280,25 +275,35 @@ public class PortalDirectoryService {
      */
     public enum EnumKind {
         ORDER_TYPES("order-types", "enum_order_type", "order_type_usage", "orders",
-                "заказах", "Тип заказа"),
+                "error.order_type"),
         RECEIPT_DOC_TYPES("receipt-doc-types", "enum_receipt_doc_type", "receipt_doc_type_usage",
-                "receipts", "поступлениях", "Тип документа");
+                "receipts", "error.receipt_doc_type");
 
         private final String path;
         private final String table;
         private final String usageFunction;
         private final String usageColumn;
-        private final String usageLabel;
-        private final String title;
+        private final String errorPrefix;
 
         EnumKind(String path, String table, String usageFunction, String usageColumn,
-                 String usageLabel, String title) {
+                 String errorPrefix) {
             this.path = path;
             this.table = table;
             this.usageFunction = usageFunction;
             this.usageColumn = usageColumn;
-            this.usageLabel = usageLabel;
-            this.title = title;
+            this.errorPrefix = errorPrefix;
+        }
+
+        /**
+         * Ключ сообщения об отказе для этого справочника.
+         *
+         * <p>Раньше здесь лежало русское название («Тип заказа»)
+         * и подставлялось в текст ошибки — в английском сообщении оно
+         * так и оставалось русским. Теперь у справочника свой ключ,
+         * и переводчик видит фразу целиком.
+         */
+        public String error(String what) {
+            return errorPrefix + "." + what;
         }
 
         public static EnumKind ofPath(String path) {
@@ -307,7 +312,7 @@ public class PortalDirectoryService {
                     return k;
                 }
             }
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Неизвестный справочник: " + path);
+            throw Fail.notFound("error.directory.unknown", "path", path);
         }
     }
 
@@ -330,8 +335,7 @@ public class PortalDirectoryService {
                                                  Integer id, EnumRow row) {
         users.requireAdmin(actor);
         if (isBlank(row.code()) || isBlank(row.name())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Заполните код и наименование");
+            throw Fail.badRequest("error.directory.code_and_name_required");
         }
         try {
             if (id == null) {
@@ -361,8 +365,7 @@ public class PortalDirectoryService {
                         .update();
             }
         } catch (DuplicateKeyException e) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    kind.title + " с кодом «" + row.code() + "» уже есть");
+            throw Fail.conflict(kind.error("code_taken"), "code", row.code());
         }
         return enumRows(actor, kind);
     }
@@ -378,9 +381,7 @@ public class PortalDirectoryService {
                 .query(Long.class)
                 .single();
         if (count != null && count > 0) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    kind.title + " используется в " + kind.usageLabel + " (" + count
-                            + "). Его можно отключить, но не удалить");
+            throw Fail.conflict(kind.error("in_use"), "count", count);
         }
         jdbc.sql("DELETE FROM dbo.%s WHERE id = :id".formatted(kind.table))
                 .param("id", id)
@@ -397,7 +398,7 @@ public class PortalDirectoryService {
                 .query()
                 .listOfRows();
         if (rows.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Склад не найден");
+            throw Fail.notFound("error.warehouse.not_found");
         }
         return new LinkedHashMap<>(asText(SqlRows.toCamelCase(rows)).getFirst());
     }
@@ -437,8 +438,7 @@ public class PortalDirectoryService {
     public Map<String, Object> saveOperator(PortalUser actor, String operatorId, Operator o) {
         users.requireAdmin(actor);
         if (isBlank(o.code()) || isBlank(o.name())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "У организации обязательны код и наименование");
+            throw Fail.badRequest("error.operator.code_and_name_required");
         }
         if (operatorId != null) {
             operatorRow(operatorId);      // есть ли такая — иначе 404
@@ -465,8 +465,7 @@ public class PortalDirectoryService {
                     .query(String.class)
                     .single();
         } catch (DuplicateKeyException e) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "Организация с кодом «" + o.code() + "» уже есть");
+            throw Fail.conflict("error.operator.code_taken", "code", o.code());
         }
         return operatorRow(id);
     }
@@ -495,12 +494,10 @@ public class PortalDirectoryService {
         operatorRow(operatorId);
 
         Map<String, Object> usage = usage("operator_usage", operatorId, "uuid");
-        List<String> where = new ArrayList<>();
-        addUsage(where, usage.get("depositors"), "поклажедатели");
+        List<MsgRef> where = new ArrayList<>();
+        addUsage(where, usage.get("depositors"), "error.usage.depositors");
         if (!where.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "Организация используется: " + String.join(", ", where)
-                            + ". Снимите её у поклажедателей или отправьте в архив.");
+            throw Fail.conflict("error.operator.in_use", "where", where);
         }
         jdbc.sql("SELECT dbo.admin_delete_operator(:id::uuid)")
                 .param("id", operatorId)
@@ -510,7 +507,7 @@ public class PortalDirectoryService {
 
     private Map<String, Object> operatorRow(String operatorId) {
         if (operatorId == null || operatorId.isBlank()) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Организация не найдена");
+            throw Fail.notFound("error.operator.not_found");
         }
         List<Map<String, Object>> rows;
         try {
@@ -520,10 +517,10 @@ public class PortalDirectoryService {
                     .listOfRows();
         } catch (org.springframework.dao.DataAccessException e) {
             // не-uuid в адресе — это «не найдено», а не ошибка сервера
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Организация не найдена");
+            throw Fail.notFound("error.operator.not_found");
         }
         if (rows.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Организация не найдена");
+            throw Fail.notFound("error.operator.not_found");
         }
         return new LinkedHashMap<>(asText(SqlRows.toCamelCase(rows)).getFirst());
     }
@@ -535,7 +532,7 @@ public class PortalDirectoryService {
                 .query()
                 .listOfRows();
         if (rows.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Поклажедатель не найден");
+            throw Fail.notFound("error.depositor.not_found");
         }
         return new LinkedHashMap<>(asText(SqlRows.toCamelCase(rows)).getFirst());
     }
@@ -547,7 +544,7 @@ public class PortalDirectoryService {
                 .query(Boolean.class)
                 .single());
         if (!exists) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, kind.title + " не найден");
+            throw Fail.notFound(kind.error("not_found"));
         }
     }
 
@@ -559,17 +556,16 @@ public class PortalDirectoryService {
                 .getFirst();
     }
 
-    private static void addUsage(List<String> where, Object count, String what) {
+    /** Место использования — тоже текст портала, поэтому ключом, а не словом. */
+    private static void addUsage(List<MsgRef> where, Object count, String key) {
         if (count != null && ((Number) count).longValue() > 0) {
-            where.add(what + " (" + count + ")");
+            where.add(MsgRef.of(key, "count", count));
         }
     }
 
-    private static void requireUnused(List<String> where, String what) {
+    private static void requireUnused(List<MsgRef> where, String messageKey) {
         if (!where.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    what + " используется в " + String.join(", ", where)
-                            + ". Его можно перевести в архив, но не удалить");
+            throw Fail.conflict(messageKey, "where", where);
         }
     }
 
@@ -586,11 +582,11 @@ public class PortalDirectoryService {
         return clean;
     }
 
-    private static void requireFields(Map<String, Object> clean, List<String> required, String what) {
+    private static void requireFields(Map<String, Object> clean, List<String> required,
+                                      String messageKey) {
         for (String field : required) {
             if (!clean.containsKey(field) || isBlank(clean.get(field))) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                        "Чтобы создать " + what + ", заполните поле «" + field + "»");
+                throw Fail.badRequest(messageKey, "field", field);
             }
         }
     }

@@ -1,10 +1,9 @@
 package com.ahlers.portal3pl.auth;
 
+import com.ahlers.portal3pl.common.Fail;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
-import org.springframework.web.server.ResponseStatusException;
 
 /**
  * Что портал помнит о текущем сеансе: кто вошёл и с каким поклажедателем
@@ -44,7 +43,7 @@ public class SessionUser {
     public PortalUser requireUser(HttpServletRequest request) {
         PortalUser user = currentUser(request);
         if (user == null) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Требуется вход в портал");
+            throw Fail.unauthorized("error.auth.sign_in_required");
         }
         return user;
     }

@@ -3,6 +3,7 @@ package com.ahlers.portal3pl.excel;
 import com.ahlers.portal3pl.auth.PortalUser;
 import com.ahlers.portal3pl.catalog.SkuColumns;
 import com.ahlers.portal3pl.catalog.SkuWriteService;
+import com.ahlers.portal3pl.common.Fail;
 import com.ahlers.portal3pl.common.SqlRows;
 import com.ahlers.portal3pl.config.CurrentUser;
 import com.ahlers.portal3pl.config.DepositorScope;
@@ -16,7 +17,6 @@ import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
-import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -123,8 +123,7 @@ public class SkuImportService {
 
             List<Map<String, Object>> parsed = parseRows(sheet, layout);
             if (parsed.isEmpty()) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                        "В файле нет ни одной заполненной строки");
+                throw Fail.badRequest("error.excel.no_rows");
             }
 
             String importId = createImport(user, depositorId, fileName, content.length, layout);
@@ -137,20 +136,16 @@ public class SkuImportService {
             // Повреждённый файл, не .xlsx внутри, пароль на книге —
             // причина человеку всё равно непонятна, а подробность
             // нужна в журнале, не на экране.
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Не удалось прочитать файл. Проверьте, что это .xlsx, "
-                            + "сохранённый из Excel, и без пароля");
+            throw Fail.badRequest("error.excel.unreadable");
         }
     }
 
     private void requireFile(String fileName, byte[] content) {
         if (content == null || content.length == 0) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Файл пуст");
+            throw Fail.badRequest("error.file.empty");
         }
         if (content.length > MAX_BYTES) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Файл больше 2 МБ. Для ста строк номенклатуры столько не нужно — "
-                            + "вероятно, выбран не тот файл");
+            throw Fail.badRequest("error.file.too_big");
         }
         // Проверяем по первым байтам, а не по расширению: переименованный
         // .doc с расширением .xlsx иначе дошёл бы до разбора и упал там
@@ -158,11 +153,10 @@ public class SkuImportService {
         boolean zip = content.length > 4 && content[0] == 'P' && content[1] == 'K'
                 && (content[2] == 3 || content[2] == 5 || content[2] == 7);
         if (!zip) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Это не файл Excel. Нужен .xlsx, сохранённый из Excel");
+            throw Fail.badRequest("error.file.not_excel");
         }
         if (fileName == null || fileName.isBlank()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Имя файла не передано");
+            throw Fail.badRequest("error.file.name_missing");
         }
     }
 
@@ -184,16 +178,14 @@ public class SkuImportService {
         }
         String marker = SkuTemplateService.markerOf(wb);
         if (marker != null && !marker.equalsIgnoreCase(depositorCode)) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "Файл сформирован для поклажедателя «" + marker
-                            + "», а вы работаете с «" + depositorCode + "»");
+            throw Fail.conflict("error.excel.other_depositor_marker",
+                    "marker", marker, "current", depositorCode);
         }
         if (marker == null) {
             String other = foreignCodeInName(fileName, depositorCode);
             if (other != null) {
-                throw new ResponseStatusException(HttpStatus.CONFLICT,
-                        "В имени файла указан поклажедатель «" + other
-                                + "», а вы работаете с «" + depositorCode + "»");
+                throw Fail.conflict("error.excel.other_depositor_name",
+                        "other", other, "current", depositorCode);
             }
         }
     }
@@ -229,14 +221,13 @@ public class SkuImportService {
                 return wb.getSheetAt(i);
             }
         }
-        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "В файле нет заполненных листов");
+        throw Fail.badRequest("error.excel.no_sheets");
     }
 
     private List<String> headers(Sheet sheet) {
         Row row = sheet.getRow(sheet.getFirstRowNum());
         if (row == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "В файле нет строки заголовков");
+            throw Fail.badRequest("error.excel.no_header_row");
         }
         DataFormatter fmt = new DataFormatter();
         List<String> out = new ArrayList<>();
@@ -259,9 +250,7 @@ public class SkuImportService {
                     .filter(h -> h != null && !h.isBlank())
                     .reduce((a, b) -> a + ", " + b)
                     .orElse("— ни одного");
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "В файле нет столбца с коммерческим кодом товара. "
-                            + "Найденные заголовки: " + found);
+            throw Fail.badRequest("error.excel.no_code_column", "headers", found);
         }
     }
 
@@ -282,9 +271,7 @@ public class SkuImportService {
                 continue;            // пустая строка шаблона — не данные
             }
             if (rows.size() >= MAX_ROWS) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                        "В файле больше " + MAX_ROWS + " строк с данными. "
-                                + "Разделите его на части");
+                throw Fail.badRequest("error.excel.too_many_rows", "limit", MAX_ROWS);
             }
             rows.add(parseRow(row, r + 1, layout, fmt, dictionaries, lengths,
                     existing, seenCode));
@@ -860,8 +847,7 @@ public class SkuImportService {
                 .listOfRows()
                 .stream()
                 .findFirst()
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
-                        "Загрузка не найдена — возможно, она уже отменена"));
+                .orElseThrow(() -> Fail.notFound("error.import.not_found_maybe_cancelled"));
     }
 
     /**
@@ -875,9 +861,7 @@ public class SkuImportService {
      */
     private void requireSameSession(PortalUser user, Map<String, Object> head) {
         if (!String.valueOf(head.get("user_id")).equals(user.userId())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "Эту загрузку начинал другой пользователь. "
-                            + "Загрузите файл заново");
+            throw Fail.conflict("error.import.other_user");
         }
     }
 
@@ -1067,8 +1051,7 @@ public class SkuImportService {
                 .listOfRows()
                 .stream()
                 .findFirst()
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
-                        "Загрузка не найдена — возможно, она уже отменена"));
+                .orElseThrow(() -> Fail.notFound("error.import.not_found_maybe_cancelled"));
 
         Map<String, Object> out = new LinkedHashMap<>(head);
         // JSONB отдаём текстом, а экран его разбирает. Иначе наружу
@@ -1118,7 +1101,7 @@ public class SkuImportService {
                 .param("imp", importId)
                 .update();
         if (n == 0) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Загрузка не найдена");
+            throw Fail.notFound("error.import.not_found");
         }
         jdbc.sql("DELETE FROM dbo.excel_import_row WHERE import_id = :imp::uuid")
                 .param("imp", importId)
