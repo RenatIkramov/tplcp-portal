@@ -32,7 +32,10 @@
   .utility-row{display:flex;align-items:center;gap:10px;color:rgba(255,255,255,.85);font-size:12.5px;}
   .utility-row a{color:rgba(255,255,255,.85);text-decoration:none;}
   .utility-row a:hover{color:#fff;text-decoration:underline;}
-  .utility-row > span:not(.lang):not(#userName){color:rgba(255,255,255,.25);}
+  /* :not(#userName) здесь был лишним: элемента с таким id в портале нет
+     и не было. Исключение, которое ничего не исключает, при чтении
+     правила заставляет искать несуществующий элемент. */
+  .utility-row > span:not(.lang){color:rgba(255,255,255,.25);}
   .utility-row.muted{color:rgba(255,255,255,.5);font-size:12px;}
   .utility-row.muted a{color:rgba(255,255,255,.7);text-decoration:underline;}
   .lang{display:flex;gap:6px;position:relative;}
@@ -247,12 +250,12 @@
   .line-info-row:last-child{border-bottom:none;}
   .line-info-row .li-label{color:var(--muted);flex-shrink:0;}
   .line-info-row .li-value{font-weight:600;text-align:right;word-break:break-word;overflow-wrap:anywhere;min-width:0;}
-  .line-info-row.stack{flex-direction:column;gap:4px;}
-  .line-info-row.stack .li-value{text-align:left;}
+  /* Классов .line-info-row.stack и .empty-note не ставит ни вёрстка,
+     ни код портала — удалены. Мёртвое правило опаснее отсутствующего:
+     однажды кто-то напишет class="stack", увидит, что оформление есть,
+     и будет считать его поддержанным. */
 
   .section-title{font-size:15px;font-weight:600;margin:22px 0 10px;}
-
-  .empty-note{padding:40px;text-align:center;color:var(--muted);font-size:13.5px;}
 
   /* ===== Admin ===== */
   .admin-subtabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:18px;flex-wrap:wrap;}

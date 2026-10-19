@@ -105,9 +105,20 @@ public enum DocumentType {
      * не попадёт произвольное имя колонки, пришедшее снаружи.
      */
     public java.util.Set<String> editableHeaderColumns() {
+        // Чего здесь нарочно нет:
+        //
+        //   doc_date      — дату создания ставит база при создании черновика,
+        //                   вводить её человеку незачем;
+        //   cargo_places,
+        //   pallet_count,
+        //   total_pieces,
+        //   weight_kg,
+        //   volume_m3     — это измеренные склада́ми факты, они приходят
+        //                   из WMS. Портал их показывает, но не задаёт:
+        //                   иначе в документе соседствовали бы «сколько
+        //                   обещали» и «сколько приняли» под одним именем.
         java.util.Set<String> common = new java.util.LinkedHashSet<>(java.util.List.of(
-                "erp_number", "doc_date", "comment", "trip",
-                "total_pieces", "cargo_places", "pallet_count", "weight_kg", "volume_m3",
+                "erp_number", "comment", "trip",
                 "custom_field_1", "custom_field_2", "custom_field_3", "custom_field_4",
                 "custom_field_5", "custom_field_6", "custom_field_7", "custom_field_8",
                 "custom_field_9", "custom_field_10"));
@@ -118,8 +129,12 @@ public enum DocumentType {
             case ORDERS -> common.addAll(java.util.List.of(
                     "warehouse_id", "consignee_id", "delivery_point_id", "consignee_contact",
                     "order_type_id", "planned_ship_date", "delivery_date"));
+            // Дату отгрузки перемещения портал не задаёт: её ставит склад,
+            // когда действительно отгружает. Поэтому её нет и среди
+            // обязательных для подтверждения — требовать то, чего нельзя
+            // заполнить, значит запереть документ навсегда.
             case TRANSFERS -> common.addAll(java.util.List.of(
-                    "from_warehouse_id", "to_warehouse_id", "ship_date"));
+                    "from_warehouse_id", "to_warehouse_id"));
         }
         return common;
     }
@@ -156,12 +171,29 @@ public enum DocumentType {
         };
     }
 
-    /** Поля, без которых документ нельзя подтвердить. */
-    public java.util.List<String> requiredForConfirm() {
+    /**
+     * Поля, без которых документ нельзя подтвердить: колонка базы → колонка
+     * справочника колонок.
+     *
+     * <p>Второе значение нужно, чтобы назвать поле человеку так, как оно
+     * подписано у него на экране. Соответствие задано списком, а не
+     * правилом перевода имени: {@code eta_date} в справочнике зовётся
+     * {@code eta}, а {@code planned_ship_date} — {@code plannedShip},
+     * и никакое механическое преобразование этого не угадает.
+     */
+    public java.util.Map<String, String> requiredForConfirm() {
         return switch (this) {
-            case RECEIPTS -> java.util.List.of("warehouse_id", "supplier_id", "eta_date");
-            case ORDERS -> java.util.List.of("warehouse_id", "consignee_id", "planned_ship_date");
-            case TRANSFERS -> java.util.List.of("from_warehouse_id", "to_warehouse_id", "ship_date");
+            case RECEIPTS -> new java.util.LinkedHashMap<>(java.util.Map.of(
+                    "warehouse_id", "warehouse",
+                    "supplier_id", "supplier",
+                    "eta_date", "eta"));
+            case ORDERS -> new java.util.LinkedHashMap<>(java.util.Map.of(
+                    "warehouse_id", "warehouse",
+                    "consignee_id", "consignee",
+                    "planned_ship_date", "plannedShip"));
+            case TRANSFERS -> new java.util.LinkedHashMap<>(java.util.Map.of(
+                    "from_warehouse_id", "fromWarehouse",
+                    "to_warehouse_id", "toWarehouse"));
         };
     }
 }

@@ -337,9 +337,9 @@
       // видимость разделов зависит от клиента, поэтому спрашиваем заново
       await PORTAL.refreshSettings();
       PORTAL.reloadAll();
-      if (typeof notify === 'function') notify('Выбран поклажедатель: ' + PORTAL.depositorName);
+      if (typeof notify === 'function') notify(T('auth.message.depositor_selected', {name: PORTAL.depositorName}));
     } catch (e){
-      if (typeof notify === 'function') notify('Не удалось переключить: ' + e.message);
+      if (typeof notify === 'function') notify(T('auth.message.depositor_switch_failed', {error: e.message}));
     }
   };
   // в прототипе у кладовщика был свой переключатель — теперь он общий

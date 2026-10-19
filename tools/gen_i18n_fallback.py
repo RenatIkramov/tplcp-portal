@@ -75,6 +75,14 @@ SQL = ("SELECT json_object_agg(k.text_key, t.value) "
 # (PortalMessages) и присылает уже фразой, экран ключа не видит.
 # Фильтруем по корню ключа, а не только запросом: тексты могут прийти
 # и от работающего портала (--url), и из файла (--from-json).
+#
+# Исключение - ключ с таким корнем, который зовёт сама статика. Такие
+# есть: core.js подставляет error.status.not_found и error.status.conflict
+# на ответы 404 и 409, а i18n.js - info.password.changed. Отфильтровать их
+# значит показать человеку строку "error.status.not_found" вместо
+# сообщения - ровно в тот момент, когда что-то и так не работает.
+# Поэтому фильтр пропускает только то, на что из статики никто
+# не ссылается.
 SERVER_PREFIXES = ('error.', 'info.')
 
 
@@ -246,7 +254,9 @@ def main() -> int:
         texts = from_psql(args)
     else:
         texts = from_portal(args.url)
-    texts = {k: v for k, v in texts.items() if not k.startswith(SERVER_PREFIXES)}
+    in_static = keys_in_static()
+    texts = {k: v for k, v in texts.items()
+             if not k.startswith(SERVER_PREFIXES) or k in in_static}
     say(f'текстов получено: {len(texts)}')
 
     content = FALLBACK.read_text(encoding='utf-8')

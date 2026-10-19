@@ -323,7 +323,11 @@
       say(outcome(kind, response));
       // Справочник под окном показывает прежний список: перечитываем
       // его, чтобы созданные позиции были на месте, когда окно закроют.
-      if (typeof PORTAL.reloadProducts === 'function') PORTAL.reloadProducts();
+      // Ждём: без await применение считалось бы законченным раньше, чем
+      // список перечитан, и человек, закрывший окно сразу, увидел бы
+      // прежние строки. Отказа здесь быть не может — load() в catalog.js
+      // ловит его сам и показывает «Данные недоступны» в таблице.
+      if (typeof PORTAL.reloadProducts === 'function') await PORTAL.reloadProducts();
     } catch (e){
       say(e.message);
       if (button) button.disabled = false;

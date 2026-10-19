@@ -65,7 +65,7 @@
   window.portalOpenSku = function(code){
     const row = (PORTAL.catalog.sku || []).find(s => s.code === code);
     if (!row){
-      if (typeof notify === 'function') notify('Товар ' + code + ' не найден в загруженном списке');
+      if (typeof notify === 'function') notify(T('sku.message.not_in_loaded_list', {code: code}));
       return;
     }
     const p = toProduct(row);
@@ -88,7 +88,7 @@
     const row = (PORTAL.rows || []).find(r => r.code === code);
     const sku = (PORTAL.catalog.sku || []).find(s => s.code === code);
     if (!row){
-      if (typeof notify === 'function') notify('Товар ' + code + ' не найден в списке запасов');
+      if (typeof notify === 'function') notify(T('sku.message.not_in_stock_list', {code: code}));
       return;
     }
     try {
@@ -117,7 +117,7 @@
       products.push(p);
       if (typeof openProduct === 'function') openProduct(code);
     } catch (e){
-      if (typeof notify === 'function') notify('Не удалось получить партии: ' + e.message);
+      if (typeof notify === 'function') notify(T('sku.message.batches_failed', {error: e.message}));
     }
   };
 
@@ -155,12 +155,17 @@
 
   function toTransfer(t){
     return {
-      no: t.documentNo, erpNo: t.documentNo, wmsNumber: dash(t.docNumber),
+      // «Номер» — номер в ERP клиента, «ID документа» — номер портала.
+      // См. тот же разбор в docs.js: подставлять в «Номер» номер портала
+      // значит показывать человеку чужое число как его собственное.
+      no: t.documentNo, erpNo: dash(t.erpNumber), wmsNumber: dash(t.docNumber),
       status: BADGE[t.statusCode] || 'warn', statusLabel: t.statusName || '',
-      date: ruDate(t.docDate), dateIso: t.docDate,
+      // Дата создания и дата отгрузки — отметки времени с V62: показываем
+      // со временем, а фильтруем по местному дню (см. PORTAL.localDay).
+      date: PORTAL.dateTimeText(t.docDate), dateIso: PORTAL.localDay(t.docDate),
       fromWarehouse: t.fromWarehouseName, toWarehouse: t.toWarehouseName,
       warehouse: t.fromWarehouseName,
-      shipDate: ruDate(t.shipDate), receivedDate: ruDate(t.receivedDate),
+      shipDate: PORTAL.dateTimeText(t.shipDate), receivedDate: ruDate(t.receivedDate),
       author: dash(t.authorName), trip: dash(t.trip), comment: dash(t.comment),
       lineCount: n(t.lineCount), totalPieces: n(t.totalPieces),
       weight: n(t.weightKg), volume: n(t.volumeM3),
@@ -203,7 +208,11 @@
     const tripQ = (document.getElementById('transfersSearchTrip')?.value || '').trim().toLowerCase();
     const fromISO = document.getElementById('transfersDateFrom')?.value || '';
     const toISO = document.getElementById('transfersDateTo')?.value || '';
-    if (noQ) rows = rows.filter(t => (t.no || '').toLowerCase().includes(noQ));
+    // Поиск по номеру ищет во всех трёх номерах: человек набирает
+    // то, что у него перед глазами, а перед глазами бывает любой.
+    if (noQ) rows = rows.filter(t => (t.no || '').toLowerCase().includes(noQ)
+                                  || (t.erpNo || '').toLowerCase().includes(noQ)
+                                  || (t.wmsNumber || '').toLowerCase().includes(noQ));
     if (tripQ) rows = rows.filter(t => (t.trip || '').toLowerCase().includes(tripQ));
     if (fromISO) rows = rows.filter(t => (t.dateIso || '') >= fromISO);
     if (toISO) rows = rows.filter(t => (t.dateIso || '') <= toISO);
@@ -230,6 +239,10 @@
     patchBatchColumns();
     patchTransferColumns();
     window.renderTransfers = renderTransfersFromApi;
+    // Список перемещений живёт здесь, а поступления и заказы — в docs.js.
+    // Общее «перечитать списки документов» должно обновлять все три,
+    // иначе созданное или сохранённое перемещение в списке не появится.
+    PORTAL.reloadTransfers = loadTransfers;
     PORTAL.onLogin(loadTransfers);
   }
 

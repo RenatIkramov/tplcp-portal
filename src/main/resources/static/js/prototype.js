@@ -5403,7 +5403,7 @@ function saveAdminDepositorAccessEdit(depositorId){
   const checked = [...document.querySelectorAll('#adminUserEditContent input[data-warehouse-id]:checked')].map(cb=>cb.dataset.warehouseId);
   DEPOSITOR_WAREHOUSES[depositorId] = checked;
   persistAdminState();
-  notify(T('admin.text.accessible_warehouses_updated') + DEPOSITORS[depositorId].name);
+  notify(T('admin.text.accessible_warehouses_updated', {name: DEPOSITORS[depositorId].name}));
   renderAdminDepositorAccess();
   if(currentDepositorId === depositorId) updateWarehouseFilterUI(depositorId);
   showView('admin');
@@ -5678,7 +5678,7 @@ function saveAdminAccessEdit(login){
   u.allowedDepositors = checked;
   if(!checked.includes(u.defaultDepositor)) u.defaultDepositor = checked[0] || 'none';
   persistAdminState();
-  notify(T('admin.text.access_updated') + u.full_name);
+  notify(T('admin.text.access_updated', {name: u.full_name}));
   renderAdminAccess();
   showView('admin');
   showAdminSub('access');

@@ -29,15 +29,29 @@
 
   function commonFields(r){
     return {
+      // Три номера у документа, и путать их нельзя:
+      //   erpNo      — колонка «Номер»: номер документа в ERP клиента.
+      //                Это его номер, по нему он документ и зовёт;
+      //   no         — колонка «ID документа»: номер, который выдал
+      //                портал. По умолчанию колонка скрыта, включается
+      //                через ⚙ Колонки;
+      //   wmsNumber  — колонка «Номер документа в WMS».
+      //
+      // Раньше в «Номер» подставлялся номер портала — «чтобы колонка
+      // не пустовала». Выходило хуже пустоты: человек видел в поле
+      // «номер в ERP» чужое число и считал его своим.
       no: r.documentNo,
-      erpNo: r.documentNo,            // колонка «Номер» в демо
-      erpNumber: dash(r.erpNumber),   // номер в ERP — отдельная колонка
+      erpNo: dash(r.erpNumber),
+      erpNumber: dash(r.erpNumber),   // по нему работает поиск по номеру
       wmsNumber: dash(r.docNumber),
       status: BADGE[r.statusCode] || 'warn',
       statusLabel: r.statusName || '',
       statusCode: r.statusCode,
-      date: ruDate(r.docDate),
-      dateIso: r.docDate,
+      // Дата создания — отметка времени с V62, поэтому показываем её
+      // со временем и фильтруем по местному дню, а не по первым десяти
+      // знакам ISO: там мгновение по UTC.
+      date: PORTAL.dateTimeText(r.docDate),
+      dateIso: PORTAL.localDay(r.docDate),
       author: dash(r.authorName),
       trip: dash(r.trip),
       comment: dash(r.comment),
@@ -81,7 +95,9 @@
     deliveryAddress: dash(o.deliveryAddress),
     orderType: dash(o.orderTypeName),
     plannedShip: ruDate(o.plannedShipDate),
-    ship: ruDate(o.shipDate),
+    // Дата отгрузки с V62 со временем, планируемая осталась днём:
+    // первое — событие, второе — обещание на день.
+    ship: PORTAL.dateTimeText(o.shipDate),
     deliveryDate: ruDate(o.deliveryDate)
   });
 
@@ -191,17 +207,21 @@
     statusBar(table);
   }
 
-  /** Карточка документа появится следующим шагом — пока подсказка. */
-  window.portalOpenDocument = function(no){
-    if (typeof notify === 'function'){
-      notify('Карточка документа ' + no + ' подключается к API следующим шагом');
-    }
-  };
+  // Заглушка portalOpenDocument удалена: карточку открывает card.js,
+  // а редактор черновика — draft.js, и оба грузятся позже этого файла.
 
   /** Перезагрузка списков — используется редактором черновиков. */
+  /**
+   * Перечитать списки документов — все три.
+   *
+   * <p>Перемещения загружает другой файл, поэтому они подключаются
+   * через PORTAL.reloadTransfers. Без этого созданное перемещение
+   * в списке не появлялось: обновлялись только поступления и заказы.
+   */
   window.portalReloadDocuments = function(){
     load('receipts');
     load('orders');
+    if (typeof PORTAL.reloadTransfers === 'function') PORTAL.reloadTransfers();
   };
 
   function install(){

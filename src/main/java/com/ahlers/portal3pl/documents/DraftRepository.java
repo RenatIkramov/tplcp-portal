@@ -26,7 +26,14 @@ public class DraftRepository {
         this.jdbc = jdbc;
     }
 
-    /** Создаёт пустой черновик и возвращает его doc_id. */
+    /**
+     * Создаёт пустой черновик и возвращает его doc_id.
+     *
+     * <p>Дата создания — {@code now()}, а не {@code current_date}: с V62
+     * это отметка времени с точностью до минуты. На складе за день
+     * проходит несколько машин, и «в какой именно момент документ
+     * появился» — не праздный вопрос при разборе расхождений.
+     */
     public String createDraft(DocumentType type, String depositorId, String userId) {
         String sql = """
                 INSERT INTO dbo.%s (document_no, depositor_id, status_id, doc_date,
@@ -35,7 +42,7 @@ public class DraftRepository {
                         :depositorId::uuid,
                         (SELECT id FROM dbo.enum_status
                           WHERE object_type_id = :objectType AND code = 'draft'),
-                        current_date, 'portal', :userId::uuid, :userId::uuid, now())
+                        now(), 'portal', :userId::uuid, :userId::uuid, now())
                 RETURNING doc_id::text
                 """.formatted(type.headerTable());
         return jdbc.sql(sql)
@@ -202,33 +209,79 @@ public class DraftRepository {
                          WHERE d.doc_id = h.doc_id AND NOT s.is_in_wms) AS unknown_sku_count,
                        (SELECT COUNT(*) FROM dbo.%s d
                          WHERE d.doc_id = h.doc_id AND d.batch_number IS NULL
-                           AND (d.%s IS NULL OR d.%s <= 0)) AS bad_qty_count
+                           AND (d.%s IS NULL OR d.%s <= 0)) AS bad_qty_count,
+                       %s AS same_warehouse
                 FROM dbo.%s h
                 LEFT JOIN dbo.enum_status st ON st.id = h.status_id
                 WHERE h.doc_id = :docId::uuid
                 """.formatted(type.lineTable(), type.lineTable(), type.lineTable(),
-                type.plannedQtyColumn(), type.plannedQtyColumn(), type.headerTable());
+                type.plannedQtyColumn(), type.plannedQtyColumn(), sameWarehouse(type),
+                type.headerTable());
         List<Map<String, Object>> rows = jdbc.sql(sql).param("docId", docId).query().listOfRows();
         return rows.isEmpty() ? Map.of() : SqlRows.toCamelCase(rows).getFirst();
     }
 
-    /** Какие обязательные поля шапки не заполнены. */
-    public List<String> missingRequired(DocumentType type, String docId) {
-        List<String> required = type.requiredForConfirm();
+    /**
+     * Совпадают ли склады у перемещения.
+     *
+     * <p>Выражение подставляется в запрос, а не считается в Java, потому
+     * что остальные признаки состояния документа считаются там же —
+     * одним проходом по шапке. У поступлений и заказов второго склада
+     * нет вовсе, поэтому для них это всегда «нет».
+     */
+    private static String sameWarehouse(DocumentType type) {
+        return type == DocumentType.TRANSFERS
+                ? "(h.from_warehouse_id IS NOT NULL AND h.from_warehouse_id = h.to_warehouse_id)"
+                : "false";
+    }
+
+    /**
+     * Какие обязательные поля шапки не заполнены — ПОДПИСЯМИ, а не именами
+     * колонок базы.
+     *
+     * <p>Человеку показывали «не заполнены поля: to_warehouse_id, ship_date».
+     * Имя колонки базы ему ничего не говорит и ни с чем на экране
+     * не совпадает. Подпись берём там же, где её берёт сам экран, —
+     * из справочника колонок: с переводом на язык пользователя и
+     * с переименованием, если клиент назвал поле по-своему.
+     *
+     * <p>Если подписи вдруг не нашлось, показываем имя колонки: это хуже,
+     * но честнее пустоты, и сразу видно, какое поле выпало из справочника.
+     */
+    public List<String> missingRequired(DocumentType type, String docId,
+                                        String userId, String localeCode) {
+        Map<String, String> required = type.requiredForConfirm();
         String sql = "SELECT %s FROM dbo.%s WHERE doc_id = :docId::uuid"
-                .formatted(String.join(", ", required), type.headerTable());
+                .formatted(String.join(", ", required.keySet()), type.headerTable());
         List<Map<String, Object>> rows = jdbc.sql(sql).param("docId", docId).query().listOfRows();
-        if (rows.isEmpty()) {
-            return required;
-        }
-        Map<String, Object> row = rows.getFirst();
+        Map<String, Object> row = rows.isEmpty() ? Map.of() : rows.getFirst();
+
+        Map<String, String> labels = labels(type, userId, localeCode);
         List<String> missing = new ArrayList<>();
-        for (String column : required) {
-            if (row.get(column) == null) {
-                missing.add(column);
+        required.forEach((column, columnId) -> {
+            if (rows.isEmpty() || row.get(column) == null) {
+                missing.add(labels.getOrDefault(columnId, column));
             }
-        }
+        });
         return missing;
+    }
+
+    /** Подписи колонок таблицы так, как их видит этот пользователь. */
+    private Map<String, String> labels(DocumentType type, String userId, String localeCode) {
+        Map<String, String> out = new java.util.LinkedHashMap<>();
+        if (userId == null || userId.isBlank()) {
+            return out;
+        }
+        jdbc.sql("SELECT column_id, label FROM dbo.table_columns(:user::uuid, :locale::text,"
+                        + " :table::text)")
+                .param("user", userId)
+                .param("locale", localeCode == null || localeCode.isBlank() ? "en" : localeCode)
+                .param("table", type.path())
+                .query()
+                .listOfRows()
+                .forEach(r -> out.put(String.valueOf(r.get("column_id")),
+                        String.valueOf(r.get("label"))));
+        return out;
     }
 
     /** Запись в журнал обменов — пока отправка в WMS заглушена (Р5). */

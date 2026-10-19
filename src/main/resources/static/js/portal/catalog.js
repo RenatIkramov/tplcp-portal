@@ -114,9 +114,8 @@
     if (typeof updateTopScrollWidth === 'function') setTimeout(() => updateTopScrollWidth('sku'), 0);
   }
 
-  window.portalOpenSku = function(code){
-    if (typeof notify === 'function') notify('Карточка товара ' + code + ' подключается следующим шагом');
-  };
+  // Заглушка portalOpenSku удалена: карточку товара открывает sku.js,
+  // а правку — sku-edit.js, и оба грузятся позже этого файла.
 
   /* ---------------- Биллинг ---------------- */
 
@@ -144,13 +143,16 @@
           const badgeHtml = typeof badge === 'function'
             ? badge(INVOICE_BADGE[inv.statusCode] || 'warn', inv.statusName || '')
             : dash(inv.statusName);
-          const pdfBtn = inv.hasPdf
-            ? '<button class="btn ghost" onclick="event.stopPropagation(); notify(\'Выгрузка PDF появится вместе с генерацией счетов\')">' + T('common.text.download_pdf') + '</button>'
-            : '—';
+          // В колонке PDF стоит прочерк, и кнопки там нет нарочно. Признак
+          // наличия файла сервер присылает, но самого файла портал пока
+          // не хранит и отдать его не может. Кнопка, которая нажимается
+          // и показывает плашку «появится позже», хуже её отсутствия:
+          // человек щёлкает по ней заново, пока не сочтёт портал
+          // неисправным. Вернётся с хранилищем файлов (MinIO/S3, этап 9).
           return '<tr><td><strong>' + dash(inv.invoiceNumber) + '</strong></td><td>' + period
             + '</td><td>' + ruDate(inv.issueDate) + '</td><td class="num">' + money(inv.amountNoVat)
             + '</td><td class="num">' + money(inv.amountWithVat) + '</td><td>' + badgeHtml
-            + '</td><td>' + pdfBtn + '</td></tr>';
+            + '</td><td>—</td></tr>';
         }).join('')
       : '<tr><td colspan="7" style="color:var(--muted);">'
         + (PORTAL.catalogError.invoices ? T('partners.text.data_unavailable')

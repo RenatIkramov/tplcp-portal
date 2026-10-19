@@ -36,7 +36,7 @@
     object: 'sku',            // объект на вкладке полей
     group: null,              // подвкладка карточки товара
     warehouses: [],           // выданные склады
-    settings: {hideTransfersTab: false},
+    settings: {hideTransfersTab: false, priceInReceipts: false, priceInOrders: false},
     columns: [],              // строки admin_depositor_columns по ВСЕМ таблицам
     // Правки до сохранения. Ключ — «таблица.колонка»: одно имя колонки
     // живёт в разных таблицах («вес» есть и в заказе, и в его строке),
@@ -124,6 +124,26 @@
       + esc(T_('admin.label.show_transfers_section')) + '</label>'
       + '  <div class="hint" style="margin:8px 0 0;">'
       + esc(T_('admin.hint.transfers_section')) + '</div>'
+      + '</div>'
+      // Окно ввода строки (V61): нужны ли клиенту цена и сумма. Настройка
+      // отдельная по типу документа — цена бывает осмысленна в поступлении
+      // и бессмысленна в заказе у одного и того же клиента. Перемещения
+      // здесь нет нарочно: у них цены не существует.
+      + '<div class="section-title">'
+      + esc(T_('admin.title.line_entry_window')) + '</div>'
+      + '<div class="table-card" style="padding:18px 20px;">'
+      + '  <div class="hint" style="margin:-4px 0 10px;">'
+      + esc(T_('admin.hint.price_in_documents')) + '</div>'
+      + '  <label style="display:flex;align-items:center;gap:8px;font-size:13.5px;'
+      + 'padding:9px 0;border-bottom:1px solid var(--line);">'
+      + '    <input type="checkbox" id="depVisPriceReceipts"'
+      + (state.settings.priceInReceipts ? ' checked' : '') + '> '
+      + esc(T_('admin.label.price_in_receipts')) + '</label>'
+      + '  <label style="display:flex;align-items:center;gap:8px;font-size:13.5px;'
+      + 'padding:9px 0;">'
+      + '    <input type="checkbox" id="depVisPriceOrders"'
+      + (state.settings.priceInOrders ? ' checked' : '') + '> '
+      + esc(T_('admin.label.price_in_orders')) + '</label>'
       + '</div>'
       + '<div class="section-title">'
       + esc(T_('admin.title.warehouses_available_to_depositors')) + '</div>'
@@ -430,6 +450,10 @@
       .map(c => c.getAttribute('data-warehouse-id'));
     const transfers = el.querySelector('#depVisTransfers');
     if (transfers) state.settings.hideTransfersTab = !transfers.checked;
+    const priceReceipts = el.querySelector('#depVisPriceReceipts');
+    if (priceReceipts) state.settings.priceInReceipts = priceReceipts.checked;
+    const priceOrders = el.querySelector('#depVisPriceOrders');
+    if (priceOrders) state.settings.priceInOrders = priceOrders.checked;
   }
 
   async function send(){
@@ -442,7 +466,9 @@
         {warehouseIds: state.warehouses});
       await api('PUT', '/api/admin/depositors/'
         + encodeURIComponent(state.depositorId) + '/settings',
-        {hideTransfersTab: state.settings.hideTransfersTab});
+        {hideTransfersTab: state.settings.hideTransfersTab,
+         priceInReceipts: state.settings.priceInReceipts,
+         priceInOrders: state.settings.priceInOrders});
 
       // Поля — только изменённые: каждая строка отдельным запросом,
       // потому что база заводит запись лишь при отличии от портальной
@@ -515,7 +541,8 @@
       ]);
       DEPVIS.warehouseList = warehouseList || [];
       state.warehouses = issued || [];
-      state.settings = prefs || {hideTransfersTab: false};
+      state.settings = prefs
+          || {hideTransfersTab: false, priceInReceipts: false, priceInOrders: false};
       state.columns = columnList || [];
     } catch (e){
       say(e.message);

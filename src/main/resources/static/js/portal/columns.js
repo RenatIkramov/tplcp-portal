@@ -49,8 +49,8 @@
   }
 
   // tableColumnState и соседи объявлены в прототипе через const на верхнем
-  // уровне. Такие объявления — лексические глобали: свойства у window для
-  // них не создаётся, и обращение через window.tableColumnState даёт
+  // уровне. Такие объявления лексические: свойства у window для них
+  // не создаётся, и обращение через window.tableColumnState даёт
   // undefined. Поэтому читаем по голому имени, прикрываясь typeof.
   const hasGlobal = name => {
     try { return eval('typeof ' + name) !== 'undefined'; } catch (e){ return false; }
@@ -268,7 +268,7 @@
     window.portalOpenAdminUser = async function(userId){
       await openOrig.apply(this, arguments);
       if (!mayEdit() || !userId) return;
-      addCopyBlock(userId);
+      await addCopyBlock(userId);
     };
   }
 

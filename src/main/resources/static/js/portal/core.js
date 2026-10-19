@@ -31,6 +31,38 @@
     return {ru: 'ru-RU', en: 'en-GB', nl: 'nl-NL', kk: 'kk-KZ'}[code] || 'en-GB';
   };
 
+  /**
+   * Отметка времени на экран: «01.12.2026 14:35» в поясе того, кто смотрит.
+   *
+   * <p>Нужна с V62: «дата создания» и «дата отгрузки» документа стали
+   * отметками времени, а не сутками. Их нельзя показывать, отрезав первые
+   * десять знаков от ISO: в строке мгновение по UTC, и у всего, что
+   * случилось в Алматы до пяти утра, так отрезались бы прошлые сутки.
+   */
+  PORTAL.dateTimeText = function(iso){
+    if (!iso) return '—';
+    const d = new Date(iso);
+    return isNaN(d) ? String(iso)
+      : d.toLocaleString(PORTAL.timeLocale(), {day:'2-digit', month:'2-digit', year:'numeric',
+                                               hour:'2-digit', minute:'2-digit'});
+  };
+
+  /**
+   * Календарный день отметки времени — «2026-12-01», по местному поясу.
+   *
+   * <p>Для фильтров «с ... по ...»: человек выбирает дни, и сравнивать
+   * надо день с днём. Сравнение дня с мгновением обманывает молча —
+   * «2026-12-01T14:35:00Z» больше, чем «2026-12-01», и документ
+   * выпадает из последнего дня диапазона.
+   */
+  PORTAL.localDay = function(iso){
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (isNaN(d)) return String(iso).slice(0, 10);
+    const pad = n => String(n).padStart(2, '0');
+    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+  };
+
   window.PORTAL = PORTAL;
 
   const num = v => v === null || v === undefined ? 0 : Number(v);
@@ -154,7 +186,7 @@
   };
   PORTAL.errorText = (status, data) =>
     (data && (data.message || data.detail)) || BY_CODE[status]
-    || ('запрос не выполнен (код ' + status + ')');
+    || T('common.message.request_failed_with_code', {code: status});
 
   /** Разбирает неудачный ответ fetch и возвращает готовое сообщение. */
   PORTAL.responseMessage = async resp => {
@@ -342,12 +374,11 @@
       .forEach(fn => { if (typeof window[fn] === 'function'){ try { window[fn](); } catch (e) {} } });
   };
 
-  /** Клик по строке: карточки товара из API пока нет (появится на этапе 6). */
-  window.portalOpenStockRow = function(code){
-    if (typeof notify === 'function'){
-      notify('Карточка товара ' + code + ' появится, когда будет эндпоинт /api/sku');
-    }
-  };
+  // portalOpenStockRow здесь был заглушкой с текстом «карточка появится,
+  // когда будет эндпоинт». Эндпоинт есть, карточку открывает sku.js —
+  // и он грузится позже, то есть заглушка не вызывалась уже давно.
+  // Удалена, а не переведена: переводить обещание, которое портал
+  // не исполняет, — тратить работу дважды.
 
   /**
    * Замена штатного renderStock: та же фильтрация, сортировка и постраничный

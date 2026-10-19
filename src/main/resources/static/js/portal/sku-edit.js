@@ -383,11 +383,11 @@
   window.portalOpenSku = function(code){
     const row = (PORTAL.catalog.sku || []).find(s => s.code === code);
     if (!row){
-      say('Товар ' + code + ' не найден в загруженном списке');
+      say(T('sku.message.not_in_loaded_list', {code: code}));
       return;
     }
     state.mode = 'view';
-    openCard(row.skuId).catch(e => say('Не удалось открыть карточку: ' + e.message));
+    openCard(row.skuId).catch(e => say(T('common.message.card_open_failed', {error: e.message})));
   };
 
   window.portalSkuCreate = async function(){
@@ -405,7 +405,7 @@
       products.push(PORTAL.skuToProduct({code: '', name: T('sku.text.new_item')}));
       openSkuItem('');
     } catch (e){
-      say('Не удалось открыть создание товара: ' + e.message);
+      say(T('sku.message.new_sku_open_failed', {error: e.message}));
     }
   };
 

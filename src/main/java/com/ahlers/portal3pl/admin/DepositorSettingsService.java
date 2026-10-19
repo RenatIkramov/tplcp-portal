@@ -35,24 +35,41 @@ public class DepositorSettingsService {
         this.users = users;
     }
 
-    /** Настройки поклажедателя. Галочка «Показать раздел перемещения» — обратная. */
-    public record Settings(Boolean hideTransfersTab) {
+    /**
+     * Настройки поклажедателя.
+     * <p>
+     * Галочка «Показать раздел перемещения» на экране обратная по смыслу
+     * имени колонки, а две галочки цены (V61) — прямые: отмечена значит
+     * «показывать». У перемещения цены нет вовсе, поэтому флага для него
+     * не существует.
+     */
+    public record Settings(Boolean hideTransfersTab,
+                           Boolean priceInReceipts,
+                           Boolean priceInOrders) {
     }
 
     @Transactional(readOnly = true)
     public Map<String, Object> settings(PortalUser actor, String depositorId) {
         users.requireAdmin(actor);
         requireDepositor(depositorId);
-        Boolean hidden = jdbc
-                .sql("SELECT hide_transfers_tab FROM dbo.depositor_settings_of(:dep::uuid)")
+        Map<String, Object> stored = jdbc.sql("""
+                        SELECT hide_transfers_tab AS "hideTransfersTab",
+                               price_in_receipts  AS "priceInReceipts",
+                               price_in_orders    AS "priceInOrders"
+                        FROM dbo.depositor_settings_of(:dep::uuid)
+                        """)
                 .param("dep", depositorId)
-                .query(Boolean.class)
-                .optional()
-                .orElse(false);
+                .query()
+                .listOfRows()
+                .stream()
+                .findFirst()
+                .orElse(Map.of());
 
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("depositorId", depositorId);
-        out.put("hideTransfersTab", Boolean.TRUE.equals(hidden));
+        out.put("hideTransfersTab", Boolean.TRUE.equals(stored.get("hideTransfersTab")));
+        out.put("priceInReceipts", Boolean.TRUE.equals(stored.get("priceInReceipts")));
+        out.put("priceInOrders", Boolean.TRUE.equals(stored.get("priceInOrders")));
         return out;
     }
 
@@ -60,13 +77,30 @@ public class DepositorSettingsService {
     public Map<String, Object> save(PortalUser actor, String depositorId, Settings s) {
         users.requireAdmin(actor);
         requireDepositor(depositorId);
-        jdbc.sql("SELECT dbo.admin_save_depositor_settings(:dep::uuid, :hideTransfers::boolean)")
+        jdbc.sql("""
+                        SELECT dbo.admin_save_depositor_settings(:dep::uuid,
+                                   :hideTransfers::boolean,
+                                   :priceInReceipts::boolean,
+                                   :priceInOrders::boolean)
+                        """)
                 .param("dep", depositorId)
-                .param("hideTransfers", s == null || s.hideTransfersTab() == null
-                        ? Boolean.FALSE : s.hideTransfersTab())
+                .param("hideTransfers", flag(s == null ? null : s.hideTransfersTab()))
+                .param("priceInReceipts", flag(s == null ? null : s.priceInReceipts()))
+                .param("priceInOrders", flag(s == null ? null : s.priceInOrders()))
                 .query()
                 .listOfRows();
         return settings(actor, depositorId);
+    }
+
+    /**
+     * Не присланная галочка — снятая.
+     * <p>
+     * Экран всегда присылает все три: карточка клиента сохраняется целиком,
+     * а не по одному полю. Но запрос может прийти и не от экрана, и тогда
+     * «ничего не сказано» должно значить одно и то же каждый раз.
+     */
+    private static boolean flag(Boolean value) {
+        return Boolean.TRUE.equals(value);
     }
 
     /**

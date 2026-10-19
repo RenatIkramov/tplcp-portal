@@ -35,6 +35,24 @@ public class DocumentService {
         return repository.list(type, search, status, warehouseId, dateFrom, dateTo);
     }
 
+    /**
+     * Списки для выпадающих списков шапки документа: типы заказов
+     * и типы приходных документов.
+     *
+     * <p>Одним ответом, а не двумя запросами: экран открывает карточку
+     * любого типа и ему нужны оба списка — заранее не известно, какой.
+     *
+     * <p>Контекст поклажедателя не выставляется: это общие справочники
+     * портала, в них нет поклажедателя, и выставлять его было бы
+     * обещанием изоляции, которой тут нет.
+     */
+    @Transactional(readOnly = true)
+    public Map<String, Object> dictionaries() {
+        return Map.of(
+                "orderTypes", repository.enumValues("enum_order_type"),
+                "receiptDocTypes", repository.enumValues("enum_receipt_doc_type"));
+    }
+
     /** Карточка документа: шапка + состав + детализация в одном ответе. */
     @Transactional(readOnly = true)
     public Map<String, Object> card(DocumentType type, String docId) {

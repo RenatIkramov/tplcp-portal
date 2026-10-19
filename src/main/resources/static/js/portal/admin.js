@@ -460,8 +460,7 @@
     try {
       await api('POST', '/api/admin/users/' + encodeURIComponent(u.userId) + '/password',
                 {newPassword: pwd});
-      showMessage('Пароль задан: ' + pwd + ' — передайте его пользователю, при первом входе '
-        + 'портал попросит сменить', true);
+      showMessage(T('admin.message.password_issued', {password: pwd}), true);
       await loadUsers();
     } catch (e){
       showMessage(e.message, false);
@@ -497,12 +496,11 @@
     try {
       const response = await api('POST', '/api/admin/users', form);
       await loadUsers();
-      if (typeof notify === 'function') notify('Пользователь создан: ' + form.fullName);
+      if (typeof notify === 'function') notify(T('admin.message.user_created', {name: form.fullName}));
       // открываем уже созданного — там же задаётся видимость разделов,
       // и пароль показываем в его карточке: записать его можно только сейчас
       if (response.userId) await window.portalOpenAdminUser(response.userId);
-      showMessage('Пароль: ' + response.password + ' — передайте его пользователю, при первом '
-        + 'входе портал попросит сменить', true);
+      showMessage(T('admin.message.password_issued', {password: response.password}), true);
     } catch (e){
       showMessage(e.message, false);
     } finally {
@@ -535,7 +533,7 @@
         canEditTransport: isOn('menuVisEditTransport')
       });
       drawList();
-      if (typeof notify === 'function') notify('Изменения сохранены: ' + u.fullName);
+      if (typeof notify === 'function') notify(T('admin.message.user_saved', {name: u.fullName}));
       // если администратор правил себя — применяем настройки сразу
       if (PORTAL.session && PORTAL.session.login === u.login){
         // та же функция, что и при смене поклажедателя: правила
@@ -546,7 +544,7 @@
       showReferencesSub('users');
     } catch (e){
       showMessage(e.message, false);
-      if (typeof notify === 'function') notify('Не удалось сохранить: ' + e.message);
+      if (typeof notify === 'function') notify(T('common.message.save_failed', {error: e.message}));
     } finally {
       if (byId('adminSaveUser')){
         byId('adminSaveUser').disabled = false;

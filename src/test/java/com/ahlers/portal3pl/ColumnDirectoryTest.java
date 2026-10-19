@@ -55,7 +55,8 @@ class ColumnDirectoryTest extends PortalTestBase {
             columns.saveFieldLabel(admin, id, "sku", "code", null);
             // настройки разделов тоже возвращаем: скрытый раздел дожил бы
             // до следующего теста и уронил бы его
-            depositorSettings.save(admin, id, new DepositorSettingsService.Settings(false));
+            depositorSettings.save(admin, id,
+                    new DepositorSettingsService.Settings(false, false, false));
         }
         new TransactionTemplate(txManager).executeWithoutResult(tx ->
                 jdbc.sql("DELETE FROM dbo.user_table_column WHERE user_id IN"
@@ -76,6 +77,27 @@ class ColumnDirectoryTest extends PortalTestBase {
                 .findFirst()
                 .map(r -> Boolean.TRUE.equals(r.get("isVisible")))
                 .orElse(false);
+    }
+
+    /**
+     * Портальные умолчания прямо из каталога — список колонок,
+     * помеченных «показывать сразу».
+     *
+     * <p>Нужен, чтобы не сверять ЧИСЛО колонок. Число меняется от любой
+     * миграции: V51 добавила десять доп. полей шапки, V64 открыла
+     * «ID документа» — и проверка падала, не найдя при этом ни одной
+     * ошибки. Правило же не меняется: по умолчанию показывается ровно
+     * то, что помечено в каталоге.
+     */
+    private List<String> portalDefaults(String table) {
+        return jdbc.sql("""
+                        SELECT column_id FROM dbo.table_column
+                         WHERE table_key = :table AND is_default
+                         ORDER BY column_id
+                        """)
+                .param("table", table)
+                .query(String.class)
+                .list();
     }
 
     private static List<String> shown(List<Map<String, Object>> layout) {
@@ -115,12 +137,13 @@ class ColumnDirectoryTest extends PortalTestBase {
         signIn();
         PortalUser user = authService.authenticate(USER, USER_PASSWORD);
         List<Map<String, Object>> layout = columns.layout(user, TABLE);
-        // Числом каталог не меряем: он растёт от миграции к миграции,
-        // и такая проверка падает не от ошибки, а от нового поля
-        // (V51 добавила приходу десять доп. полей шапки). Проверяем
-        // правило: в выдаче есть и скрытые колонки — окно «⚙ Колонки»
-        // без них нечем наполнить.
-        assertEquals(14, shown(layout).size(), "по умолчанию показываются четырнадцать");
+        // Числами тут не меряем — ни каталог, ни умолчания: и то и другое
+        // растёт от миграции к миграции, и проверка падает не от ошибки,
+        // а от нового поля. Сверяем с самим каталогом: показано ровно то,
+        // что в нём помечено «показывать сразу». В выдаче при этом есть
+        // и скрытые колонки — окно «⚙ Колонки» без них нечем наполнить.
+        assertEquals(portalDefaults(TABLE), shown(layout).stream().sorted().toList(),
+                "по умолчанию показаны не те колонки, что помечены в каталоге");
         assertTrue(layout.size() > shown(layout).size(),
                 "в выдаче все колонки — и скрытые тоже, для окна выбора");
         assertTrue(layout.stream().anyMatch(r -> "customField1".equals(r.get("columnId"))),
@@ -184,7 +207,8 @@ class ColumnDirectoryTest extends PortalTestBase {
         signIn();
         PortalUser user = authService.authenticate(USER, USER_PASSWORD);
         columns.saveMine(user, TABLE, List.of("no"));
-        assertEquals(20, shown(columns.layout(user, "sku")).size(),
+        assertEquals(portalDefaults("sku"),
+                shown(columns.layout(user, "sku")).stream().sorted().toList(),
                 "товары остались на умолчаниях");
     }
 
@@ -194,7 +218,8 @@ class ColumnDirectoryTest extends PortalTestBase {
         PortalUser user = authService.authenticate(USER, USER_PASSWORD);
         columns.saveMine(user, TABLE, List.of("no"));
         assertEquals(1, shown(columns.layout(user, TABLE)).size());
-        assertEquals(14, shown(columns.resetMine(user, TABLE)).size(),
+        assertEquals(portalDefaults(TABLE),
+                shown(columns.resetMine(user, TABLE)).stream().sorted().toList(),
                 "сброс возвращает портальные умолчания");
     }
 
@@ -462,7 +487,8 @@ class ColumnDirectoryTest extends PortalTestBase {
     }
 
     /**
-     * Каталог переименуемых полей (V48) — список для окна правки.
+     * Каталог полей, которые можно переименовать (V48), — список
+     * для окна правки.
      *
      * <p>Прежний экран брал его из массива в прототипе, поэтому в окне
      * были только пять «объектов» и колонки макета. Проверяем, что
@@ -694,7 +720,7 @@ class ColumnDirectoryTest extends PortalTestBase {
                 "по умолчанию раздел виден");
 
         depositorSettings.save(admin, depositorId,
-                new DepositorSettingsService.Settings(true));
+                new DepositorSettingsService.Settings(true, false, false));
         assertEquals(true, depositorSettings.settings(admin, depositorId)
                         .get("hideTransfersTab"),
                 "настройка сохранилась");
@@ -713,7 +739,7 @@ class ColumnDirectoryTest extends PortalTestBase {
         String depositorId = depositorId(USER, DEPOSITOR);
         expectRejection(403, () -> depositorSettings.settings(client, depositorId));
         expectRejection(403, () -> depositorSettings.save(client, depositorId,
-                new DepositorSettingsService.Settings(true)));
+                new DepositorSettingsService.Settings(true, false, false)));
     }
 
     @Test

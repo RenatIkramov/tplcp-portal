@@ -206,12 +206,12 @@
 <button data-i18n="receipts.button.print" class="btn ghost" onclick="openPrintDocumentModal('receipts')">Печать</button>
 <span id="receiptDraftActions" style="display:none;">
   <button data-i18n="receipts.button.delete_draft" class="btn ghost" onclick="openDeleteReceiptDraftConfirm()" style="color:#c0392b;border-color:#e3b3ac;">Удалить черновик</button>
-  <button data-i18n="receipts.button.save" class="btn ghost" onclick="saveReceiptDraft(); notify('Изменения по поступлению сохранены')">Сохранить</button>
+  <button data-i18n="receipts.button.save" class="btn ghost" onclick="saveReceiptDraft()">Сохранить</button>
   <button data-i18n="receipts.button.confirm" class="btn primary" onclick="confirmReceiptDraft()">Подтвердить</button>
 </span>
 </div>
 </div>
-<div class="detail-head" id="receiptDetailHead" onchange="saveReceiptDraft()" style="display:block;">
+<div class="detail-head" id="receiptDetailHead" style="display:block;">
 <div id="receiptDetailBanner"></div>
 <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:12px;">
 <h2 id="receiptDetailTitle" style="display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin:0;"></h2>
@@ -249,12 +249,12 @@
 <button data-i18n="transfers.button.print" class="btn ghost" onclick="openPrintDocumentModal('transfers')">Печать</button>
 <span id="transferDraftActions" style="display:none;">
   <button data-i18n="transfers.button.delete_draft" class="btn ghost" onclick="openDeleteTransferDraftConfirm()" style="color:#c0392b;border-color:#e3b3ac;">Удалить черновик</button>
-  <button data-i18n="transfers.button.save" class="btn ghost" onclick="saveTransferDraft(); notify('Изменения по перемещению сохранены')">Сохранить</button>
+  <button data-i18n="transfers.button.save" class="btn ghost" onclick="saveTransferDraft()">Сохранить</button>
   <button data-i18n="transfers.button.confirm" class="btn primary" onclick="confirmTransferDraft()">Подтвердить</button>
 </span>
 </div>
 </div>
-<div class="detail-head" id="transferDetailHead" onchange="saveTransferDraft()" style="display:block;">
+<div class="detail-head" id="transferDetailHead" style="display:block;">
 <div id="transferDetailBanner"></div>
 <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:12px;">
 <h2 id="transferDetailTitle" style="display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin:0;"></h2>
@@ -327,12 +327,12 @@
 <button data-i18n="orders.button.print" class="btn ghost" onclick="openPrintDocumentModal('orders')">Печать</button>
 <span id="orderDraftActions" style="display:none;">
   <button data-i18n="orders.button.delete_draft" class="btn ghost" onclick="openDeleteOrderDraftConfirm()" style="color:#c0392b;border-color:#e3b3ac;">Удалить черновик</button>
-  <button data-i18n="orders.button.save" class="btn ghost" onclick="saveOrderDraft(); notify('Изменения по заказу сохранены')">Сохранить</button>
+  <button data-i18n="orders.button.save" class="btn ghost" onclick="saveOrderDraft()">Сохранить</button>
   <button data-i18n="orders.button.confirm" class="btn primary" onclick="confirmOrderDraft()">Подтвердить</button>
 </span>
 </div>
 </div>
-<div class="detail-head" id="orderDetailHead" onchange="saveOrderDraft()" style="display:block;">
+<div class="detail-head" id="orderDetailHead" style="display:block;">
 <div id="orderDetailBanner"></div>
 <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:12px;">
 <h2 id="orderDetailTitle" style="display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin:0;"></h2>
@@ -1149,6 +1149,7 @@
     <div class="line-info-row"><span class="li-label">Единица измерения</span><span class="li-value" id="orderLineEditUnit">—</span></div>
     <div class="line-info-row"><span class="li-label">Общий остаток на складе</span><span class="li-value" id="orderLineEditStockTotal">—</span></div>
     <div class="line-info-row"><span class="li-label">Доступный остаток на складе</span><span class="li-value" id="orderLineEditStockAvail">—</span></div>
+    <div class="line-info-row"><span data-i18n="col.stock.incoming" class="li-label">К получению</span><span class="li-value" id="orderLineEditStockIncoming">—</span></div>
   </div>
   <div style="display:flex; flex-direction:column; gap:16px;">
     <div class="kv" id="orderLineEditPackagingWrap" style="display:none;">

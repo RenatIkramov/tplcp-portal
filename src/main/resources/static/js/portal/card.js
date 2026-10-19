@@ -75,7 +75,7 @@
   async function openDocument(type, no){
     const row = (PORTAL.docs[type] || []).find(r => r.no === no);
     if (!row){
-      if (typeof notify === 'function') notify('Документ ' + no + ' не найден в загруженном списке');
+      if (typeof notify === 'function') notify(T('common.message.document_not_in_list', {no: no}));
       return;
     }
     try {
@@ -104,7 +104,7 @@
         if (typeof openTransfer === 'function') openTransfer(no);
       }
     } catch (e){
-      if (typeof notify === 'function') notify('Не удалось открыть документ: ' + e.message);
+      if (typeof notify === 'function') notify(T('common.message.document_open_failed', {error: e.message}));
     }
   }
 

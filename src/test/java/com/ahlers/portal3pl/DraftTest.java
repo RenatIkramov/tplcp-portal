@@ -1,6 +1,7 @@
 package com.ahlers.portal3pl;
 
 import com.ahlers.portal3pl.common.MsgRef;
+import com.ahlers.portal3pl.documents.DocumentService;
 import com.ahlers.portal3pl.documents.DocumentType;
 import com.ahlers.portal3pl.documents.DraftService;
 import org.junit.jupiter.api.AfterEach;
@@ -10,9 +11,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -25,6 +29,9 @@ class DraftTest extends PortalTestBase {
 
     @Autowired
     DraftService drafts;
+
+    @Autowired
+    DocumentService documents;
 
     private final List<String> created = new ArrayList<>();
 
@@ -64,7 +71,7 @@ class DraftTest extends PortalTestBase {
         Map<String, Object> card = draft(Map.of());
         Map<String, Object> h = header(card);
 
-        assertTrue(h.get("documentNo").toString().startsWith("ПН-"), "портал присваивает свой номер");
+        assertTrue(h.get("documentNo").toString().startsWith("R"), "портал присваивает свой номер");
         assertEquals("draft", h.get("statusCode"));
         assertEquals("portal", h.get("origin"), "владелец черновика — портал");
         assertEquals(0, rows(card).size());
@@ -167,12 +174,146 @@ class DraftTest extends PortalTestBase {
         }
     }
 
+    /**
+     * Списки для шапки документа отдаются и состоят из ключей.
+     *
+     * <p>До этого их в портале не было вовсе: карточка предлагала
+     * наименования из демо-массива прототипа, и выбранное наименование
+     * уходило в колонку ключа — сохранение падало ошибкой приведения
+     * типа. Проверяется поэтому не только «список не пуст», но и «ключ
+     * — число»: список из наименований такую проверку не прошёл бы.
+     */
+    @Test
+    void documentDictionariesAreKeyed() {
+        signIn();
+        Map<String, Object> all = documents.dictionaries();
+
+        for (String kind : List.of("orderTypes", "receiptDocTypes")) {
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> rows = (List<Map<String, Object>>) all.get(kind);
+            assertNotNull(rows, kind + " не отдаётся вовсе");
+            assertFalse(rows.isEmpty(), kind + ": список пуст, в карточке нечего выбрать");
+            for (Map<String, Object> row : rows) {
+                assertNotNull(row.get("id"), kind + ": у значения нет ключа");
+                assertInstanceOf(Number.class, row.get("id"),
+                        kind + ": ключ не число — в карточку уйдёт наименование");
+                assertNotNull(row.get("name"), kind + ": у значения нет наименования");
+            }
+        }
+    }
+
+    /**
+     * Дата уходит на экран календарной датой, а не мгновением времени.
+     *
+     * <p>Проверка появилась после настоящей ошибки, и она не про формат,
+     * а про сутки. Драйвер отдаёт колонку {@code date} как
+     * {@code java.sql.Date} — момент времени с нулевым временем, — и
+     * в JSON он превращался в мгновение по UTC. В Алматы (UTC+5)
+     * «1 декабря» приезжало на экран как «30 ноября»: ровно на разницу
+     * с UTC назад.
+     *
+     * <p>Поэтому утверждается именно строка, а не «дата та же»: тип
+     * {@code java.sql.Date} эту проверку не прошёл бы, хотя его
+     * {@code toString()} даёт тот же текст. Сдвиг возникал не при
+     * чтении, а при выводе в JSON, и закрыть его можно только тем,
+     * что из репозитория уходит уже строка.
+     */
+    @Test
+    void dateStaysTheSameDay() {
+        signIn();
+        String docId = header(draft(Map.of())).get("docId").toString();
+
+        drafts.updateHeader(DocumentType.RECEIPTS, docId, Map.of("eta_date", "2026-12-01"));
+        Object eta = header(drafts.card(DocumentType.RECEIPTS, docId)).get("etaDate");
+
+        assertEquals("2026-12-01", eta,
+                "дата уехала или пришла мгновением времени: " + eta
+                + " (" + (eta == null ? "null" : eta.getClass().getName()) + ")");
+    }
+
+    /**
+     * Номер документа по правилам V65: [тип][YYMMDD][счётчик].
+     *
+     * <p>Проверяется ВИД номера и день в нём, а не само число: счётчик
+     * общий на тип и день, он растёт от любого документа — и своего,
+     * и чужого, — поэтому ждать «001» значит ждать, что в этот день
+     * никто больше ничего не создал.
+     *
+     * <p>День сверяется с датой документа. Расхождение здесь никто
+     * не заметит, пока кто-нибудь не станет искать документ по номеру
+     * за «тот день»: номер и дата обязаны говорить об одном дне.
+     */
+    @Test
+    void numberFollowsTheRules() {
+        signIn();
+        String number = header(draft(Map.of())).get("documentNo").toString();
+
+        String today = singleValue("SELECT to_char(current_date, 'YYMMDD')");
+        assertTrue(number.matches("^R" + today + "[0-9]{3,}$"),
+                "номер не по правилам ([тип][YYMMDD][счётчик]): " + number);
+    }
+
+    /**
+     * Номера не повторяются, и счётчик идёт вперёд.
+     *
+     * <p>Уникальность подпёрта и базой — на document_no стоит уникальный
+     * индекс, — но проверка нужна именно на выдачу: индекс сообщит
+     * о дубле отказом сохранения, то есть человеку, а не нам.
+     *
+     * <p>Сравниваются хвосты как числа, а не строки: на тысячном
+     * документе за день счётчик становится четырёхзначным, и «1000»
+     * как строка меньше, чем «999».
+     */
+    @Test
+    void numbersGrowAndDoNotRepeat() {
+        signIn();
+        List<String> numbers = new ArrayList<>();
+        for (int i = 0; i < 3; i++) {
+            numbers.add(header(draft(Map.of())).get("documentNo").toString());
+        }
+
+        assertEquals(numbers.size(), Set.copyOf(numbers).size(), "номера повторяются: " + numbers);
+        for (int i = 1; i < numbers.size(); i++) {
+            assertTrue(tail(numbers.get(i)) > tail(numbers.get(i - 1)),
+                    "счётчик не идёт вперёд: " + numbers);
+        }
+    }
+
+    /** Счётчик из номера: всё после буквы типа и шести знаков даты. */
+    private static long tail(String number) {
+        return Long.parseLong(number.substring(7));
+    }
+
     @Test
     void draftDeleted() {
         signIn();
         String docId = header(draft(Map.of())).get("docId").toString();
         drafts.delete(DocumentType.RECEIPTS, docId);
         expectRejection(404, () -> drafts.card(DocumentType.RECEIPTS, docId));
+    }
+
+    /**
+     * Черновик со строками тоже удаляется.
+     *
+     * <p>Проверка появилась после настоящей ошибки: внешний ключ строк
+     * объявлен без каскада, и удаление шапки у документа, где есть хоть
+     * одна строка, падало ошибкой целостности. Прежняя проверка удаляла
+     * ПУСТОЙ черновик и потому ничего не замечала — а пустых документов
+     * в работе не бывает.
+     */
+    @Test
+    void draftWithLinesDeleted() {
+        signIn();
+        String docId = header(draft(Map.of())).get("docId").toString();
+        String skuId = singleValue("SELECT sku_id::text FROM dbo.sku WHERE code = 'RK-ROG-01'");
+        drafts.addLine(DocumentType.RECEIPTS, docId,
+                Map.of("sku_id", skuId, "expected_qty", 10));
+
+        drafts.delete(DocumentType.RECEIPTS, docId);
+        expectRejection(404, () -> drafts.card(DocumentType.RECEIPTS, docId));
+        assertEquals("0", singleValue(
+                "SELECT count(*)::text FROM dbo.receipt_details WHERE doc_id = '" + docId + "'::uuid"),
+                "строки удалённого черновика остались в базе");
     }
 
     @Test

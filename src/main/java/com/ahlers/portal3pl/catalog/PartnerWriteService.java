@@ -186,8 +186,23 @@ public class PartnerWriteService {
 
     /* ======================= Адреса доставки ======================= */
 
+    /**
+     * Адреса доставки грузополучателя.
+     *
+     * <p>{@code depositorScope.apply()} здесь обязателен, и его не было:
+     * единственный метод чтения в этом классе без него. Таблица адресов
+     * под RLS, и запрос без выставленного {@code app.depositor_id}
+     * возвращал НОЛЬ строк — молча, без ошибки. Снаружи это выглядело
+     * так, будто у грузополучателей нет адресов: в заказе место доставки
+     * нельзя было ни выбрать, ни подставить.
+     *
+     * <p>Это те самые грабли, про которые сказано в плане: под
+     * {@code portal_app} забытый контекст не ломает запрос, а тихо
+     * опустошает выдачу.
+     */
     @Transactional(readOnly = true)
     public List<Map<String, Object>> addresses(String consigneeId) {
+        depositorScope.apply();
         return asText(SqlRows.toCamelCase(jdbc.sql("""
                         SELECT * FROM dbo.v_delivery_points
                         WHERE consignee_id = :id::uuid

@@ -82,11 +82,26 @@ public class DraftService {
         return card(type, docId);
     }
 
+    /**
+     * Удалить черновик вместе с его строками.
+     *
+     * <p>Строки удаляются первыми, и это не предосторожность: внешний ключ
+     * {@code fk_*_details_doc_id} объявлен без каскада, поэтому удаление
+     * шапки у документа, в котором есть хоть одна строка, падало ошибкой
+     * целостности. То есть кнопка «Удалить черновик» работала только
+     * на пустом документе — а пустых в работе не бывает.
+     *
+     * <p>Каскад на уровне базы здесь намеренно не ставится: удалять
+     * документ целиком вправе только этот метод, он один проверяет, что
+     * документ — наш черновик (решение Р5). Каскад разрешил бы удаление
+     * строк любому, кто удалит шапку в обход проверки.
+     */
     @Transactional
     public void delete(DocumentType type, String docId) {
         depositorScope.apply();
         currentUser.requireUserId();
         requireDraft(type, docId);
+        drafts.deleteAllLines(type, docId);
         if (drafts.deleteDraft(type, docId) == 0) {
             throw Fail.notFound("error.draft.not_found");
         }
@@ -206,7 +221,8 @@ public class DraftService {
         Map<String, Object> state = state(type, docId);
         List<MsgRef> problems = new ArrayList<>();
 
-        List<String> missing = drafts.missingRequired(type, docId);
+        List<String> missing = drafts.missingRequired(type, docId,
+                currentUser.requireUserId(), texts.locale());
         if (!missing.isEmpty()) {
             problems.add(MsgRef.of("error.ready.fields_missing",
                     "fields", String.join(", ", missing)));
@@ -220,6 +236,13 @@ public class DraftService {
         if (number(state.get("unknownSkuCount")) > 0) {
             problems.add(MsgRef.of("error.ready.unknown_sku",
                     "count", number(state.get("unknownSkuCount"))));
+        }
+        // Перемещение «со склада на тот же склад» смысла не имеет. Это
+        // причина, а не отказ при вводе: человек заполняет шапку в любом
+        // порядке, и запрещать сохранение на полпути нельзя — он только
+        // что выбрал получателя и ещё не дошёл до отправителя.
+        if (Boolean.TRUE.equals(state.get("sameWarehouse"))) {
+            problems.add(MsgRef.of("error.ready.same_warehouse"));
         }
         return problems;
     }

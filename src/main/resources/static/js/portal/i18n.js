@@ -382,7 +382,7 @@
         await api('POST', '/api/me/locale', {code: code});
       }
     } catch (e){
-      say('Не удалось переключить язык: ' + e.message);
+      say(T('common.message.language_switch_failed', {error: e.message}));
     }
   };
 

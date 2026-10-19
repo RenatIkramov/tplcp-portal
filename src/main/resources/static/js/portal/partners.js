@@ -232,7 +232,7 @@
       state.addresses = card.addresses || [];
       render();
     } catch (e){
-      say('Не удалось открыть карточку: ' + e.message);
+      say(T('common.message.card_open_failed', {error: e.message}));
     }
   };
 

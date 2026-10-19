@@ -43,7 +43,7 @@
   window.portalDownloadSkuTemplate = async function(){
     try {
       const name = await download('/api/sku/excel-template', 'Шаблон_Номенклатура.xlsx');
-      say('Скачивается' + ': ' + name);
+      say(T('common.message.downloading_file', {name: name}));
     } catch (e){
       say(e.message);
     }

@@ -153,11 +153,11 @@
         await api('PUT', '/api/admin/users/' + encodeURIComponent(userId) + '/depositors',
                   {depositorIds: checked('data-depositor-id')});
         await load();
-        if (typeof notify === 'function') notify('Доступы обновлены: ' + u.fullName);
+        if (typeof notify === 'function') notify(T('admin.text.access_updated', {name: u.fullName}));
         showView('admin');
         showAdminSub('access');
       } catch (e){
-        if (typeof notify === 'function') notify('Не удалось сохранить: ' + e.message);
+        if (typeof notify === 'function') notify(T('common.message.save_failed', {error: e.message}));
       }
     });
     // возврат — в ту подвкладку, из которой открыли
@@ -214,11 +214,11 @@
         await api('PUT', '/api/admin/users/' + encodeURIComponent(userId) + '/warehouses',
                   {warehouseIds: checked('data-warehouse-id')});
         await load();
-        if (typeof notify === 'function') notify('Склады сотрудника обновлены: ' + u.fullName);
+        if (typeof notify === 'function') notify(T('admin.message.user_warehouses_updated', {name: u.fullName}));
         showView('admin');
         showAdminSub('staff-access');
       } catch (e){
-        if (typeof notify === 'function') notify('Не удалось сохранить: ' + e.message);
+        if (typeof notify === 'function') notify(T('common.message.save_failed', {error: e.message}));
       }
     });
     // возврат — в ту подвкладку, из которой открыли
@@ -276,7 +276,7 @@
                 + encodeURIComponent(depositorId) + '/warehouses',
                 {warehouseIds: checked('data-warehouse-id')});
         drawDepositorWarehouses();
-        if (typeof notify === 'function') notify('Доступные склады обновлены: ' + d.orgName);
+        if (typeof notify === 'function') notify(T('admin.text.accessible_warehouses_updated', {name: d.orgName}));
         // если правили текущего поклажедателя — обновляем списки складов в документах
         if (PORTAL.session && PORTAL.session.depositorId === depositorId){
           PORTAL.reloadAll();
@@ -284,7 +284,7 @@
         showView('admin');
         showAdminSub('depositor-access');
       } catch (e){
-        if (typeof notify === 'function') notify('Не удалось сохранить: ' + e.message);
+        if (typeof notify === 'function') notify(T('common.message.save_failed', {error: e.message}));
       }
     });
     // возврат — в ту подвкладку, из которой открыли

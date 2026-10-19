@@ -102,6 +102,34 @@ class PartnerDirectoryTest extends PortalTestBase {
 
     /* ---------------- Адреса доставки ---------------- */
 
+    /**
+     * Адреса ЧИТАЮТСЯ отдельным запросом — и читаются.
+     *
+     * <p>Проверка появилась после настоящей ошибки: в {@code addresses()}
+     * не был выставлен контекст поклажедателя, и RLS возвращала ноль
+     * строк — молча, без отказа. Снаружи это выглядело так, будто
+     * у грузополучателей нет адресов: в заказе место доставки нельзя
+     * было ни выбрать, ни подставить.
+     *
+     * <p>Прежние проверки этого не замечали, потому что брали список
+     * из ответа {@code addAddress} — а тот свой контекст выставляет.
+     * Путь записи был проверен, путь чтения — нет.
+     */
+    @Test
+    void addressesAreReadable() {
+        signIn();
+        String id = (String) partners.create(PartnerKind.CONSIGNEE,
+                Map.of("code", PREFIX + "C5", "name", "Читаемые адреса")).get("consigneeId");
+        partners.addAddress(id, Map.of("address", "Алматы, Складская, 5"));
+        partners.addAddress(id, Map.of("address", "Шымкент, Байтурсынова, 9"));
+
+        List<Map<String, Object>> list = partners.addresses(id);
+        assertEquals(2, list.size(), "адреса не читаются: вернулось " + list.size() + " строк");
+        assertEquals(1, defaults(list), "основной адрес ровно один");
+        assertEquals(Boolean.TRUE, list.getFirst().get("isDefault"),
+                "основной адрес должен идти первым — его подставляет карточка заказа");
+    }
+
     @Test
     void firstAddressBecomesDefaultAndOnlyOneStays() {
         signIn();

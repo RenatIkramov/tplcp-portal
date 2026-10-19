@@ -9,7 +9,6 @@
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   const dash = v => (v === null || v === undefined || v === '') ? '—' : v;
   const say = m => { if (typeof notify === 'function') notify(m); };
-  const T_ = k => (typeof T === 'function' ? T(k) : k);
 
   async function api(method, url, body){
     const opt = {method: method, headers: {'Accept': 'application/json'}};

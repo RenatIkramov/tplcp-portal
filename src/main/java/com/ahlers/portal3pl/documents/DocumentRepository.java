@@ -25,6 +25,31 @@ public class DocumentRepository {
         this.jdbc = jdbc;
     }
 
+    /**
+     * Типы заказов и типы приходных документов — для выпадающих списков
+     * шапки документа.
+     *
+     * <p>Списки общие для портала: в таблицах нет поклажедателя, и RLS
+     * к ним не применяется. Правит их администратор через справочники
+     * уровня портала (V24), читать их вправе любой вошедший — иначе
+     * в карточке нечего выбрать.
+     *
+     * <p>Наименование берётся из самой таблицы, без перевода: ровно так
+     * же его отдают v_orders и v_receipts в колонках order_type_name
+     * и doc_type_name. Одно и то же значение должно читаться одинаково
+     * и в списке, и в сохранённом документе; перевод перечислений —
+     * отдельная работа, и делать его в одном месте из двух нельзя.
+     */
+    public List<Map<String, Object>> enumValues(String table) {
+        String sql = """
+                SELECT id, code, name
+                FROM dbo.%s
+                WHERE COALESCE(is_active, true)
+                ORDER BY COALESCE(sort_order, id), name
+                """.formatted(table);
+        return SqlRows.toCamelCase(jdbc.sql(sql).query().listOfRows());
+    }
+
     public List<Map<String, Object>> list(DocumentType type, String search, String status,
                                           String warehouseId, LocalDate dateFrom, LocalDate dateTo) {
         String sql = """
@@ -37,7 +62,12 @@ public class DocumentRepository {
                   AND (:status::text IS NULL OR status_code = :status::text)
                   AND (:warehouseId::text IS NULL OR %s = :warehouseId::text)
                   AND (:dateFrom::date IS NULL OR doc_date >= :dateFrom::date)
-                  AND (:dateTo::date   IS NULL OR doc_date <= :dateTo::date)
+                  -- Строго меньше следующего дня, а не «меньше или равно».
+                  -- С V62 doc_date — отметка времени: условие
+                  -- doc_date <= DATE '2026-12-01' отсекло бы всё, что
+                  -- случилось в этот день позже полуночи, то есть почти
+                  -- весь последний день диапазона.
+                  AND (:dateTo::date   IS NULL OR doc_date < :dateTo::date + 1)
                 ORDER BY doc_date DESC, document_no DESC
                 """.formatted(type.headerView(), type.partyColumn(), type.warehouseColumn());
 

@@ -231,7 +231,7 @@ public class SkuTemplateService {
 
         // 2. Пустая строка под данные: ячейки должны существовать, иначе
         //    таблице не на чем держаться. Строка одна — таблица дорастёт
-        //        сама, когда человек начнёт писать ниже.
+        //    сама, когда человек начнёт писать ниже.
         for (int r = 1; r <= TEMPLATE_ROWS; r++) {
             Row row = sheet.createRow(r);
             for (int i = 0; i < fields.size(); i++) {
@@ -258,7 +258,7 @@ public class SkuTemplateService {
             if (f.textFormat()) {
                 sheet.setDefaultColumnStyle(i, text);
             }
-            int width = Math.min(Math.max(headers.get(i).length() + 4, 12), 42);
+            int width = Math.clamp(headers.get(i).length() + 4, 12, 42);
             sheet.setColumnWidth(i, width * 256);
         }
         sheet.createFreezePane(0, 1);

@@ -100,17 +100,25 @@ GET {{host}}/api/receipts/ПОДСТАВИТЬ-DOC-ID/line-details?lineNumber=1
 ### Номенклатура
 GET {{host}}/api/sku
 
-### Номенклатура: поиск и фильтр группы
+### Номенклатура: поиск по названию
 GET {{host}}/api/sku?search=рога
+
+### Номенклатура: фильтр по группе
 GET {{host}}/api/sku?group=Мясная продукция
 
-### Поставщики / грузополучатели / склады
+### Поставщики
 GET {{host}}/api/suppliers
+
+### Грузополучатели
 GET {{host}}/api/consignees
+
+### Склады
 GET {{host}}/api/warehouses
 
-### Биллинг
+### Биллинг: тарифы на услуги
 GET {{host}}/api/service-tariffs
+
+### Биллинг: счета
 GET {{host}}/api/invoices
 
 ### ---- Черновики документов ----
@@ -188,8 +196,10 @@ Content-Type: application/json
 
 {"newPassword": "Vydannyy-2026"}
 
-### Роли и все поклажедатели портала — списки для карточки пользователя
+### Роли — список для карточки пользователя
 GET {{host}}/api/admin/roles
+
+### Все поклажедатели портала — список для карточки пользователя
 GET {{host}}/api/admin/depositors
 
 ### Создать пользователя (пароль можно не присылать — портал придумает и вернёт)
@@ -222,15 +232,19 @@ Content-Type: application/json
 ### Все склады портала — для галочек
 GET {{host}}/api/admin/warehouses
 
-### Поклажедатели менеджера: посмотреть и заменить набор
+### Поклажедатели менеджера: посмотреть
 GET {{host}}/api/admin/users/ПОДСТАВИТЬ-USER-ID/depositors
+
+### Поклажедатели менеджера: заменить набор
 PUT {{host}}/api/admin/users/ПОДСТАВИТЬ-USER-ID/depositors
 Content-Type: application/json
 
 {"depositorIds": ["ПОДСТАВИТЬ-UUID"]}
 
-### Склады кладовщика
+### Склады кладовщика: посмотреть
 GET {{host}}/api/admin/users/ПОДСТАВИТЬ-USER-ID/warehouses
+
+### Склады кладовщика: заменить набор
 PUT {{host}}/api/admin/users/ПОДСТАВИТЬ-USER-ID/warehouses
 Content-Type: application/json
 
@@ -239,8 +253,11 @@ Content-Type: application/json
 ### Поклажедатели со списком своих складов
 GET {{host}}/api/admin/depositor-access
 
-### Склады поклажедателя. Пустой список = ограничений нет, доступны все
+### Склады поклажедателя: посмотреть
 GET {{host}}/api/admin/depositors/ПОДСТАВИТЬ-UUID/warehouses
+
+### Склады поклажедателя: заменить набор.
+# Пустой список = ограничений нет, доступны все
 PUT {{host}}/api/admin/depositors/ПОДСТАВИТЬ-UUID/warehouses
 Content-Type: application/json
 

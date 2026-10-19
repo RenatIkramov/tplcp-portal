@@ -120,21 +120,42 @@ public class CurrentUser {
         // настройками: ему важно, показывать ли раздел, а не на каком
         // уровне это решили.
         java.util.Map<String, Object> all = new java.util.LinkedHashMap<>(own);
-        all.put("hideTransfersTab", hideTransfersTab());
+        all.putAll(depositorSettings());
         return all;
     }
 
-    /** Скрыт ли раздел «Перемещения» у текущего поклажедателя. */
-    private boolean hideTransfersTab() {
+    /**
+     * Настройки поклажедателя, которые нужны экрану.
+     * <p>
+     * Три значения: показывать ли раздел «Перемещения» и нужны ли цена
+     * с суммой в окне ввода строки поступления и заказа (V61). У перемещения
+     * цены нет вовсе — товар не меняет владельца, — поэтому третьего флага
+     * не существует.
+     * <p>
+     * Читаются одним запросом: это одна строка одной функции, и три
+     * обращения к ней вместо одного экономили бы только внимание читающего.
+     */
+    private java.util.Map<String, Object> depositorSettings() {
         String depositorId = DepositorContext.depositorId();
         if (depositorId == null || depositorId.isBlank()) {
-            // поклажедатель ещё не выбран — скрывать нечего
-            return false;
+            // поклажедатель ещё не выбран — показывать нечего и скрывать нечего
+            return java.util.Map.of("hideTransfersTab", false,
+                    "priceInReceipts", false,
+                    "priceInOrders", false);
         }
-        return jdbc.sql("SELECT hide_transfers_tab FROM dbo.depositor_settings_of(:dep::uuid)")
+        return jdbc.sql("""
+                        SELECT hide_transfers_tab AS "hideTransfersTab",
+                               price_in_receipts  AS "priceInReceipts",
+                               price_in_orders    AS "priceInOrders"
+                        FROM dbo.depositor_settings_of(:dep::uuid)
+                        """)
                 .param("dep", depositorId)
-                .query(Boolean.class)
-                .optional()
-                .orElse(false);
+                .query()
+                .listOfRows()
+                .stream()
+                .findFirst()
+                .orElse(java.util.Map.of("hideTransfersTab", false,
+                        "priceInReceipts", false,
+                        "priceInOrders", false));
     }
 }
