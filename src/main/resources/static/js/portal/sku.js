@@ -172,6 +172,20 @@
       palletCount: n(t.palletCount), cargoPlaces: n(t.cargoPlaces),
       carrier: dash(t.carrier), carNumber: dash(t.carNumber),
       driverName: dash(t.driverName), driverPhone: dash(t.driverPhone),
+      // Доп. поля поклажедателя. Копируются поимённо, а не
+      // оставляются «где-то в ответе»: колонки списка рисуются
+      // по одноимённому свойству строки, и без этого включённое
+      // через ⚙ Колонки «Доп. поле 1» показывало бы прочерк.
+      customField1: dash(t.customField1),
+      customField2: dash(t.customField2),
+      customField3: dash(t.customField3),
+      customField4: dash(t.customField4),
+      customField5: dash(t.customField5),
+      customField6: dash(t.customField6),
+      customField7: dash(t.customField7),
+      customField8: dash(t.customField8),
+      customField9: dash(t.customField9),
+      customField10: dash(t.customField10),
       docId: t.docId
     };
   }
@@ -188,9 +202,18 @@
     set('volume', t => t.volume);
   }
 
+  /**
+   * Перемещения с сервера, с отбором из панели фильтров.
+   *
+   * <p>Ожидание PORTAL.filtersReady — то же, что в docs.js: без него
+   * запрос ушёл бы раньше, чем собралась панель, и отбор не попал бы
+   * в запрос вовсе.
+   */
   async function loadTransfers(){
     try {
-      PORTAL.docs.transfers = (await PORTAL.fetchJson('/api/transfers')).map(toTransfer);
+      if (PORTAL.filtersReady) await PORTAL.filtersReady;
+      const data = await PORTAL.fetchJson('/api/transfers' + PORTAL.filterQuery('transfers'));
+      PORTAL.docs.transfers = data.map(toTransfer);
       PORTAL.docsError.transfers = null;
     } catch (e){
       PORTAL.docs.transfers = [];
@@ -202,20 +225,10 @@
   function renderTransfersFromApi(){
     const el = document.getElementById('transfersBody');
     if (!el) return;
+    // Отбор делает сервер (см. filters.js): здесь остались сортировка
+    // и страницы. Поиск по номеру ищет во всех трёх номерах документа
+    // и в контрагенте — это параметр search, он тоже уходит на сервер.
     let rows = (PORTAL.docs.transfers || []).slice();
-
-    const noQ = (document.getElementById('transfersSearchNo')?.value || '').trim().toLowerCase();
-    const tripQ = (document.getElementById('transfersSearchTrip')?.value || '').trim().toLowerCase();
-    const fromISO = document.getElementById('transfersDateFrom')?.value || '';
-    const toISO = document.getElementById('transfersDateTo')?.value || '';
-    // Поиск по номеру ищет во всех трёх номерах: человек набирает
-    // то, что у него перед глазами, а перед глазами бывает любой.
-    if (noQ) rows = rows.filter(t => (t.no || '').toLowerCase().includes(noQ)
-                                  || (t.erpNo || '').toLowerCase().includes(noQ)
-                                  || (t.wmsNumber || '').toLowerCase().includes(noQ));
-    if (tripQ) rows = rows.filter(t => (t.trip || '').toLowerCase().includes(tripQ));
-    if (fromISO) rows = rows.filter(t => (t.dateIso || '') >= fromISO);
-    if (toISO) rows = rows.filter(t => (t.dateIso || '') <= toISO);
 
     if (typeof fcApplySort === 'function') rows = fcApplySort('transfers', rows);
     let items = rows, totalPages = 1, total = rows.length;

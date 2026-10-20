@@ -1,6 +1,7 @@
 package com.ahlers.portal3pl.documents;
 
-import org.springframework.format.annotation.DateTimeFormat;
+import com.ahlers.portal3pl.auth.SessionUser;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -13,7 +14,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 
@@ -21,7 +21,8 @@ import java.util.Map;
  * Один контроллер на три типа документов: поступления, заказы, перемещения.
  * Тип приходит частью адреса и проверяется по перечислению DocumentType.
  * <p>
- *   GET /api/receipts?search=ПН&status=received&dateFrom=2026-09-01
+ *   GET /api/receipts?filter.status=received&filter.date.from=2026-09-01
+ *   GET /api/document-filters/receipts — какие фильтры доступны человеку
  *   GET /api/orders/{docId}            — карточка: шапка, состав, детализация
  *   GET /api/transfers/{docId}/lines   — только состав
  */
@@ -31,21 +32,29 @@ public class DocumentController {
 
     private final DocumentService service;
     private final DraftService drafts;
+    private final SessionUser session;
 
-    public DocumentController(DocumentService service, DraftService drafts) {
+    public DocumentController(DocumentService service, DraftService drafts, SessionUser session) {
         this.service = service;
         this.drafts = drafts;
+        this.session = session;
     }
 
+    /**
+     * Список документов.
+     *
+     * <p>Фильтры приходят парами {@code filter.<колонка>=значение}
+     * (для дат и чисел — {@code filter.<колонка>.from} и {@code .to}),
+     * поэтому принимаются картой целиком: набор колонок задаётся
+     * справочником и меняется миграцией, а не подписью этого метода.
+     * Что из присланного законно, решает {@link DocumentFilters}.
+     */
     @GetMapping
     public List<Map<String, Object>> list(
             @PathVariable String docType,
-            @RequestParam(required = false) String search,
-            @RequestParam(required = false) String status,
-            @RequestParam(required = false) String warehouseId,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateFrom,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateTo) {
-        return service.list(DocumentType.ofPath(docType), search, status, warehouseId, dateFrom, dateTo);
+            @RequestParam Map<String, String> params,
+            HttpServletRequest request) {
+        return service.list(session.requireUser(request), DocumentType.ofPath(docType), params);
     }
 
     @GetMapping("/{docId}")

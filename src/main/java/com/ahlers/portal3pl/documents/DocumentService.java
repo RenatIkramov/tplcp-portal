@@ -1,11 +1,11 @@
 package com.ahlers.portal3pl.documents;
 
+import com.ahlers.portal3pl.auth.PortalUser;
 import com.ahlers.portal3pl.common.Fail;
 import com.ahlers.portal3pl.config.DepositorScope;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 
@@ -20,19 +20,57 @@ public class DocumentService {
     private final DepositorScope depositorScope;
     private final DocumentRepository repository;
     private final DraftService drafts;
+    private final DocumentFilters filters;
 
     public DocumentService(DepositorScope depositorScope, DocumentRepository repository,
-                           DraftService drafts) {
+                           DraftService drafts, DocumentFilters filters) {
         this.depositorScope = depositorScope;
         this.repository = repository;
         this.drafts = drafts;
+        this.filters = filters;
     }
 
+    /**
+     * Список документов с фильтрами из справочника колонок.
+     *
+     * <p>Контекст поклажедателя выставляется до разбора фильтров, а не
+     * после: справочник фильтров читает запреты клиента через
+     * {@code current_depositor_id()}, и без контекста он отдал бы пустой
+     * список разрешённых — то есть отказ на любой фильтр.
+     */
     @Transactional(readOnly = true)
-    public List<Map<String, Object>> list(DocumentType type, String search, String status,
-                                          String warehouseId, LocalDate dateFrom, LocalDate dateTo) {
+    public List<Map<String, Object>> list(PortalUser user, DocumentType type,
+                                          Map<String, String> params) {
         depositorScope.apply();
-        return repository.list(type, search, status, warehouseId, dateFrom, dateTo);
+        return repository.list(type, filters.parse(user, type, params));
+    }
+
+    /** Какие фильтры этот человек может поставить на этом экране. */
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> filters(PortalUser user, DocumentType type) {
+        depositorScope.apply();
+        return filters.catalogue(user, type);
+    }
+
+    /**
+     * Выбор фильтров человека: какие из них на панели и в каком порядке.
+     *
+     * <p>Пустой список отвергается: ноль строк в таблице выбора уже
+     * означает «не настраивал», и панель вернулась бы к набору
+     * по умолчанию вместо того, чтобы опустеть.
+     */
+    @Transactional
+    public List<Map<String, Object>> saveFilters(PortalUser user, DocumentType type,
+                                                 List<String> columns) {
+        depositorScope.apply();
+        return filters.saveMine(user, type, columns);
+    }
+
+    /** Вернуть набор фильтров по умолчанию. */
+    @Transactional
+    public List<Map<String, Object>> resetFilters(PortalUser user, DocumentType type) {
+        depositorScope.apply();
+        return filters.resetMine(user, type);
     }
 
     /**

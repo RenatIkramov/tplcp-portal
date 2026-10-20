@@ -1,10 +1,11 @@
 package com.ahlers.portal3pl.documents;
 
+import com.ahlers.portal3pl.common.Fail;
 import com.ahlers.portal3pl.common.SqlRows;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
-import java.time.LocalDate;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -50,35 +51,64 @@ public class DocumentRepository {
         return SqlRows.toCamelCase(jdbc.sql(sql).query().listOfRows());
     }
 
-    public List<Map<String, Object>> list(DocumentType type, String search, String status,
-                                          String warehouseId, LocalDate dateFrom, LocalDate dateTo) {
-        String sql = """
-                SELECT * FROM dbo.%s
-                WHERE (:search::text IS NULL
-                       OR document_no ILIKE :search::text
-                       OR COALESCE(doc_number,'') ILIKE :search::text
-                       OR COALESCE(erp_number,'') ILIKE :search::text
-                       OR COALESCE(%s,'') ILIKE :search::text)
-                  AND (:status::text IS NULL OR status_code = :status::text)
-                  AND (:warehouseId::text IS NULL OR %s = :warehouseId::text)
-                  AND (:dateFrom::date IS NULL OR doc_date >= :dateFrom::date)
-                  -- Строго меньше следующего дня, а не «меньше или равно».
-                  -- С V62 doc_date — отметка времени: условие
-                  -- doc_date <= DATE '2026-12-01' отсекло бы всё, что
-                  -- случилось в этот день позже полуночи, то есть почти
-                  -- весь последний день диапазона.
-                  AND (:dateTo::date   IS NULL OR doc_date < :dateTo::date + 1)
-                ORDER BY doc_date DESC, document_no DESC
-                """.formatted(type.headerView(), type.partyColumn(), type.warehouseColumn());
+    /**
+     * Список документов со сколькими угодно фильтрами по колонкам.
+     *
+     * <p>Здесь был ещё общий поиск: одна строка шла сразу по трём
+     * номерам документа и по контрагенту. Поле убрано с панели по
+     * решению заказчика, и правильно: подписать одно поле, которое
+     * ищет по четырём разным вещам, нечем — человек не знает, что он
+     * сейчас ищет. Вместо него отдельные фильтры по каждому номеру
+     * и по контрагенту, каждый со своей подписью. Параметр убран
+     * вместе с полем: звать его стало некому, а необходимый, но
+     * никем не вызываемый путь — это путь, который тихо расходится
+     * с остальным кодом.
+     *
+     * <p>Имена колонок в условиях подставляются в текст запроса, и это
+     * безопасно ровно потому, что они пришли не из запроса пользователя,
+     * а из справочника: {@link DocumentFilters} сверяет каждое и отвергает
+     * незнакомое. Значения подставляются только параметрами — всегда.
+     */
+    public List<Map<String, Object>> list(DocumentType type,
+                                          List<DocumentFilters.Condition> filters) {
+        StringBuilder where = new StringBuilder();
+        Map<String, Object> values = new LinkedHashMap<>();
 
-        return SqlRows.toCamelCase(jdbc.sql(sql)
-                .param("search", blankToNull(search) == null ? null : "%" + search.trim() + "%")
-                .param("status", blankToNull(status))
-                .param("warehouseId", blankToNull(warehouseId))
-                .param("dateFrom", dateFrom)
-                .param("dateTo", dateTo)
-                .query()
-                .listOfRows());
+        int n = 0;
+        for (DocumentFilters.Condition f : filters) {
+            String name = "f" + n++;
+            where.append(n == 1 ? "WHERE " : "  AND ")
+                    .append(predicate(f, name)).append('\n');
+            values.put(name, "text".equals(f.kind()) ? "%" + f.value() + "%" : f.value());
+        }
+
+        String sql = "SELECT * FROM dbo.%s\n%sORDER BY doc_date DESC, document_no DESC"
+                .formatted(type.headerView(), where);
+
+        var query = jdbc.sql(sql);
+        for (Map.Entry<String, Object> value : values.entrySet()) {
+            query = query.param(value.getKey(), value.getValue());
+        }
+        return SqlRows.toCamelCase(query.query().listOfRows());
+    }
+
+    /** Условие под один фильтр. Колонка — из справочника, значение — параметром. */
+    private static String predicate(DocumentFilters.Condition f, String name) {
+        return switch (f.kind()) {
+            case "text" -> "COALESCE(%s::text,'') ILIKE :%s::text".formatted(f.column(), name);
+            case "enum" -> "%s::text = :%s::text".formatted(f.column(), name);
+            case "number" -> "%s %s :%s::numeric"
+                    .formatted(f.column(), "from".equals(f.bound()) ? ">=" : "<=", name);
+            // Дата «по» — строго меньше следующего дня, а не «меньше или
+            // равно». Колонки вроде doc_date с V62 хранят отметку времени,
+            // и условие doc_date <= DATE '2026-12-01' отсекло бы всё,
+            // что случилось в этот день позже полуночи, то есть почти
+            // весь последний день диапазона.
+            case "date" -> "from".equals(f.bound())
+                    ? "%s >= :%s::date".formatted(f.column(), name)
+                    : "%s < :%s::date + 1".formatted(f.column(), name);
+            default -> throw Fail.internal("error.filter.unknown_kind", "kind", f.kind());
+        };
     }
 
     /** Шапка одного документа. Пустой список означает «нет доступа или не существует». */
@@ -109,9 +139,5 @@ public class DocumentRepository {
                 .param("lineNumber", lineNumber)
                 .query()
                 .listOfRows());
-    }
-
-    private static String blankToNull(String s) {
-        return s == null || s.isBlank() ? null : s;
     }
 }

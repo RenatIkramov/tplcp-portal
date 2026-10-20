@@ -134,27 +134,23 @@
 <main>
 <!-- ================= ПОСТУПЛЕНИЯ: список ================= -->
 <section class="view" id="view-receipts">
-<div class="panel-head">
+<div class="panel-head list-head">
 <h1 data-i18n="common.button.receipts">Поступления <span class="count" id="receiptsCount"></span></h1>
 <div class="actions">
 <button class="btn primary" id="createReceiptBtn" data-i18n="receipts.button.create_new" onclick="createNewReceiptDraft()">+ Создать новый</button>
 <button class="btn" data-i18n="receipts.button.import_from_excel" onclick="notify('Диалог загрузки файла Excel с поступлением')">Загрузить из Excel</button>
 <button class="btn ghost" data-i18n="receipts.button.download_excel_template" onclick="notify('Скачивается: Шаблон_Поступление.xlsx')">Скачать шаблон Excel</button>
 </div>
+<div class="head-tools">
+<button class="btn ghost" data-i18n="common.button.filters" onclick="openFilterPicker('receipts')">⚙ Фильтры</button>
+<button class="btn ghost" data-i18n="receipts.button.columns" onclick="openColumnPicker('receipts')">⚙ Колонки</button>
+</div>
 </div>
 <div class="filters">
-<div class="fgroup"><label for="receiptsSearchNo" data-i18n="receipts.label.document_number">Номер документа</label><input id="receiptsSearchNo" onkeydown="if(event.key==='Enter') onReceiptsFilterChange()" data-i18n-placeholder="common.placeholder.eg_receipt_no" placeholder="напр. ПР-000123"/></div>
-<div class="fgroup"><label for="receiptsSearchSupplier" data-i18n="col.receipts.supplier">Поставщик</label><input id="receiptsSearchSupplier" onkeydown="if(event.key==='Enter') onReceiptsFilterChange()" data-i18n-placeholder="common.placeholder.eg_supplier" placeholder="ИП «Козлов»"/></div>
-<div class="fgroup"><label for="receiptsSearchTrip" data-i18n="receipts.label.trip">Рейс</label><input id="receiptsSearchTrip" onkeydown="if(event.key==='Enter') onReceiptsFilterChange()" data-i18n-placeholder="common.placeholder.eg_receipt_wms_no" placeholder="напр. ПРБ-260701-01"/></div>
-<div class="fgroup"><label for="receiptsDateFrom" data-i18n="receipts.label.date_from">Дата с</label><input type="date" id="receiptsDateFrom"/></div>
-<div class="fgroup"><label for="receiptsDateTo" data-i18n="receipts.label.date_to">Дата по</label><input type="date" id="receiptsDateTo"/></div>
-<div class="fgroup"><label for="receiptsFilterStatus" data-i18n="col.receipts.status">Статус</label>
-<select id="receiptsFilterStatus"><option data-i18n="receipts.option.all">Все</option><option data-i18n="receipts.option.draft">Черновик</option><option data-i18n="receipts.option.awaiting_receiving">Ожидает приёмки</option><option data-i18n="receipts.option.in_progress">В работе</option><option data-i18n="col.receiptComposition.accepted">Принято</option><option data-i18n="receipts.option.discrepancy">Расхождение</option></select>
+<div class="filter-actions">
+<button class="btn primary icon" onclick="onReceiptsFilterChange()" data-i18n-title="receipts.button.search" title="Найти" data-i18n-aria="receipts.button.search" aria-label="Найти"><svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="6.8" cy="6.8" r="4.6"/><path d="M10.2 10.2 14 14"/></svg></button>
+<button class="btn ghost icon" onclick="clearReceiptsFilters()" data-i18n-title="receipts.button.clear_filters" title="Очистить фильтры" data-i18n-aria="receipts.button.clear_filters" aria-label="Очистить фильтры"><svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
 </div>
-<button data-i18n="receipts.button.search" class="btn primary" onclick="onReceiptsFilterChange()">Найти</button>
-<button data-i18n="receipts.button.clear_filters" class="btn ghost" onclick="clearReceiptsFilters()">Очистить фильтры</button>
-<div class="spacer"></div>
-<button class="btn ghost" data-i18n="receipts.button.columns" onclick="openColumnPicker('receipts')">⚙ Колонки</button>
 </div>
 <div class="table-card">
 <div class="table-scroll-top" id="receiptsScrollTop"><div id="receiptsScrollTopInner"></div></div>
@@ -169,23 +165,23 @@
 </section>
 
 <section class="view" id="view-transfers">
-<div class="panel-head">
+<div class="panel-head list-head">
 <h1><span data-i18n="transfers.title.transfers">Перемещения</span> <span class="count" id="transfersCount"></span></h1>
 <div class="actions">
 <button data-i18n="transfers.button.create_new" class="btn primary" id="createTransferBtn" onclick="createNewTransferDraft()">+ Создать новое</button>
 <button data-i18n="transfers.button.import_from_excel" class="btn" onclick="notify('Диалог загрузки файла Excel с перемещением')">Загрузить из Excel</button>
 <button data-i18n="transfers.button.download_excel_template" class="btn ghost" onclick="notify('Скачивается: Шаблон_Перемещение.xlsx')">Скачать шаблон Excel</button>
 </div>
+<div class="head-tools">
+<button class="btn ghost" data-i18n="common.button.filters" onclick="openFilterPicker('transfers')">⚙ Фильтры</button>
+<button data-i18n="transfers.button.columns" class="btn ghost" onclick="openColumnPicker('transfers')">⚙ Колонки</button>
+</div>
 </div>
 <div class="filters">
-<div class="fgroup"><label for="transfersSearchNo" data-i18n="transfers.label.document_number">Номер документа</label><input id="transfersSearchNo" onkeydown="if(event.key==='Enter') onTransfersFilterChange()" data-i18n-placeholder="common.placeholder.eg_transfer_no" placeholder="напр. ПМ-000001"/></div>
-<div class="fgroup"><label for="transfersSearchTrip" data-i18n="transfers.label.trip">Рейс</label><input id="transfersSearchTrip" onkeydown="if(event.key==='Enter') onTransfersFilterChange()" data-i18n-placeholder="common.placeholder.eg_transfer_wms_no" placeholder="напр. ПРМ-260701-01"/></div>
-<div class="fgroup"><label for="transfersDateFrom" data-i18n="transfers.label.date_from">Дата с</label><input type="date" id="transfersDateFrom"/></div>
-<div class="fgroup"><label for="transfersDateTo" data-i18n="transfers.label.date_to">Дата по</label><input type="date" id="transfersDateTo"/></div>
-<button data-i18n="transfers.button.search" class="btn primary" onclick="onTransfersFilterChange()">Найти</button>
-<button data-i18n="transfers.button.clear_filters" class="btn ghost" onclick="clearTransfersFilters()">Очистить фильтры</button>
-<div class="spacer"></div>
-<button data-i18n="transfers.button.columns" class="btn ghost" onclick="openColumnPicker('transfers')">⚙ Колонки</button>
+<div class="filter-actions">
+<button class="btn primary icon" onclick="onTransfersFilterChange()" data-i18n-title="transfers.button.search" title="Найти" data-i18n-aria="transfers.button.search" aria-label="Найти"><svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="6.8" cy="6.8" r="4.6"/><path d="M10.2 10.2 14 14"/></svg></button>
+<button class="btn ghost icon" onclick="clearTransfersFilters()" data-i18n-title="transfers.button.clear_filters" title="Очистить фильтры" data-i18n-aria="transfers.button.clear_filters" aria-label="Очистить фильтры"><svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
+</div>
 </div>
 <div class="table-card">
 <div class="table-scroll-top" id="transfersScrollTop"><div id="transfersScrollTopInner"></div></div>
@@ -286,27 +282,23 @@
 </section>
 <!-- ================= ЗАКАЗЫ: список ================= -->
 <section class="view active" id="view-orders">
-<div class="panel-head">
+<div class="panel-head list-head">
 <h1 data-i18n="common.title.shipment_orders">Заказы на отгрузку <span class="count" id="ordersCount"></span></h1>
 <div class="actions">
 <button class="btn primary" id="createOrderBtn" data-i18n="receipts.button.create_new" onclick="createNewOrderDraft()">+ Создать новый</button>
 <button class="btn" data-i18n="receipts.button.import_from_excel" onclick="notify('Диалог загрузки файла Excel с заказом')">Загрузить из Excel</button>
 <button class="btn ghost" data-i18n="receipts.button.download_excel_template" onclick="notify('Скачивается: Шаблон_Заказ_на_отгрузку.xlsx')">Скачать шаблон Excel</button>
 </div>
+<div class="head-tools">
+<button class="btn ghost" data-i18n="common.button.filters" onclick="openFilterPicker('orders')">⚙ Фильтры</button>
+<button class="btn ghost" data-i18n="receipts.button.columns" onclick="openColumnPicker('orders')">⚙ Колонки</button>
+</div>
 </div>
 <div class="filters">
-<div class="fgroup"><label for="ordersSearchNo" data-i18n="common.label.order_number">Номер заказа</label><input id="ordersSearchNo" onkeydown="if(event.key==='Enter') onOrdersFilterChange()" data-i18n-placeholder="common.placeholder.eg_order_no" placeholder="напр. ЗК-000045"/></div>
-<div class="fgroup"><label for="ordersSearchConsignee" data-i18n="col.orders.consignee">Грузополучатель</label><input id="ordersSearchConsignee" onkeydown="if(event.key==='Enter') onOrdersFilterChange()" data-i18n-placeholder="common.placeholder.eg_consignee" placeholder="ИП «Барашкин»"/></div>
-<div class="fgroup"><label for="ordersSearchTrip" data-i18n="common.label.trip">Рейс</label><input id="ordersSearchTrip" onkeydown="if(event.key==='Enter') onOrdersFilterChange()" data-i18n-placeholder="common.placeholder.eg_order_wms_no" placeholder="напр. ОТГ-260701-01"/></div>
-<div class="fgroup"><label for="ordersDateFrom" data-i18n="common.label.ship_date_from">Дата отгрузки с</label><input type="date" id="ordersDateFrom"/></div>
-<div class="fgroup"><label for="ordersDateTo" data-i18n="common.label.ship_date_to">Дата отгрузки по</label><input type="date" id="ordersDateTo"/></div>
-<div class="fgroup"><label for="ordersFilterStatus" data-i18n="col.receipts.status">Статус</label>
-<select id="ordersFilterStatus"><option data-i18n="receipts.option.all">Все</option><option data-i18n="receipts.option.draft">Черновик</option><option data-i18n="common.option.reserved">В резерве</option><option data-i18n="common.option.picking">Комплектуется</option><option data-i18n="common.option.shipped">Отгружен</option><option data-i18n="common.option.delayed">Задержка</option></select>
+<div class="filter-actions">
+<button class="btn primary icon" onclick="onOrdersFilterChange()" data-i18n-title="common.button.search" title="Найти" data-i18n-aria="common.button.search" aria-label="Найти"><svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="6.8" cy="6.8" r="4.6"/><path d="M10.2 10.2 14 14"/></svg></button>
+<button class="btn ghost icon" onclick="clearOrdersFilters()" data-i18n-title="common.button.clear_filters" title="Очистить фильтры" data-i18n-aria="common.button.clear_filters" aria-label="Очистить фильтры"><svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
 </div>
-<button data-i18n="common.button.search" class="btn primary" onclick="onOrdersFilterChange()">Найти</button>
-<button data-i18n="common.button.clear_filters" class="btn ghost" onclick="clearOrdersFilters()">Очистить фильтры</button>
-<div class="spacer"></div>
-<button class="btn ghost" data-i18n="receipts.button.columns" onclick="openColumnPicker('orders')">⚙ Колонки</button>
 </div>
 <div class="table-card">
 <div class="table-scroll-top" id="ordersScrollTop"><div id="ordersScrollTopInner"></div></div>
@@ -424,10 +416,17 @@
 </section>
 <!-- ================= ТОВАРЫ: список ================= -->
 <section class="view" id="view-stock">
-<div class="panel-head">
+<div class="panel-head list-head">
 <h1 data-i18n="common.button.stock">Запасы <span class="count" id="stockCount"></span></h1>
+<div class="head-tools">
+<button class="btn ghost" data-i18n="receipts.button.columns" onclick="openColumnPicker('stock')">⚙ Колонки</button>
+</div>
 </div>
 <div class="filters">
+<div class="filter-actions">
+<button class="btn primary icon" onclick="onStockFilterChange()" data-i18n-title="stock.button.search" title="Найти" data-i18n-aria="stock.button.search" aria-label="Найти"><svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="6.8" cy="6.8" r="4.6"/><path d="M10.2 10.2 14 14"/></svg></button>
+<button class="btn ghost icon" onclick="clearStockFilters()" data-i18n-title="stock.button.clear_filters" title="Очистить фильтры" data-i18n-aria="stock.button.clear_filters" aria-label="Очистить фильтры"><svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
+</div>
 <div class="fgroup"><label for="stockSearchCode" data-i18n="stock.label.code_sku">Код / артикул</label><input id="stockSearchCode" onkeydown="if(event.key==='Enter') onStockFilterChange()" data-i18n-placeholder="common.placeholder.eg_sku_code" placeholder="напр. RK-1001"/></div>
 <div class="fgroup"><label for="stockSearchName" data-i18n="col.stock.name">Наименование</label><input id="stockSearchName" onkeydown="if(event.key==='Enter') onStockFilterChange()" data-i18n-placeholder="common.placeholder.eg_sku_name" placeholder="напр. Рога"/></div>
 <div class="fgroup"><label for="stockFilterGroup" data-i18n="col.stock.group">Группа</label>
@@ -445,10 +444,6 @@
 </select>
 </div>
 <div class="fgroup"><label>&nbsp;</label><label style="display:flex;align-items:center;gap:6px;font-weight:400;font-size:13.5px;height:38px;"><input type="checkbox" id="stockDefectFilterCb"> Только брак</label></div>
-<button data-i18n="stock.button.search" class="btn primary" onclick="onStockFilterChange()">Найти</button>
-<button data-i18n="stock.button.clear_filters" class="btn ghost" onclick="clearStockFilters()">Очистить фильтры</button>
-<div class="spacer"></div>
-<button class="btn ghost" data-i18n="receipts.button.columns" onclick="openColumnPicker('stock')">⚙ Колонки</button>
 </div>
 <div class="table-card">
 <div class="table-scroll-top" id="stockScrollTop"><div id="stockScrollTopInner"></div></div>
@@ -479,14 +474,21 @@
 </div>
 
 <div class="admin-sub ref-sub active" id="ref-sub-sku">
-<div class="panel-head">
+<div class="panel-head list-head">
 <h1 data-i18n="references.button.products">Товары <span class="count" id="skuCount"></span></h1>
 <div class="actions">
 <button class="btn" id="uploadSkuExcelBtn" data-i18n="receipts.button.import_from_excel" onclick="notify('Диалог загрузки справочника товаров из Excel')">Загрузить из Excel</button>
 <button class="btn ghost" data-i18n="receipts.button.download_excel_template" onclick="notify('Скачивается: Шаблон_Номенклатура.xlsx')">Скачать шаблон Excel</button>
 </div>
+<div class="head-tools">
+<button class="btn ghost" data-i18n="receipts.button.columns" onclick="openColumnPicker('sku')">⚙ Колонки</button>
+</div>
 </div>
 <div class="filters">
+<div class="filter-actions">
+<button class="btn primary icon" onclick="onSkuFilterChange()" data-i18n-title="references.button.search" title="Найти" data-i18n-aria="references.button.search" aria-label="Найти"><svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="6.8" cy="6.8" r="4.6"/><path d="M10.2 10.2 14 14"/></svg></button>
+<button class="btn ghost icon" onclick="clearSkuFilters()" data-i18n-title="references.button.clear_filters" title="Очистить фильтры" data-i18n-aria="references.button.clear_filters" aria-label="Очистить фильтры"><svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
+</div>
 <div class="fgroup"><label for="skuSearchCode" data-i18n="stock.label.code_sku">Код / артикул</label><input id="skuSearchCode" onkeydown="if(event.key==='Enter') onSkuFilterChange()" data-i18n-placeholder="common.placeholder.eg_sku_code" placeholder="напр. RK-1001"/></div>
 <div class="fgroup"><label for="skuSearchName" data-i18n="col.stock.name">Наименование</label><input id="skuSearchName" onkeydown="if(event.key==='Enter') onSkuFilterChange()" data-i18n-placeholder="common.placeholder.eg_sku_name" placeholder="напр. Рога"/></div>
 <div class="fgroup"><label for="skuFilterGroup" data-i18n="col.stock.group">Группа</label>
@@ -503,10 +505,6 @@
 <option data-i18n="references.option.construction_materials">Строительные материалы</option>
 </select>
 </div>
-<button data-i18n="references.button.search" class="btn primary" onclick="onSkuFilterChange()">Найти</button>
-<button data-i18n="references.button.clear_filters" class="btn ghost" onclick="clearSkuFilters()">Очистить фильтры</button>
-<div class="spacer"></div>
-<button class="btn ghost" data-i18n="receipts.button.columns" onclick="openColumnPicker('sku')">⚙ Колонки</button>
 </div>
 <div class="table-card">
 <div class="table-scroll-top" id="skuScrollTop"><div id="skuScrollTopInner"></div></div>
@@ -521,7 +519,7 @@
 </div>
 
 <div class="admin-sub ref-sub" id="ref-sub-packaging">
-<div class="panel-head">
+<div class="panel-head list-head">
 <h1><span data-i18n="references.title.packaging">Упаковки</span> <span class="count" id="packagingCount"></span></h1>
 <div class="actions">
 <button data-i18n="references.button.import_from_excel" class="btn" id="uploadPackagingExcelBtn" onclick="notify('Диалог загрузки справочника упаковки из Excel')">Загрузить из Excel</button>
@@ -529,11 +527,12 @@
 </div>
 </div>
 <div class="filters">
+<div class="filter-actions">
+<button class="btn primary icon" onclick="onPackagingFilterChange()" data-i18n-title="references.button.search" title="Найти" data-i18n-aria="references.button.search" aria-label="Найти"><svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="6.8" cy="6.8" r="4.6"/><path d="M10.2 10.2 14 14"/></svg></button>
+<button class="btn ghost icon" onclick="clearPackagingFilters()" data-i18n-title="references.button.clear_filters" title="Очистить фильтры" data-i18n-aria="references.button.clear_filters" aria-label="Очистить фильтры"><svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
+</div>
 <div class="fgroup"><label for="packagingSearchCode" data-i18n="references.label.item_code">Код товара</label><input id="packagingSearchCode" onkeydown="if(event.key==='Enter') onPackagingFilterChange()" data-i18n-placeholder="common.placeholder.eg_sku_code" placeholder="напр. RK-1001"/></div>
 <div class="fgroup"><label for="packagingSearchName" data-i18n="references.label.item_name">Наименование товара</label><input id="packagingSearchName" onkeydown="if(event.key==='Enter') onPackagingFilterChange()" data-i18n-placeholder="common.placeholder.eg_sku_name" placeholder="напр. Рога"/></div>
-<button data-i18n="references.button.search" class="btn primary" onclick="onPackagingFilterChange()">Найти</button>
-<button data-i18n="references.button.clear_filters" class="btn ghost" onclick="clearPackagingFilters()">Очистить фильтры</button>
-<div class="spacer"></div>
 </div>
 <div class="table-card">
 <div class="table-scroll-top" id="packagingScrollTop"><div id="packagingScrollTopInner"></div></div>
@@ -1072,7 +1071,7 @@
 <div class="col-panel">
 <h3 data-i18n="common.title.column_settings">Настройка колонок</h3>
 <div class="hint">Отметьте нужные колонки и перетащите для изменения порядка вывода</div>
-<div id="colList"></div>
+<div id="colList" class="col-list"></div>
 <div class="col-actions">
 <button data-i18n="common.button.apply" class="btn primary" onclick="applyColumnPicker()" style="flex:1;">Применить</button>
 <button data-i18n="common.button.reset" class="btn ghost" onclick="resetColumnPicker()">Сбросить</button>
@@ -1325,6 +1324,13 @@
      только источник данных списков. Карточки документов пока демонстрационные —
      они подключаются следующим шагом.
 =================================================================================== -->
+<!--
+  Панель фильтров списка документов: строится из справочника
+  (/api/document-filters), отбор делает сервер. Подключается ПЕРЕД
+  docs.js и sku.js: списки дожидаются PORTAL.filtersReady, и подписка
+  панели должна встать в очередь входа раньше их подписок.
+-->
+<script src="js/portal/filters.js"></script>
 <script src="js/portal/docs.js"></script>
 
 <!-- ======= ЭТАП 6: «Товары», «Биллинг» и справочники из реального API =======

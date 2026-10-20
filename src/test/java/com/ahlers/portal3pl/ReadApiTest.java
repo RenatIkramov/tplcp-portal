@@ -4,6 +4,7 @@ import com.ahlers.portal3pl.auth.AuthService;
 import com.ahlers.portal3pl.catalog.CatalogService;
 import com.ahlers.portal3pl.catalog.CatalogType;
 import com.ahlers.portal3pl.documents.DocumentService;
+import com.ahlers.portal3pl.auth.PortalUser;
 import com.ahlers.portal3pl.documents.DocumentType;
 import com.ahlers.portal3pl.stock.StockLine;
 import com.ahlers.portal3pl.stock.StockService;
@@ -174,7 +175,7 @@ class ReadApiTest extends PortalTestBase {
     }
 
     private List<String> documentNumbers(DocumentType type) {
-        return documents.list(type, null, null, null, null, null).stream()
+        return documents.list(currentUser(), type, Map.of()).stream()
                 .map(r -> String.valueOf(r.get("documentNo")))
                 .toList();
     }
@@ -188,25 +189,43 @@ class ReadApiTest extends PortalTestBase {
      */
     @Test
     void documentFilters() {
-        signIn();
-        List<Map<String, Object>> all = documents.list(DocumentType.RECEIPTS, null, null, null, null, null);
+        PortalUser user = signedInUser();
+        List<Map<String, Object>> all = documents.list(user, DocumentType.RECEIPTS, Map.of());
 
-        List<Map<String, Object>> received =
-                documents.list(DocumentType.RECEIPTS, null, "received", null, null, null);
+        List<Map<String, Object>> received = documents.list(user, DocumentType.RECEIPTS,
+                Map.of("filter.status", "received"));
         assertTrue(column(received, "documentNo").contains(RECEIPT_NO),
                 "принятое поступление " + RECEIPT_NO + " попадает под фильтр по статусу");
         assertTrue(received.size() <= all.size(), "фильтр по статусу не расширяет список");
 
-        List<Map<String, Object>> bySupplier =
-                documents.list(DocumentType.RECEIPTS, "козлов", null, null, null, null);
-        assertFalse(bySupplier.isEmpty(), "поиск по поставщику находит");
-        assertTrue(bySupplier.size() <= all.size(), "поиск не расширяет список");
+        // Поставщик — такой же фильтр по колонке, как остальные.
+        // Здесь был общий поиск по номерам и контрагенту одной строкой;
+        // поле убрано с панели, и проверять нечего, кроме отбора
+        // по названной колонке.
+        List<Map<String, Object>> bySupplier = documents.list(user, DocumentType.RECEIPTS,
+                Map.of("filter.supplier", "козлов"));
+        assertFalse(bySupplier.isEmpty(), "отбор по поставщику находит");
+        assertTrue(bySupplier.size() <= all.size(), "отбор не расширяет список");
+    }
+
+    /** Вход и ссылка на вошедшего: фильтры читаются от его имени. */
+    private PortalUser signedInUser() {
+        signIn();
+        return currentUser();
+    }
+
+    /** Ссылка на основного пользователя, без повторного входа. */
+    private PortalUser currentUser() {
+        return authService.authenticate(USER, USER_PASSWORD);
     }
 
     @Test
     void foreignDocumentsHidden() {
         signInAs(OTHER_USER, OTHER_DEPOSITOR);
-        assertEquals(0, documents.list(DocumentType.RECEIPTS, null, null, null, null, null).size());
+        // Список читается глазами ВОШЕДШЕГО: подставить сюда основного
+        // пользователя значило бы проверить не ту изоляцию.
+        PortalUser other = authService.authenticate(OTHER_USER, USER_PASSWORD);
+        assertEquals(0, documents.list(other, DocumentType.RECEIPTS, Map.of()).size());
     }
 
     /**
@@ -328,7 +347,8 @@ class ReadApiTest extends PortalTestBase {
     private static final String RECEIPT_NO = "ПН-000148";
 
     private String receiptId() {
-        return documents.list(DocumentType.RECEIPTS, RECEIPT_NO, null, null, null, null)
+        return documents.list(currentUser(), DocumentType.RECEIPTS,
+                        Map.of("filter.no", RECEIPT_NO))
                 .getFirst().get("docId").toString();
     }
 

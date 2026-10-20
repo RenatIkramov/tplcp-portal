@@ -10,28 +10,25 @@ import com.ahlers.portal3pl.common.Fail;
 public enum DocumentType {
 
     RECEIPTS("receipts", "v_receipts", "v_receipt_lines", "v_receipt_line_details",
-            "supplier_name", "eta_date"),
+            "eta_date"),
     ORDERS("orders", "v_orders", "v_order_lines", "v_order_line_details",
-            "consignee_name", "planned_ship_date"),
+            "planned_ship_date"),
     TRANSFERS("transfers", "v_transfers", "v_transfer_lines", "v_transfer_line_details",
-            "to_warehouse_name", "ship_date");
+            "ship_date");
 
     private final String path;
     private final String headerView;
     private final String linesView;
     private final String lineDetailsView;
-    /** Колонка контрагента: поставщик / грузополучатель / склад назначения. */
-    private final String partyColumn;
     /** Колонка плановой даты: ожидаемая приёмка / плановая отгрузка. */
     private final String plannedDateColumn;
 
     DocumentType(String path, String headerView, String linesView, String lineDetailsView,
-                 String partyColumn, String plannedDateColumn) {
+                 String plannedDateColumn) {
         this.path = path;
         this.headerView = headerView;
         this.linesView = linesView;
         this.lineDetailsView = lineDetailsView;
-        this.partyColumn = partyColumn;
         this.plannedDateColumn = plannedDateColumn;
     }
 
@@ -54,10 +51,6 @@ public enum DocumentType {
 
     public String lineDetailsView() {
         return lineDetailsView;
-    }
-
-    public String partyColumn() {
-        return partyColumn;
     }
 
     public String plannedDateColumn() {

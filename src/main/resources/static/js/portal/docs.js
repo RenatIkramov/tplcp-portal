@@ -72,6 +72,20 @@
       driverName: dash(r.driverName),
       driverPhone: dash(r.driverPhone),
       driverIdNumber: dash(r.driverIdNumber),
+      // Доп. поля поклажедателя. Копируются поимённо, а не
+      // оставляются «где-то в ответе»: колонки списка рисуются
+      // по одноимённому свойству строки, и без этого включённое
+      // через ⚙ Колонки «Доп. поле 1» показывало бы прочерк.
+      customField1: dash(r.customField1),
+      customField2: dash(r.customField2),
+      customField3: dash(r.customField3),
+      customField4: dash(r.customField4),
+      customField5: dash(r.customField5),
+      customField6: dash(r.customField6),
+      customField7: dash(r.customField7),
+      customField8: dash(r.customField8),
+      customField9: dash(r.customField9),
+      customField10: dash(r.customField10),
       driverInn: dash(r.driverInn),
       docId: r.docId
     };
@@ -145,9 +159,18 @@
     if (link) link.onclick = e => { e.preventDefault(); load(table); };
   }
 
+  /**
+   * Список с сервера, с отбором из панели фильтров.
+   *
+   * <p>Ожидание PORTAL.filtersReady не формальность: подписчики входа
+   * прогоняются не дожидаясь друг друга, и без ожидания запрос уходил
+   * бы раньше, чем появилась панель, — то есть без отбора и без
+   * диапазона дат по умолчанию.
+   */
   async function load(table){
     try {
-      const data = await PORTAL.fetchJson('/api/' + table);
+      if (PORTAL.filtersReady) await PORTAL.filtersReady;
+      const data = await PORTAL.fetchJson('/api/' + table + PORTAL.filterQuery(table));
       PORTAL.docs[table] = data.map(table === 'receipts' ? toReceipt : toOrder);
       PORTAL.docsLoadedAt[table] = new Date();
       PORTAL.docsError[table] = null;
@@ -162,28 +185,16 @@
     const body = document.getElementById(table + 'Body');
     if (!body) return;
 
+    // Отбор делает сервер (см. filters.js и DocumentFilters): здесь
+    // остались только сортировка и разбивка на страницы — то, что
+    // действительно про показ, а не про выборку.
+    //
+    // Прежний отбор жил тут и отбирал по тому, что уже лежит
+    // на странице. Он сравнивал статус по переведённой подписи —
+    // на английском языке не находилось ничего, — а «дата по» резала
+    // последний день диапазона: дата стала отметкой времени, а
+    // сравнение осталось строковым.
     let rows = PORTAL.docs[table].slice();
-
-    // фильтры демо: поиск по номеру, по контрагенту, по рейсу, статус, период
-    const val = id => (document.getElementById(id)?.value || '').trim().toLowerCase();
-    const noQ = val(table === 'receipts' ? 'receiptsSearchNo' : 'ordersSearchNo');
-    const partyQ = val(table === 'receipts' ? 'receiptsSearchSupplier' : 'ordersSearchConsignee');
-    const tripQ = val(table === 'receipts' ? 'receiptsSearchTrip' : 'ordersSearchTrip');
-    const statusQ = document.getElementById(table + 'FilterStatus')?.value || '';
-    const fromISO = document.getElementById(table + 'DateFrom')?.value || '';
-    const toISO = document.getElementById(table + 'DateTo')?.value || '';
-
-    if (noQ) rows = rows.filter(r => (r.no || '').toLowerCase().includes(noQ)
-                                  || (r.erpNumber || '').toLowerCase().includes(noQ)
-                                  || (r.wmsNumber || '').toLowerCase().includes(noQ));
-    if (partyQ) rows = rows.filter(r => ((table === 'receipts' ? r.supplier : r.consignee) || '')
-                                          .toLowerCase().includes(partyQ));
-    if (tripQ) rows = rows.filter(r => (r.trip || '').toLowerCase().includes(tripQ));
-    if (statusQ && statusQ !== T('admin.option.all')){
-      rows = rows.filter(r => (r.statusLabel || '').toLowerCase().includes(statusQ.toLowerCase()));
-    }
-    if (fromISO) rows = rows.filter(r => (r.dateIso || '') >= fromISO);
-    if (toISO)   rows = rows.filter(r => (r.dateIso || '') <= toISO);
 
     if (typeof fcApplySort === 'function') rows = fcApplySort(table, rows);
 
@@ -228,6 +239,10 @@
     patchColumns();
     window.renderReceipts = () => render('receipts');
     window.renderOrders = () => render('orders');
+    // Панель фильтров перечитывает список этим вызовом: отбор
+    // изменился — за данными надо идти заново, перерисовкой
+    // имеющихся строк тут не обойтись.
+    PORTAL.reloadDocs = load;
     PORTAL.onLogin(() => { load('receipts'); load('orders'); });
   }
 

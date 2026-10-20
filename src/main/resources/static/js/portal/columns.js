@@ -56,13 +56,49 @@
     try { return eval('typeof ' + name) !== 'undefined'; } catch (e){ return false; }
   };
 
+  /**
+   * Колонка есть в справочнике, но её нет в вёрстке демо — дорисовываем
+   * сами.
+   *
+   * <p>Здесь стояло обратное: такие колонки отбрасывались, «рисовать
+   * её нечем, поэтому ориентируемся на то, что умеет прототип».
+   * Рассуждение верное для колонки, ПРОПАВШЕЙ из вёрстки, и неверное
+   * для новой. А новые появились: V68 завёл «Рейс» как настоящую
+   * колонку всех трёх списков, и десять «Доп. полей» поклажедателя
+   * были в справочнике с самого начала. Ни одной из них не было
+   * в окне ⚙ Колонки — включить их человек не мог, хотя в базе они
+   * ему разрешены. Получалось, что справочник колонок решает всё,
+   * кроме того, что человек видит.
+   *
+   * <p>Рисуется значением одноимённого свойства строки списка.
+   * Подпись берётся без переименования клиента (portalLabel):
+   * переименование накладывает сам прототип в localizeColumnLabel,
+   * и готовая подпись применилась бы дважды.
+   */
+  function adopt(tableKey, rows){
+    const cols = tableColumns[tableKey];
+    if (!cols) return;
+    const known = new Set(cols.map(c => c.id));
+    rows.forEach(r => {
+      if (known.has(r.columnId)) return;
+      known.add(r.columnId);
+      cols.push({
+        id: r.columnId,
+        label: r.portalLabel || r.label,
+        render: item => {
+          const v = item[r.columnId];
+          return v === null || v === undefined || v === '' ? '—' : v;
+        }
+      });
+    });
+  }
+
   function applyTable(tableKey, rows){
     raw[tableKey] = rows.map(r => r.columnId);
     all[tableKey] = rows;
     if (!hasGlobal('tableColumnState') || !tableColumnState[tableKey]) return;
+    adopt(tableKey, rows);
     const known = new Set((tableColumns[tableKey] || []).map(c => c.id));
-    // колонка могла пропасть из вёрстки, но остаться в базе — рисовать
-    // её нечем, поэтому ориентируемся на то, что умеет прототип
     const rowsHere = ordered(rows.filter(r => known.has(r.columnId)));
     if (!rowsHere.length) return;
 
