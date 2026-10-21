@@ -248,7 +248,7 @@
   function packagingTabHtml(){
     if (!state.skuId){
       return '<div style="color:var(--muted); font-size:13px;">'
-        + 'Сначала сохраните товар — упаковки задаются уже для него</div>';
+        + T('sku.hint.save_product_first') + '</div>';
     }
     const rows = state.packagings;
     const types = (state.dict && state.dict.packaging_type) || [];
@@ -266,7 +266,7 @@
             + '</td><td class="num">' + dash(r.widthCm) + '</td><td class="num">' + dash(r.heightCm)
             + '</td><td class="num">' + dash(r.volumeM3) + '</td><td class="num">' + dash(r.grossWeightKg)
             + '</td><td>' + (r.isDefaultOrderUnit
-                ? '★ по умолчанию'
+                ? '★ ' + T('sku.text.by_default')
                 : (canEdit ? '<button class="btn ghost" onclick="portalPackagingDefault(\'' + r.packagingId
                     + '\')">' + T('sku.text.set_as_order_unit') + '</button>' : '—'))
             + '</td>'
@@ -346,7 +346,7 @@
     if (state.mode === 'view') return;     // просмотр рисует прототип
     if (!TABS[tab]){
       body.innerHTML = '<div style="color:var(--muted); font-size:13px;">'
-        + 'Эти поля портал не меняет: их ставит обмен с WMS или сам портал</div>';
+        + T('sku.hint.fields_set_by_wms') + '</div>';
       return;
     }
     // Поля, закрытые этому поклажедателю, не правятся: иначе запрет
@@ -354,12 +354,12 @@
     const fields = TABS[tab].filter(f => fieldAllowed(f.col));
     if (!fields.length){
       body.innerHTML = '<div style="color:var(--muted); font-size:13px;">'
-        + 'На этой вкладке у вас нет доступных полей</div>';
+        + T('sku.text.no_fields_on_this_tab') + '</div>';
       return;
     }
     body.innerHTML = '<div class="kv-grid">' + fields.map(fieldHtml).join('') + '</div>'
       + '<div style="color:var(--muted); font-size:12px; margin-top:12px;">'
-      + 'Поля со звёздочкой обязательны. Правки со всех вкладок сохраняются одной кнопкой.</div>';
+      + T('sku.hint.required_and_one_save') + '</div>';
   }
 
   /* ================= Открытие карточки ================= */
@@ -607,6 +607,68 @@
     renderPackagingFromApi();
   }
 
+  /**
+   * Состояние колонок упаковок — для прототипа, который о такой
+   * таблице не знал.
+   *
+   * <p>Упаковки были единственным списком с заголовком, вписанным
+   * в разметку руками: ни ⚙ Колонок, ни запрета колонки клиенту,
+   * ни переименования поля. Справочник колонок (V76) это закрывает,
+   * но общий механизм отрисовки читает состояние из переменных
+   * прототипа — а у него таблицы packaging нет вовсе. Заводим её
+   * пустой: колонки в неё допишет columns.js из справочника, как он
+   * делает это для всякой колонки, которой нет в вёрстке.
+   *
+   * <p>Переменные прототипа объявлены через const на верхнем уровне,
+   * и свойства у window для них не создаётся — читаем по голому
+   * имени, прикрывшись typeof, как это уже делают columns.js
+   * и draft.js.
+   */
+  function seedPackagingColumns(){
+    const has = name => {
+      try { return eval('typeof ' + name) !== 'undefined'; } catch (e){ return false; }
+    };
+    if (!has('tableColumns') || !has('tableColumnState')) return;
+    if (!tableColumns.packaging) tableColumns.packaging = [];
+    if (!tableColumnState.packaging) tableColumnState.packaging = [];
+    if (has('tableColumnHidden') && !tableColumnHidden.packaging){
+      tableColumnHidden.packaging = new Set();
+    }
+    // По какому полю строки собирается onclick: список упаковок
+    // открывает карточку товара, значит по коду товара.
+    if (has('tableKeyField') && !tableKeyField.packaging) tableKeyField.packaging = 'skuCode';
+    if (has('sortState') && !sortState.packaging) sortState.packaging = {col: null, dir: 1};
+  }
+
+  /**
+   * Числовые колонки — вправо, код товара — полужирным.
+   *
+   * <p>Колонки, дорисованные из справочника, показывают значение как
+   * есть: о том, что коэффициент и габариты это числа, справочник
+   * не знает. Дописываем это здесь — тем же приёмом, каким docs.js
+   * правит колонки списков документов.
+   */
+  function patchPackagingColumns(){
+    const cols = (typeof tableColumns !== 'undefined' && tableColumns.packaging) || null;
+    if (!cols) return;
+    const NUMERIC = ['coefficient', 'lengthCm', 'widthCm', 'heightCm', 'volumeM3', 'grossWeightKg'];
+    cols.forEach(c => {
+      if (NUMERIC.includes(c.id)) c.num = true;
+      if (c.id === 'skuCode') c.render = r => '<strong>' + esc(dash(r.skuCode)) + '</strong>';
+    });
+  }
+
+  /**
+   * Наименование упаковки собирается экраном: в ответе сервера
+   * такого поля нет, есть тип, коэффициент и единица измерения.
+   */
+  function withDisplayName(r){
+    return Object.assign({}, r, {
+      displayName: dash(r.packagingTypeName) + ' (' + dash(r.coefficient)
+          + ' ' + dash(r.uomName) + ')'
+    });
+  }
+
   function renderPackagingFromApi(){
     const body = document.getElementById('packagingBody');
     if (!body) return;
@@ -614,21 +676,16 @@
     const codeQ = val('packagingSearchCode');
     const nameQ = val('packagingSearchName');
 
-    let rows = (PORTAL.catalog.packaging || []).slice();
+    let rows = (PORTAL.catalog.packaging || []).map(withDisplayName);
     if (codeQ) rows = rows.filter(r => (r.skuCode || '').toLowerCase().includes(codeQ));
     if (nameQ) rows = rows.filter(r => (r.skuName || '').toLowerCase().includes(nameQ));
 
-    if (typeof fcDirSortArray === 'function'){
-      const map = {productCode: 'skuCode', productName: 'skuName', unit: 'uomName',
-                   packagingCode: 'packagingCode', type: 'packagingTypeName',
-                   displayName: 'packagingTypeName', barcode: 'barcode',
-                   coefficient: 'coefficient', length: 'lengthCm', width: 'widthCm',
-                   height: 'heightCm', volume: 'volumeM3', weightGross: 'grossWeightKg'};
-      rows = fcDirSortArray('packaging', rows, r => {
-        const col = dirSortState.packaging.col;
-        return r[map[col] || col] ?? '';
-      });
-    }
+    // Сортировка теперь общая — та же, что у прочих списков: щелчок
+    // по заголовку обрабатывает onSortColumnClick, который ставит
+    // renderTableHead. Прежний отдельный порядок (dirSortState)
+    // упаковкам больше не нужен.
+    if (typeof fcApplySort === 'function') rows = fcApplySort('packaging', rows);
+
     let items = rows, totalPages = 1, total = rows.length;
     if (typeof getPage === 'function'){
       const page = getPage('packaging', rows);
@@ -637,16 +694,10 @@
     const counter = document.getElementById('packagingCount');
     if (counter) counter.textContent = '(' + total + ')';
 
+    patchPackagingColumns();
+    if (typeof renderTableHead === 'function') renderTableHead('packaging');
     body.innerHTML = items.length
-      ? items.map(r => '<tr style="cursor:pointer;" onclick="portalOpenSku(\'' + esc(r.skuCode) + '\')">'
-          + '<td><strong>' + esc(r.skuCode) + '</strong></td><td>' + dash(esc(r.skuName))
-          + '</td><td>' + dash(esc(r.uomName)) + '</td><td>' + esc(r.packagingCode)
-          + '</td><td>' + dash(esc(r.packagingTypeName)) + '</td><td>'
-          + dash(esc(r.packagingTypeName) + ' (' + dash(r.coefficient) + dash(esc(r.uomName)) + ')')
-          + '</td><td>' + dash(esc(r.barcode)) + '</td><td class="num">' + dash(r.coefficient)
-          + '</td><td class="num">' + dash(r.lengthCm) + '</td><td class="num">' + dash(r.widthCm)
-          + '</td><td class="num">' + dash(r.heightCm) + '</td><td class="num">' + dash(r.volumeM3)
-          + '</td><td class="num">' + dash(r.grossWeightKg) + '</td></tr>').join('')
+      ? items.map(r => renderTableRow('packaging', r, 'portalOpenSku')).join('')
       : '<tr><td colspan="13" style="color:var(--muted);">'
         + (PORTAL.catalogError.packaging ? T('partners.text.data_unavailable') : T('stock.text.nothing_found')) + '</td></tr>';
     if (typeof renderPaginationBar === 'function') renderPaginationBar('packaging', totalPages, total);
@@ -673,6 +724,10 @@
       origOpenSkuItem(code);
       decorate();
     };
+    // Состояние колонок заводим до входа: columns.js допишет в него
+    // колонки из справочника при первой же загрузке раскладки,
+    // а он подключается в index.html позже этого файла.
+    seedPackagingColumns();
     window.renderPackaging = renderPackagingFromApi;
 
     PORTAL.onLogin(() => {

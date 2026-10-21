@@ -136,6 +136,116 @@ class PortalTextsTest extends PortalTestBase {
                         + " плашку с дырой:\n" + String.join("\n", new TreeSet<>(wrong)));
     }
 
+    /**
+     * Русского текста нет и в разметке, которую портал рисует сам.
+     *
+     * <p>Соседняя проверка смотрит только плашки. А экран портал
+     * собирает строками: заголовки карточек доступов, правила пароля,
+     * подсказки справочников. Такая строка ничем не отличается от
+     * переведённой, пока язык русский, — и ровно поэтому её не
+     * замечают. При английском языке экран становится наполовину
+     * русским, причём русскими остаются подсказки, то есть то, что
+     * читают, когда не поняли.
+     *
+     * <p>Разрешены два исключения, и оба — не текст для человека:
+     * <ul>
+     *   <li>подпись для {@code console.warn} и {@code safely(…)} —
+     *       её читает разработчик в отладчике;
+     *   <li>образец для {@code indexOf}/{@code includes} — им портал
+     *       ищет кнопку прототипа по её {@code onclick}.
+     * </ul>
+     * Оба исключения узкие нарочно: расширять их значит возвращать
+     * дыру, ради которой проверка и написана.
+     */
+    @Test
+    void drawnMarkupComesFromTheCatalogue() {
+        List<String> found = new ArrayList<>();
+        int scanned = 0;
+        for (Path file : portalFiles()) {
+            String code = withoutComments(read(file));
+            Matcher m = STRING.matcher(code);
+            while (m.find()) {
+                String literal = m.group();
+                scanned++;
+                if (!CYRILLIC.matcher(literal).find() || allowed(code, m.start())) {
+                    continue;
+                }
+                found.add(file.getFileName() + ": " + literal.trim());
+            }
+        }
+
+        // Сломанный разбор даёт ноль находок и молча зелёную проверку.
+        assertTrue(scanned > 500,
+                "строковых литералов нашлось подозрительно мало (" + scanned
+                        + ") — сломался разбор, а не код");
+        assertTrue(found.isEmpty(),
+                "портал рисует человеку русский текст из кода — при английском языке"
+                        + " он таким и останется; текст надо завести ключом в миграции"
+                        + " и звать через T('ключ'):\n" + String.join("\n", found));
+    }
+
+    /** Литерал, который человек не читает: отладка или образец поиска. */
+    private static boolean allowed(String code, int start) {
+        String before = code.substring(Math.max(0, start - 40), start);
+        return DIAGNOSTIC.matcher(before).find() || NEEDLE.matcher(before).find();
+    }
+
+    /**
+     * Строковый литерал: в кавычках, в апострофах и в обратных
+     * кавычках. Шаблонная строка включена не для порядка: сегодня
+     * кириллицы в них нет, но написать её туда так же легко,
+     * а проверка, которая смотрит не везде, успокаивает зря.
+     */
+    private static final Pattern STRING = Pattern.compile(
+            "'(?:[^'\\\\\n]|\\\\.)*'"
+            + "|\"(?:[^\"\\\\\n]|\\\\.)*\""
+            + "|`(?:[^`\\\\]|\\\\[\\s\\S])*`");
+
+    /** console.warn('…'), console.error('…'), safely('…', …) */
+    private static final Pattern DIAGNOSTIC =
+            Pattern.compile("(?:console\\.(?:warn|error|log)|safely)\\s*\\(\\s*$");
+
+    /** onclick.indexOf('…'), text.includes('…') */
+    private static final Pattern NEEDLE =
+            Pattern.compile("\\.(?:indexOf|includes)\\s*\\(\\s*$");
+
+    /**
+     * Исходник без комментариев: по-русски в них пишут нарочно,
+     * и объяснение на русском полезнее английского имени.
+     *
+     * <p>Строки при этом не трогаются — иначе вырезались бы и
+     * апострофы внутри них, и разбор поехал бы.
+     */
+    private static String withoutComments(String src) {
+        StringBuilder out = new StringBuilder(src.length());
+        int i = 0;
+        while (i < src.length()) {
+            char c = src.charAt(i);
+            if (c == '\'' || c == '"' || c == '`') {
+                int j = i + 1;
+                while (j < src.length() && src.charAt(j) != c) {
+                    j += src.charAt(j) == '\\' ? 2 : 1;
+                }
+                out.append(src, i, Math.min(j + 1, src.length()));
+                i = j + 1;
+            } else if (c == '/' && i + 1 < src.length() && src.charAt(i + 1) == '/') {
+                int j = src.indexOf('\n', i);
+                j = j < 0 ? src.length() : j;
+                out.append(" ".repeat(j - i));
+                i = j;
+            } else if (c == '/' && i + 1 < src.length() && src.charAt(i + 1) == '*') {
+                int j = src.indexOf("*/", i + 2);
+                j = j < 0 ? src.length() : j + 2;
+                out.append(" ".repeat(j - i));
+                i = j;
+            } else {
+                out.append(c);
+                i++;
+            }
+        }
+        return out.toString();
+    }
+
     /* ---------------- разбор исходника ---------------- */
 
     /**

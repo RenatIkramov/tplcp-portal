@@ -97,6 +97,28 @@
   const state = {dir: null, mode: 'view', id: null, row: null, draft: {}};
   PORTAL.portalDir = state;
 
+  /**
+   * Свой склад списков, а НЕ общий PORTAL.catalog.
+   *
+   * <p>Отсюда росла поломка, которую видно было только у админа:
+   * выбрал поклажедателя — справочник «Поклажедатели» пуст, обновил
+   * страницу — на месте. PORTAL.catalog — это данные ВЫБРАННОГО
+   * клиента, и смена клиента их законно забывает (PORTAL.forgetAll
+   * чистит хранилище целиком, ключ за ключом). Склады, поклажедатели
+   * и организации оператора лежали там же — и забывались вместе
+   * с чужими товарами. Перечитать их было некому: грузятся они
+   * на onSession («кто вошёл»), а смена клиента прогоняет только
+   * onLogin («чьи данные»).
+   *
+   * <p>Поэтому список портала живёт отдельно — как уже живут единицы
+   * измерения, пользователи, доступы и типы документов: у каждого
+   * свой состав. Исключение в forgetAll решило бы сегодняшний случай
+   * и промолчало бы о следующем справочнике портала, который кто-то
+   * положит в общее хранилище.
+   */
+  const lists = {rows: {}, error: {}};
+  PORTAL.portalDirLists = lists;
+
   function ensureView(){
     if (document.getElementById('view-portaldir-detail')) return;
     const anchor = document.getElementById('view-sku-detail');
@@ -185,11 +207,11 @@
       ).join('') + '</div>';
     if (state.row && state.row.userCount !== undefined && !editing){
       html += '<div style="color:var(--muted); font-size:13px; margin-top:12px;">'
-        + 'Пользователей с доступом: ' + state.row.userCount + '</div>';
+        + T('admin.text.users_with_access', {count: state.row.userCount}) + '</div>';
     }
     if (editing){
       html += '<div style="color:var(--muted); font-size:12px; margin-top:12px;">'
-        + 'Поля со звёздочкой обязательны.</div>';
+        + T('common.hint.required_fields_marked') + '</div>';
     }
     document.getElementById('portalDirBody').innerHTML = html;
     showView('portaldir-detail');
@@ -321,11 +343,11 @@
   async function reload(dirName){
     const dir = DIRS[dirName];
     try {
-      PORTAL.catalog[dirName] = await api('GET', dir.list);
-      PORTAL.catalogError[dirName] = null;
+      lists.rows[dirName] = await api('GET', dir.list);
+      lists.error[dirName] = null;
     } catch (e){
-      PORTAL.catalog[dirName] = PORTAL.catalog[dirName] || [];
-      PORTAL.catalogError[dirName] = e.message;
+      lists.rows[dirName] = lists.rows[dirName] || [];
+      lists.error[dirName] = e.message;
     }
     renderDir(dirName);
   }
@@ -335,7 +357,7 @@
     const body = document.getElementById(dir.body);
     if (!body) return;
     const show = document.getElementById(dirName + 'ShowArchived')?.checked;
-    let rows = (PORTAL.catalog[dirName] || []).filter(r => show || r.isActive !== false);
+    let rows = (lists.rows[dirName] || []).filter(r => show || r.isActive !== false);
     if (typeof fcDirSortArray === 'function'){
       rows = fcDirSortArray(dirName, rows.slice(), r => r[dirSortState[dirName].col] ?? '');
     }
@@ -353,7 +375,7 @@
             }).join('')
           + '</tr>').join('')
       : '<tr><td colspan="' + dir.columns.length + '" style="color:var(--muted);">'
-        + (PORTAL.catalogError[dirName] ? T('partners.text.data_unavailable') : T('partners.text.directory_is_empty')) + '</td></tr>';
+        + (lists.error[dirName] ? T('partners.text.data_unavailable') : T('partners.text.directory_is_empty')) + '</td></tr>';
   }
 
   window.portalDirArchiveFilter = renderDir;
@@ -361,7 +383,7 @@
   // Принимает КЛЮЧ текста кнопки, а не готовую подпись: подпись,
   // подставленная один раз, осталась бы на языке момента отрисовки.
   function decorateList(dirName, labelKey){
-    const head = document.querySelector('#ref-sub-' + dirName + ' .panel-head');
+    const head = document.querySelector('#admin-sub-' + dirName + ' .panel-head');
     if (!head || document.getElementById(dirName + 'CreateBtn')) return;
     let actions = head.querySelector('.actions');
     if (!actions){
@@ -420,7 +442,7 @@
       if (form && form.id === r.id){
         return '<tr>' + inputCell('code', form.values.code) + inputCell('name', form.values.name)
           + inputCell('sortOrder', form.values.sortOrder, true)
-          + '<td>' + (r.isActive ? T('portal.text.yes') : 'нет') + '</td>'
+          + '<td>' + (r.isActive ? T('portal.text.yes') : T('portal.text.no')) + '</td>'
           + '<td style="white-space:nowrap;">'
           + '<button class="btn primary" onclick="portalEnumSave()">' + T('portal.text.save') + '</button> '
           + '<button class="btn ghost" onclick="portalEnumCancel()">' + T('common.button.cancel') + '</button></td></tr>';
@@ -447,7 +469,7 @@
     body.innerHTML = html || '<tr><td colspan="5" style="color:var(--muted);">' + T('partners.text.directory_is_empty') + '</td></tr>';
 
     if (canEdit){
-      const panel = document.querySelector('#ref-sub-' + name + ' .panel-head');
+      const panel = document.querySelector('#admin-sub-' + name + ' .panel-head');
       if (panel && !document.getElementById(name + 'CreateBtn')){
         let actions = panel.querySelector('.actions');
         if (!actions){
@@ -533,21 +555,15 @@
 
   /* ========= Организации оператора в администрировании =========
      В разметке демо такой подвкладки нет: таблица operator создавалась
-     под решение Р2, а экрана у неё не было. Поэтому кнопку и панель
-     добавляем сами, рядом с остальными подвкладками администрирования.
+     под решение Р2, а экрана у неё не было. Поэтому панель добавляем
+     сами. Кнопку — не добавляем: ряд вкладок собирает admin-tabs.js
+     по своему списку, иначе место вкладки зависело бы от порядка
+     загрузки файлов. Мы лишь сообщаем, что панель готова и чем её
+     наполнять.
   ============================================================= */
 
   function ensureOperatorSub(){
-    const tabs = document.querySelector('#view-admin .admin-subtabs');
-    if (!tabs || document.getElementById('admin-sub-operator')) return;
-
-    const btn = document.createElement('button');
-    btn.className = 'admin-subtab-btn';
-    btn.setAttribute('data-sub', 'operator');
-    btn.setAttribute('data-i18n', 'admin.title.operator_organizations');
-    btn.textContent = T('admin.title.operator_organizations');
-    btn.onclick = () => showAdminSub('operator');
-    tabs.appendChild(btn);
+    if (document.getElementById('admin-sub-operator')) return;
 
     const pane = document.createElement('div');
     pane.className = 'admin-sub';
@@ -559,8 +575,7 @@
       + '<div class="actions" id="operatorsDirActions"></div></div>'
       + '<div class="hint" data-i18n="admin.hint.operator_directory"'
       + ' style="margin:-4px 0 12px;">'
-      + 'Реквизиты организаций оператора и содержимое страниц «О нас» и «Контакты». '
-      + 'Логотип появится вместе с файловым хранилищем.</div>'
+      + T('admin.hint.operator_directory') + '</div>'
       + '<div class="table-card"><table><thead><tr>'
       + '<th data-i18n="admin.column.organization_code">' + T('admin.column.organization_code') + '</th>'
       + '<th data-i18n="admin.column.organization_name">' + T('portal.text.company_name') + '</th>'
@@ -610,6 +625,19 @@
         decorateList('depositorsDir', 'portal.button.create_depositor');
       }
       ensureOperatorSub();
+
+      // Чем наполнить вкладку, когда её открыли. Список загружается
+      // при входе (выше), а перерисовка нужна при каждом открытии:
+      // сортировка, галочка «показать архивные» и переименование
+      // полей живут на экране, а не в ответе сервера.
+      if (PORTAL.adminTabs){
+        PORTAL.adminTabs.onOpen('operator', () => renderDir('operatorsDir'));
+        PORTAL.adminTabs.onOpen('warehousesDir', () => renderDir('warehousesDir'));
+        PORTAL.adminTabs.onOpen('depositorsDir', () => renderDir('depositorsDir'));
+        PORTAL.adminTabs.onOpen('orderTypes', () => renderEnum('orderTypes'));
+        PORTAL.adminTabs.onOpen('docTypes', () => renderEnum('docTypes'));
+      }
+
       reload('warehousesDir').catch(() => {});
       reload('depositorsDir').catch(() => {});
       reload('operatorsDir').catch(() => {});

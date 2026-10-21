@@ -226,6 +226,40 @@
   PORTAL.isAdmin = () => ['admin', 'developer'].includes(
       (PORTAL.session && PORTAL.session.roleCode) || '');
 
+  /**
+   * Предложить браузеру запомнить пароль.
+   *
+   * <p>ЗАЧЕМ ОТДЕЛЬНО. Менеджер паролей узнаёт вход по тому, что
+   * страница после отправки формы сменилась. Портал страницу не меняет:
+   * вход уходит запросом, а форма остаётся на месте — и предложения
+   * сохранить пароль человек не видит никогда. То же и при смене
+   * пароля: менеджер хранит старый и будет подставлять его и дальше.
+   *
+   * <p>Поэтому зовём менеджер явно. Поддержка есть не везде
+   * (PasswordCredential — это Chrome и прочие на том же движке),
+   * и работает она только в защищённом окружении: по https или
+   * с localhost. Где не поддержано — молчим: предложение сохранить
+   * пароль это удобство, и его отсутствие не повод ронять вход.
+   *
+   * @param login    логин, под которым вошли
+   * @param password пароль, который сработал
+   * @param name     как показать учётную запись в менеджере
+   */
+  PORTAL.offerToSavePassword = async (login, password, name) => {
+    try {
+      if (!window.PasswordCredential || !navigator.credentials || !login || !password) return;
+      await navigator.credentials.store(new window.PasswordCredential({
+        id: login,
+        password: password,
+        name: name || login
+      }));
+    } catch (e){
+      // Отказ менеджера, небезопасное окружение, запрет настройками —
+      // всё это не наше дело и не повод мешать человеку работать.
+      console.warn('Сохранение пароля в менеджере: ' + e.message);
+    }
+  };
+
   PORTAL.onLogin = fn => { PORTAL.loaders.push(fn); };
   PORTAL.reloadAll = () => { PORTAL.loaders.forEach(fn => { try { fn(); } catch (e) {} }); };
 

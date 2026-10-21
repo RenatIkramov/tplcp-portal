@@ -123,4 +123,35 @@ class UiTextKeysTest extends PortalTestBase {
             throw new UncheckedIOException(e);
         }
     }
+
+    /**
+     * В английских текстах нет кириллицы.
+     *
+     * <p>Перевод делает человек, и бросить его на полуслове легче
+     * всего там, где фраза кончается именем собственным: половину
+     * перевёл, адрес оставил как был. Увидеть это может только тот,
+     * кто откроет портал по-английски и дочитает до конца строки, —
+     * то есть почти никто.
+     *
+     * <p>Проверка запрещает кириллицу в английском тексте целиком.
+     * Это строго: имя собственное кириллицей теоретически возможно.
+     * Но полезных случаев за весь каталог не нашлось ни одного,
+     * а недопереведённых — нашёлся.
+     */
+    @Test
+    void englishTextsHaveNoCyrillic() {
+        List<String> offenders = jdbc.sql("""
+                        SELECT t.text_key || ' → ' || t.value
+                          FROM dbo.ui_text t
+                          JOIN dbo.dictionary_locale l ON l.locale_id = t.locale_id
+                         WHERE l.code = 'en' AND t.value ~ '[А-Яа-яЁё]'
+                         ORDER BY 1
+                        """)
+                .query(String.class)
+                .list();
+        assertTrue(offenders.isEmpty(),
+                "английский текст наполовину остался русским — человек увидит это"
+                        + " только по-английски и только дочитав до конца:\n"
+                        + String.join("\n", offenders));
+    }
 }

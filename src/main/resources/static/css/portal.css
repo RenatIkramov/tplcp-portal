@@ -38,9 +38,19 @@
   .utility-row > span:not(.lang){color:rgba(255,255,255,.25);}
   .utility-row.muted{color:rgba(255,255,255,.5);font-size:12px;}
   .utility-row.muted a{color:rgba(255,255,255,.7);text-decoration:underline;}
+  /* Переключатель языка стоит в трёх местах, и фон под ним разный:
+     тёмная шапка портала, белая карточка входа, белое окно смены
+     пароля. Белый по белому — это и значит «кнопки языка нет»:
+     она была нарисована, просто её не видно.
+     Поэтому по умолчанию чип тёмный, а светлым он становится
+     только в шапке. */
   .lang{display:flex;gap:6px;position:relative;}
-  .lang span{padding:2px 6px;border-radius:3px;cursor:default;color:rgba(255,255,255,.55);}
-  .lang span.active{background:rgba(255,255,255,.15);color:#fff;}
+  .lang span{padding:2px 6px;border-radius:3px;cursor:default;color:var(--muted);}
+  .lang span.active{background:var(--bg);color:var(--ink);border:1px solid var(--line);}
+  .header-utility .lang span{color:rgba(255,255,255,.55);}
+  .header-utility .lang span.active{
+    background:rgba(255,255,255,.15);color:#fff;border-color:transparent;
+  }
   /* Чип текущего языка открывает список — вид тот же, что был
      у активного языка, поэтому шапка не меняется на вид. */
   .lang .lang-current{cursor:pointer;user-select:none;}
@@ -277,6 +287,19 @@
   .admin-subtab-btn.active{color:var(--blue);border-bottom-color:var(--blue);}
   .admin-sub{display:none;}
   .admin-sub.active{display:block;}
+
+  /* Второй ряд вкладок администрирования: вкладки выбранной группы.
+     Отличается от первого нарочно — иначе два одинаковых ряда друг
+     под другом читаются как один длинный, и непонятно, что к чему
+     относится. Рамки снизу нет: ряд и так отделён от экрана отступом,
+     а две линии подряд рисуют полосу. */
+  .admin-subtabs-2{
+    border-bottom:none;margin:-14px 0 16px;padding-left:4px;
+  }
+  .admin-subtabs-2 .admin-subtab-btn{padding:6px 12px;font-size:13px;font-weight:500;}
+  .admin-subtabs-2 .admin-subtab-btn.active{
+    color:var(--blue);border-bottom-color:transparent;font-weight:600;
+  }
 
   /* ===== О нас ===== */
   .about-hero{

@@ -1132,11 +1132,18 @@ function clearSkuFilters(){
   onSkuFilterChange();
 }
 function clearStockFilters(){
-  document.getElementById('stockSearchCode').value = '';
-  document.getElementById('stockSearchName').value = '';
-  document.getElementById('stockFilterGroup').value = '';
-  document.getElementById('stockFilterType').value = '';
-  document.getElementById('stockDefectFilterCb').checked = false;
+  // Поля ищутся с проверкой: фильтр «Тип товара» из запасов убран —
+  // портал по нему не отбирал, и в разметке его больше нет. Без
+  // проверки эта функция падала бы на первом же нажатии «Очистить»,
+  // а значок очистки на экране остался бы.
+  const set = (id, prop, value) => {
+    const el = document.getElementById(id);
+    if (el) el[prop] = value;
+  };
+  set('stockSearchCode', 'value', '');
+  set('stockSearchName', 'value', '');
+  set('stockFilterGroup', 'value', '');
+  set('stockDefectFilterCb', 'checked', false);
   onStockFilterChange();
 }
 function clearReceiptsFilters(){
@@ -1690,7 +1697,7 @@ function fcDirectoryCodeOptions(dirName){
     'Поставщики': ()=>Object.keys(SUPPLIER_DETAILS).map(name=>({code:SUPPLIER_DETAILS[name].code || name, name})),
     'Грузополучатели': ()=>Object.keys(CONSIGNEE_DETAILS).map(name=>({code:CONSIGNEE_DETAILS[name].code || name, name})),
     'Типы заказов': ()=>ORDER_TYPES.map(name=>({code:name, name})),
-    'Типы ожидаемых документов': ()=>RECEIPT_DOC_TYPES.map(name=>({code:name, name})),
+    'Типы поступлений': ()=>RECEIPT_DOC_TYPES.map(name=>({code:name, name})),
     'Поклажедатели': ()=>DEPOSITOR_DIRECTORY.map(k=>({code:k.code, name:k.org_name})),
     'Склады': ()=>WAREHOUSE_DIRECTORY.map(w=>({code:w.code, name:w.name})),
   };
@@ -1845,7 +1852,7 @@ function deleteReportConfig(id){
 }
 
 /* ============== Расширенные настройки: конфигурация полей документов ============== */
-const FC_REF_DIRECTORIES = ['—', 'Товары', 'Поставщики', 'Грузополучатели', 'Типы заказов', 'Типы ожидаемых документов', 'Поклажедатели', 'Склады'];
+const FC_REF_DIRECTORIES = ['—', 'Товары', 'Поставщики', 'Грузополучатели', 'Типы заказов', 'Типы поступлений', 'Поклажедатели', 'Склады'];
 const FC_TRANSPORT_FIELDS = new Set(['trip','carrier','transportType','transportBrand','carNumber','trailerNumber','techPassportNumber','containerNumber','sealNumber','driverName','driverPhone','driverIdNumber','driverInn','deliveryDate']);
 const SPECIAL_HEADER_FIELDS = {
   receipts: new Set(['no','wmsNumber','erpNo','author','comment','date','status','supplier','docType','warehouse','accompanyingDocNumber','gtd','eta','arrivalDate','receivingEndDate','weight','volume','lineCount','palletCount','cargoPlaces','totalPieces','trip','carrier','transportType','transportBrand','carNumber','trailerNumber','techPassportNumber','containerNumber','sealNumber','driverName','driverPhone','driverIdNumber','driverInn']),
@@ -5280,27 +5287,26 @@ function showTab(tab){
   }
 }
 let currentReferencesSub = 'sku';
+/* В «Справочниках» остались справочники ПОКЛАЖЕДАТЕЛЯ: товары,
+   упаковки, поставщики, грузополучатели. Справочники всего портала —
+   склады, пользователи, поклажедатели, типы, единицы, языки — переехали
+   в «Администрирование → Общие справочники»: они одни на весь портал,
+   а стояли в одном ряду с данными выбранного клиента.
+
+   Имена панелей здесь перечислены списком, и список пришлось сократить
+   вместе с переездом: getElementById искал бы панель, которой в этом
+   разделе больше нет, и переключение падало бы на null. */
 function showReferencesSub(sub){
-  const adminOnlySubs = ['orderTypes', 'docTypes', 'depositorsDir', 'warehousesDir', 'users'];
-  if(adminOnlySubs.includes(sub) && currentUserRole !== 'admin' && currentUserRole !== 'developer') sub = 'sku';
   currentReferencesSub = sub;
   document.querySelectorAll('[data-refsub]').forEach(b=>b.classList.toggle('active', b.dataset.refsub===sub));
-  ['sku','packaging','suppliers','consignees','orderTypes','docTypes','depositorsDir','warehousesDir','users'].forEach(s=>{
-    document.getElementById('ref-sub-'+s).classList.toggle('active', s===sub);
+  ['sku','packaging','suppliers','consignees'].forEach(s=>{
+    const panel = document.getElementById('ref-sub-'+s);
+    if(panel) panel.classList.toggle('active', s===sub);
   });
   if(sub === 'sku') renderSku();
   if(sub === 'packaging') renderPackaging();
   if(sub === 'suppliers') renderSuppliers();
   if(sub === 'consignees') renderConsignees();
-  if(sub === 'orderTypes') renderOrderTypes();
-  if(sub === 'docTypes') renderDocTypes();
-  if(sub === 'depositorsDir') renderDepositorsDir();
-  if(sub === 'warehousesDir') renderWarehousesDir();
-  if(sub === 'users'){
-    renderAdminUsers();
-    const actions = document.getElementById('usersRefActions');
-    if(actions) actions.style.display = currentUserRole === 'developer' ? 'none' : '';
-  }
 }
 function showAdminSub(sub){
   document.querySelectorAll('.admin-subtab-btn[data-sub]').forEach(b=>b.classList.toggle('active', b.dataset.sub===sub));
@@ -5627,7 +5633,7 @@ function openAdminUserEdit(login){
 
     <div class="actions" style="margin-top:18px;">
       <button class="btn primary" onclick="saveAdminUserEdit('${u.login}')">${T('portal.text.save')}</button>
-      <button class="btn ghost" onclick="showTab('references'); showReferencesSub('users');">${T('common.button.cancel')}</button>
+      <button class="btn ghost" onclick="showTab('admin'); showAdminSub('users');">${T('common.button.cancel')}</button>
     </div>
   `;
   if(currentUserRole === 'developer'){
@@ -5997,11 +6003,10 @@ function enterApp(user){
   document.getElementById('managerLine').textContent = user.manager;
   document.getElementById('adminTabBtn').style.display = (user.role === 'admin' || user.role === 'developer') ? '' : 'none';
   document.getElementById('devSettingsTabBtn').style.display = user.role === 'developer' ? '' : 'none';
-  document.getElementById('refSubBtnOrderTypes').style.display = (user.role === 'admin' || user.role === 'developer') ? '' : 'none';
-  document.getElementById('refSubBtnDocTypes').style.display = (user.role === 'admin' || user.role === 'developer') ? '' : 'none';
-  document.getElementById('refSubBtnDepositorsDir').style.display = (user.role === 'admin' || user.role === 'developer') ? '' : 'none';
-  document.getElementById('refSubBtnWarehousesDir').style.display = (user.role === 'admin' || user.role === 'developer') ? '' : 'none';
-  document.getElementById('refSubBtnUsers').style.display = (user.role === 'admin' || user.role === 'developer') ? '' : 'none';
+  // Кнопок справочников портала в «Справочниках» больше нет: типы,
+  // поклажедатели, склады и пользователи переехали
+  // в «Администрирование → Общие справочники», а весь раздел
+  // показан по роли строкой выше.
   renderProfile(user);
   lastMainView = 'orders';
   showTab('orders');

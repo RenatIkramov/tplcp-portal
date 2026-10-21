@@ -126,7 +126,7 @@
         + (canEdit ? '<th></th>' : '') + '</tr></thead><tbody>'
         + rows.map(a => '<tr><td>' + esc(a.address) + '</td><td class="num">'
             + dash(a.sortOrder) + '</td><td>'
-            + (a.isDefault ? '★ основной'
+            + (a.isDefault ? '★ ' + T('partners.text.default')
                 : (canEdit ? '<button class="btn ghost" onclick="portalAddressDefault(\'' + a.addressId
                     + '\')">' + T('partners.text.set_as_default') + '</button>' : '—'))
             + '</td>'

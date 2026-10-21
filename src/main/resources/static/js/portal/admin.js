@@ -42,34 +42,56 @@
     modal.id = 'pwOverlay';
     modal.style.cssText = 'align-items:center;justify-content:center;';
     modal.onclick = e => { if (e.target === modal && !required) close(); };
+    // Разметка без подписей: их ставит retext(). Так подписи живут
+    // в одном месте и переставляются при смене языка — иначе окно
+    // осталось бы на том языке, на котором его собрали.
     modal.innerHTML = ''
       + '<div class="col-panel" id="pwPanel" style="width:460px;box-shadow:0 8px 32px rgba(0,0,0,.24);'
       + 'border-radius:10px;">'
-      + '  <h3 id="pwTitle" style="font-size:17px;">' + T('admin.text.change_password') + '</h3>'
-      + '  <div class="hint" id="pwHint">' + T('admin.text.choose_a_password_that_meets_the_r') + '</div>'
-      + '  <div class="kv" style="margin-top:12px;"><label>' + T('admin.text.current_password') + '</label>'
+      + '  <div style="display:flex;align-items:flex-start;gap:12px;">'
+      + '    <h3 id="pwTitle" style="font-size:17px;flex:1;"></h3>'
+      + '    <div class="lang" id="pwLang"></div>'
+      + '  </div>'
+      + '  <div class="hint" id="pwHint"></div>'
+      // Поля — внутри формы, и первым идёт скрытый логин: без него
+      // менеджер паролей не знает, чью запись обновлять, и предлагает
+      // завести новую. Форма сама никуда не отправляется — её submit
+      // перехвачен, — но разметка нужна менеджеру именно такая.
+      + '  <form id="pwForm" autocomplete="on">'
+      + '  <input type="text" id="pwLogin" name="username" autocomplete="username"'
+      + ' tabindex="-1" aria-hidden="true" style="position:absolute;opacity:0;'
+      + 'width:1px;height:1px;pointer-events:none;">'
+      + '  <div class="kv" style="margin-top:12px;"><label id="pwCurrentLabel"></label>'
       + '    <input type="password" class="kv-input kv-input-editable" id="pwCurrent" autocomplete="current-password"></div>'
-      + '  <div class="kv" style="margin-top:12px;"><label>' + T('admin.text.new_password') + '</label>'
+      + '  <div class="kv" style="margin-top:12px;"><label id="pwNewLabel"></label>'
       + '    <input type="password" class="kv-input kv-input-editable" id="pwNew" autocomplete="new-password"></div>'
-      + '  <div class="kv" style="margin-top:12px;"><label>' + T('admin.text.repeat_new_password') + '</label>'
+      + '  <div class="kv" style="margin-top:12px;"><label id="pwRepeatLabel"></label>'
       + '    <input type="password" class="kv-input kv-input-editable" id="pwRepeat" autocomplete="new-password"></div>'
+      + '  </form>'
       + '  <div id="pwRules" style="margin-top:12px;padding:10px 12px;background:var(--bg);'
       + 'border-radius:6px;font-size:12.5px;line-height:1.9;">'
-      + '    <div style="color:var(--muted);margin-bottom:2px;">' + T('admin.text.password_requirements') + '</div>'
-      + '    <div data-pw-rule="length"><span class="pw-mark">○</span>' + ' ' + T('admin.text.at_least_8_characters') + '</div>'
-      + '    <div data-pw-rule="case"><span class="pw-mark">○</span> латинские буквы: '
-      + 'и заглавные, и строчные</div>'
-      + '    <div data-pw-rule="extra"><span class="pw-mark">○</span> цифра или знак '
-      + '(например - _ . ! #)</div>'
+      + '    <div id="pwRulesTitle" style="color:var(--muted);margin-bottom:2px;"></div>'
+      + '    <div data-pw-rule="length"><span class="pw-mark">○</span> <span data-pw-text></span></div>'
+      + '    <div data-pw-rule="case"><span class="pw-mark">○</span> <span data-pw-text></span></div>'
+      + '    <div data-pw-rule="extra"><span class="pw-mark">○</span> <span data-pw-text></span></div>'
       + '  </div>'
       + '  <div id="pwError" style="display:none;margin-top:12px;padding:8px 10px;border-radius:6px;'
       + 'background:#fdecea;color:#c0392b;font-size:13px;"></div>'
       + '  <div class="actions" style="margin-top:18px;display:flex;gap:8px;">'
-      + '    <button class="btn primary" id="pwSave">' + T('admin.text.change_password2') + '</button>'
-      + '    <button class="btn ghost" id="pwCancel">' + T('common.button.cancel') + '</button>'
+      + '    <button class="btn primary" id="pwSave"></button>'
+      + '    <button class="btn ghost" id="pwCancel"></button>'
       + '  </div>'
       + '</div>';
     document.body.appendChild(modal);
+    retext();
+    // Свой переключатель языка: окно — накладка во весь экран,
+    // и переключатель шапки остаётся под ней. Человеку с выданным
+    // паролем деваться с этого окна некуда, а язык ему может быть
+    // нужен раньше, чем пароль.
+    if (typeof PORTAL.mountLanguageSwitch === 'function'){
+      PORTAL.mountLanguageSwitch(byId('pwLang'));
+    }
+    byId('pwForm').addEventListener('submit', e => { e.preventDefault(); save(); });
     byId('pwSave').onclick = save;
     byId('pwCancel').onclick = close;
     ['pwCurrent','pwNew','pwRepeat'].forEach(id => {
@@ -78,6 +100,47 @@
     byId('pwNew').addEventListener('input', markRules);
     markRules();
   }
+
+  /**
+   * Подписи окна — все разом, из каталога.
+   *
+   * <p>Зовётся при сборке, при открытии и при смене языка. Поля ввода
+   * при этом не трогаются: набранный пароль терять нельзя, а смена
+   * языка на полпути — обычное дело именно здесь.
+   *
+   * <p>Заголовок и подсказка зависят от режима: при обязательной смене
+   * человек пришёл не по своей воле, и сказать ему надо другое.
+   */
+  function retext(){
+    if (!byId('pwOverlay')) return;
+    const set = (id, text) => { const el = byId(id); if (el) el.textContent = text; };
+    set('pwTitle', required ? T('admin.text.set_your_password') : T('admin.text.change_password'));
+    set('pwHint', required
+        ? T('admin.text.password_issued_by_admin') + ' '
+          + T('admin.text.enter_the_password_you_were_given')
+        : T('admin.text.choose_a_password_that_meets_the_r'));
+    set('pwCurrentLabel', T('admin.text.current_password'));
+    set('pwNewLabel', T('admin.text.new_password'));
+    set('pwRepeatLabel', T('admin.text.repeat_new_password'));
+    set('pwRulesTitle', T('admin.text.password_requirements'));
+    const rules = {
+      length: T('admin.text.at_least_8_characters'),
+      case: T('admin.text.latin_letters_both_cases'),
+      extra: T('admin.text.digit_or_sign')
+    };
+    Object.keys(rules).forEach(rule => {
+      const cell = document.querySelector('#pwRules [data-pw-rule="' + rule + '"] [data-pw-text]');
+      if (cell) cell.textContent = rules[rule];
+    });
+    set('pwSave', T('admin.text.change_password2'));
+    set('pwCancel', T('common.button.cancel'));
+    const cancel = byId('pwCancel');
+    if (cancel) cancel.style.display = required ? 'none' : '';
+    markRules();
+  }
+
+  // Смена языка перебирает подписи окна, если оно уже собрано.
+  PORTAL.refreshPasswordDialog = retext;
 
   /**
    * Те же правила, что и на сервере, — здесь только чтобы человек видел,
@@ -122,14 +185,11 @@
 
   /** Открыть окно. principal === 'forced' — обязательная смена после входа. */
   window.portalOpenPasswordChange = function(mode){
-    createModal();
     required = mode === 'forced';
-    byId('pwTitle').textContent = required ? T('admin.text.set_your_password') : T('admin.text.change_password');
-    byId('pwHint').textContent = required
-      ? 'Пароль выдал администратор портала — работать можно только со своим. '
-        + T('admin.text.enter_the_password_you_were_given')
-      : T('admin.text.choose_a_password_that_meets_the_r');
-    byId('pwCancel').style.display = required ? 'none' : '';
+    createModal();
+    retext();
+    const who = byId('pwLogin');
+    if (who) who.value = (PORTAL.session && PORTAL.session.login) || '';
     error('');
     byId('pwOverlay').classList.add('active');
     setTimeout(() => byId('pwCurrent').focus(), 50);
@@ -145,12 +205,17 @@
     if (isNew !== repeat){ error(T('admin.text.new_password_and_its_repeat_do')); return; }
     // Проверка пароля на сервере по своей природе небыстрая — хеш считается
     // медленно намеренно. Показываем, что запрос идёт, и не даём кликать дважды.
-    const label = button.textContent;
     button.disabled = true;
     button.textContent = T('admin.text.checking');
     error('');
     try {
       await api('POST', '/api/me/password', {currentPassword: current, newPassword: isNew});
+      // Менеджер паролей хранит прежний и будет подставлять его и
+      // дальше: страницу портал не меняет, и смены он не заметит.
+      if (PORTAL.offerToSavePassword && PORTAL.session){
+        await PORTAL.offerToSavePassword(PORTAL.session.login, isNew,
+            PORTAL.session.fullName || PORTAL.session.login);
+      }
       const wasRequired = required;
       required = false;
       close();
@@ -170,7 +235,9 @@
       error(e.status === 403 ? T('admin.text.current_password_is_incorrect') : e.message);
     } finally {
       button.disabled = false;
-      button.textContent = label;
+      // Подпись берётся заново из каталога, а не из запомненной
+      // переменной: язык могли сменить, пока шёл запрос.
+      button.textContent = T('admin.text.change_password2');
     }
   }
 
@@ -224,8 +291,8 @@
     const body = byId('adminUsersBody');
     if (!body) return;
     if (admin.error){
-      body.innerHTML = '<tr><td colspan="6" style="color:#c0392b;">Не удалось получить список: '
-        + esc(admin.error) + '</td></tr>';
+      body.innerHTML = '<tr><td colspan="6" style="color:#c0392b;">'
+        + T('common.message.could_not_get_the_data') + ': ' + esc(admin.error) + '</td></tr>';
       return;
     }
     if (!admin.users.length){
@@ -237,7 +304,8 @@
         ? '<span class="badge ok"><span class="dot"></span>' + T('admin.text.active') + '</span>'
         : '<span class="badge err"><span class="dot"></span>' + T('admin.text.blocked') + '</span>';
       const pwd = u.mustChangePassword
-        ? ' <span class="badge warn" title="Пароль выдан администратором и будет сменён при входе">'
+        ? ' <span class="badge warn" title="'
+          + esc(T('admin.hint.must_change_password_badge')) + '">'
           + '<span class="dot"></span>' + T('admin.text.must_change_password') + '</span>'
         : '';
       return '<tr onclick="portalOpenAdminUser(\'' + u.userId + '\')">'
@@ -327,7 +395,7 @@
       + (isNew ? '' : ''
       + '  <div><label style="display:flex;align-items:center;gap:8px;font-size:13.5px;cursor:pointer;">'
       + '    <input type="checkbox" id="userIsActive"' + (u.isActive ? ' checked' : '')
-      +      (isSelf ? ' disabled title="Свою учётную запись заблокировать нельзя"' : '') + '>'
+      +      (isSelf ? ' disabled title="' + esc(T('admin.hint.cannot_block_yourself')) + '"' : '') + '>'
       + '    <span class="badge ' + (u.isActive ? 'ok' : 'err') + '" id="userIsActiveBadge">'
       + '<span class="dot"></span>' + (u.isActive ? T('admin.text.active') : T('admin.text.blocked')) + '</span>'
       + '  </label></div>')
@@ -347,8 +415,8 @@
       + (isNew ? '' : dataRow(T('admin.text.password_set'),
             u.passwordChangedAt ? ruDateTime(u.passwordChangedAt) : '—'))
       + '</div></div>'
-      + (isSelf ? '<div class="hint" style="margin:-6px 0 14px;">Это ваша учётная запись: '
-          + 'роль и блокировку для себя менять нельзя.</div>' : '')
+      + (isSelf ? '<div class="hint" style="margin:-6px 0 14px;">'
+          + T('admin.hint.own_account') + '</div>' : '')
 
       + accessBlock(granted)
 
@@ -362,7 +430,8 @@
       + '    <div class="kv" style="margin:0;min-width:260px;"><label>'
       + (isNew ? T('common.label.password') : T('admin.text.new_password')) + '</label>'
       + '      <input type="text" class="kv-input kv-input-editable" id="adminNewPassword" '
-      + 'data-i18n-placeholder="admin.placeholder.password_rule" placeholder="латинские буквы разного регистра + цифра или знак"></div>'
+      + 'data-i18n-placeholder="admin.placeholder.password_rule" placeholder="'
+      + esc(T('admin.placeholder.password_rule')) + '"></div>'
       + '    <button class="btn" id="adminGenPassword" type="button">' + T('admin.text.generate') + '</button>'
       + (isNew ? '' : '    <button class="btn primary" id="adminSetPassword" type="button">'
           + '' + T('admin.button.set_password') + '</button>')
@@ -403,12 +472,12 @@
     }
     byId('adminGenPassword').onclick = () => { byId('adminNewPassword').value = generate(); };
     byId('adminSaveUser').onclick = () => isNew ? createUser() : saveCard(u);
-    byId('adminCancelUser').onclick = () => { showTab('references'); showReferencesSub('users'); };
+    byId('adminCancelUser').onclick = () => { showTab('admin'); showAdminSub('users'); };
 
     if (readOnly){
       el.insertAdjacentHTML('afterbegin', '<div style="background:#eef2ff;border:1px solid #c7d2fe;'
         + 'color:#3730a3;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:13px;">'
-        + '👁 Режим просмотра — менять пользователей вправе только администратор.</div>');
+        + T('admin.text.view_mode_users') + '</div>');
       el.querySelectorAll('input, select, textarea').forEach(e => e.disabled = true);
       ['adminSetPassword','adminSaveUser','adminGenPassword'].forEach(id => {
         const b = byId(id);
@@ -417,7 +486,7 @@
     }
     // карточку пользователя открывают из справочника пользователей
     PORTAL.setBack('adminUserEditBack', 'admin.button.back_to_users',
-        () => { showTab('references'); showReferencesSub('users'); });
+        () => { showTab('admin'); showAdminSub('users'); });
     showView('admin-user-edit');
   };
 
@@ -428,14 +497,16 @@
                                    hour:'2-digit', minute:'2-digit'});
   }
 
-  /** Пароль из слогов и цифр: читается вслух и переносится без ошибок. */
+  /**
+   * Пароль из слогов и цифр: читается вслух и переносится без ошибок.
+   *
+   * <p>Здесь же собирался второй, кириллический вариант слова —
+   * и никуда не шёл: в ответ уходит только латинский. Выглядело
+   * это хуже, чем было: правило пароля требует латинских букв,
+   * и мёртвые строки читались как «портал выдаёт пароль,
+   * который сам же и отвергнет».
+   */
   function generate(){
-    const consonants = 'бвгдкмнпрстфх', vowels2 = 'аеиоуя';
-    let word = '';
-    for (let i = 0; i < 4; i++){
-      word += consonants[Math.floor(Math.random() * consonants.length)]
-             + vowels2[Math.floor(Math.random() * vowels2.length)];
-    }
     const letters = 'kmnprst', vowels = 'aeiou';
     let second = '';
     for (let i = 0; i < 3; i++){
@@ -540,8 +611,8 @@
         // видимости разделов должны считаться в одном месте
         await PORTAL.refreshSettings();
       }
-      showTab('references');
-      showReferencesSub('users');
+      showTab('admin');
+      showAdminSub('users');
     } catch (e){
       showMessage(e.message, false);
       if (typeof notify === 'function') notify(T('common.message.save_failed', {error: e.message}));
@@ -566,7 +637,19 @@
     // целиком, а не данные выбранного клиента. На onLogin он не грузился
     // до выбора поклажедателя, и администратор, которому выбор обязателен,
     // видел пустой список.
-    PORTAL.onSession(loadUsers);
+    PORTAL.onSession(() => {
+      // Кнопку «Создать пользователя» разработчику не показываем: раздел
+      // ему открыт для разбора, а не для ведения. Прежде это правило
+      // жило в переключателе подвкладок справочников — вкладка оттуда
+      // переехала, и правило переехало вместе с ней.
+      const actions = document.getElementById('usersRefActions');
+      if (actions){
+        actions.style.display =
+            (PORTAL.session && PORTAL.session.roleCode) === 'developer' ? 'none' : '';
+      }
+      if (PORTAL.adminTabs) PORTAL.adminTabs.onOpen('users', drawList);
+      return loadUsers();
+    });
   }
 
   if (document.readyState === 'loading'){

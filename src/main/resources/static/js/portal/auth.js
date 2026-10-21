@@ -130,6 +130,12 @@
     try {
       const sess = await api('POST', '/api/auth/login',
           {login: login, password: password, remember: remember});
+      // Пока пароль под рукой и мы знаем, что он сработал: страницу
+      // портал не меняет, и сам менеджер паролей вход не заметит.
+      // Зовём до signIn — тот перерисовывает экран целиком.
+      if (PORTAL.offerToSavePassword){
+        await PORTAL.offerToSavePassword(login, password, sess.fullName || login);
+      }
       await signIn(sess);
     } catch (e){
       error(e.message || T('auth.text.sign_in_failed'));
@@ -178,11 +184,12 @@
   function modeLabel(sess){
     const names = (sess.depositors || []).map(d => d.orgName).join(', ');
     switch (sess.roleCode){
-      case 'manager':   return 'Режим менеджера: доступны поклажедатели — ' + (names || 'нет');
+      case 'manager':   return T('auth.text.manager_mode_depositors',
+                                 {names: names || T('portal.text.no')});
       case 'admin':     return T('auth.text.administrator_mode_users_and_acces');
       case 'developer': return T('auth.text.developer_mode_document_and_field');
       case 'staff':     return T('auth.text.warehouse_staff_mode_only_granted');
-      default:          return 'Организация: ' + (names || '—');
+      default:          return T('auth.text.organization') + ': ' + (names || '—');
     }
   }
 
@@ -216,8 +223,10 @@
     const show = (id, visible) => { const el = field(id); if (el) el.style.display = visible ? '' : 'none'; };
     show('adminTabBtn', admin);
     show('devSettingsTabBtn', user.role === 'developer');
-    ['refSubBtnOrderTypes','refSubBtnDocTypes','refSubBtnDepositorsDir',
-     'refSubBtnWarehousesDir','refSubBtnUsers'].forEach(id => show(id, admin));
+    // Кнопок справочников портала здесь больше нет: типы, поклажедатели,
+    // склады и пользователи переехали в «Администрирование → Общие
+    // справочники», а весь раздел целиком и так показан по роли
+    // (кнопка adminTabBtn выше).
 
     const managerLine = field('managerLine');
     if (managerLine) managerLine.textContent = user.manager;

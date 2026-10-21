@@ -432,17 +432,6 @@
 <div class="fgroup"><label for="stockFilterGroup" data-i18n="col.stock.group">Группа</label>
 <select id="stockFilterGroup"><option value="" data-i18n="receipts.option.all">Все</option><option data-i18n="stock.option.raw_materials">Сырьё</option><option data-i18n="stock.option.meat_products">Мясная продукция</option><option data-i18n="stock.option.dairy_products">Молочная продукция</option><option data-i18n="stock.option.ready_made_kits">Готовые наборы</option></select>
 </div>
-<div class="fgroup"><label for="stockFilterType" data-i18n="references.label.item_type">Тип товара</label>
-<select id="stockFilterType">
-<option data-i18n="references.option.all" value="">Все</option>
-<option data-i18n="references.option.raw_materials">Сырьё</option>
-<option data-i18n="references.option.finished_goods">Готовая продукция</option>
-<option data-i18n="references.option.components">Комплектующие</option>
-<option data-i18n="references.option.spare_parts">Запчасти</option>
-<option data-i18n="references.option.consumables">Расходные материалы</option>
-<option data-i18n="references.option.construction_materials">Строительные материалы</option>
-</select>
-</div>
 <div class="fgroup"><label>&nbsp;</label><label style="display:flex;align-items:center;gap:6px;font-weight:400;font-size:13.5px;height:38px;"><input type="checkbox" id="stockDefectFilterCb"> Только брак</label></div>
 </div>
 <div class="table-card">
@@ -466,11 +455,6 @@
 <button data-i18n="references.button.packaging" class="admin-subtab-btn ref-subtab-btn" data-refsub="packaging" onclick="showReferencesSub('packaging')">Упаковки</button>
 <button data-i18n="references.button.suppliers" class="admin-subtab-btn ref-subtab-btn" data-refsub="suppliers" onclick="showReferencesSub('suppliers')">Поставщики</button>
 <button data-i18n="references.button.consignees" class="admin-subtab-btn ref-subtab-btn" data-refsub="consignees" onclick="showReferencesSub('consignees')">Грузополучатели</button>
-<button data-i18n="references.button.order_types" class="admin-subtab-btn ref-subtab-btn" id="refSubBtnOrderTypes" data-refsub="orderTypes" onclick="showReferencesSub('orderTypes')">Типы заказов</button>
-<button data-i18n="references.button.expected_document_types" class="admin-subtab-btn ref-subtab-btn" id="refSubBtnDocTypes" data-refsub="docTypes" onclick="showReferencesSub('docTypes')">Типы ожидаемых документов</button>
-<button data-i18n="references.button.depositors" class="admin-subtab-btn ref-subtab-btn" id="refSubBtnDepositorsDir" data-refsub="depositorsDir" onclick="showReferencesSub('depositorsDir')">Поклажедатели</button>
-<button data-i18n="references.button.warehouses" class="admin-subtab-btn ref-subtab-btn" id="refSubBtnWarehousesDir" data-refsub="warehousesDir" onclick="showReferencesSub('warehousesDir')">Склады</button>
-<button data-i18n="references.button.users" class="admin-subtab-btn ref-subtab-btn" id="refSubBtnUsers" data-refsub="users" onclick="showReferencesSub('users')">Пользователи</button>
 </div>
 
 <div class="admin-sub ref-sub active" id="ref-sub-sku">
@@ -525,6 +509,9 @@
 <button data-i18n="references.button.import_from_excel" class="btn" id="uploadPackagingExcelBtn" onclick="notify('Диалог загрузки справочника упаковки из Excel')">Загрузить из Excel</button>
 <button data-i18n="references.button.download_excel_template" class="btn ghost" onclick="notify('Скачивается: Шаблон_Упаковка.xlsx')">Скачать шаблон Excel</button>
 </div>
+<div class="head-tools">
+<button class="btn ghost" data-i18n="receipts.button.columns" onclick="openColumnPicker('packaging')">⚙ Колонки</button>
+</div>
 </div>
 <div class="filters">
 <div class="filter-actions">
@@ -538,21 +525,7 @@
 <div class="table-scroll-top" id="packagingScrollTop"><div id="packagingScrollTopInner"></div></div>
 <div class="table-scroll-x" id="packagingScrollX">
 <table>
-<thead><tr>
-<th data-i18n="references.column.commercial_item_code" style="cursor:pointer;" onclick="onDirSortClick('packaging','productCode')" data-i18n-title="references.hint.sort" title="Сортировать">Коммерческий код товара</th>
-<th data-i18n="references.column.item" style="cursor:pointer;" onclick="onDirSortClick('packaging','productName')" data-i18n-title="references.hint.sort" title="Сортировать">Товар</th>
-<th data-i18n="references.column.base_unit_of_measure" style="cursor:pointer;" onclick="onDirSortClick('packaging','unit')" data-i18n-title="references.hint.sort" title="Сортировать">Базовая единица измерения</th>
-<th data-i18n="references.column.packaging_code" style="cursor:pointer;" onclick="onDirSortClick('packaging','packagingCode')" data-i18n-title="references.hint.sort" title="Сортировать">Код упаковки</th>
-<th data-i18n="references.column.packaging_type" style="cursor:pointer;" onclick="onDirSortClick('packaging','type')" data-i18n-title="references.hint.sort" title="Сортировать">Тип упаковки</th>
-<th data-i18n="references.column.name" style="cursor:pointer;" onclick="onDirSortClick('packaging','displayName')" data-i18n-title="references.hint.sort" title="Сортировать">Наименование</th>
-<th data-i18n="references.column.packaging_barcode" style="cursor:pointer;" onclick="onDirSortClick('packaging','barcode')" data-i18n-title="references.hint.sort" title="Сортировать">Штрих код упаковки</th>
-<th data-i18n="references.column.factor" class="num" style="cursor:pointer;" onclick="onDirSortClick('packaging','coefficient')" data-i18n-title="references.hint.sort" title="Сортировать">Коэффициент</th>
-<th data-i18n="references.column.length_cm" class="num" style="cursor:pointer;" onclick="onDirSortClick('packaging','length')" data-i18n-title="references.hint.sort" title="Сортировать">Длина, см</th>
-<th data-i18n="references.column.width_cm" class="num" style="cursor:pointer;" onclick="onDirSortClick('packaging','width')" data-i18n-title="references.hint.sort" title="Сортировать">Ширина, см</th>
-<th data-i18n="references.column.height_cm" class="num" style="cursor:pointer;" onclick="onDirSortClick('packaging','height')" data-i18n-title="references.hint.sort" title="Сортировать">Высота, см</th>
-<th data-i18n="references.column.volume_m" class="num" style="cursor:pointer;" onclick="onDirSortClick('packaging','volume')" data-i18n-title="references.hint.sort" title="Сортировать">Объём, м³</th>
-<th data-i18n="references.column.gross_weight_kg" class="num" style="cursor:pointer;" onclick="onDirSortClick('packaging','weightGross')" data-i18n-title="references.hint.sort" title="Сортировать">Вес брутто, кг</th>
-</tr></thead>
+<thead><tr id="packagingHead"></tr></thead>
 <tbody id="packagingBody"></tbody>
 </table>
 </div>
@@ -601,84 +574,6 @@
 </div>
 </div>
 
-<div class="admin-sub ref-sub" id="ref-sub-orderTypes">
-<div class="panel-head">
-<h1 data-i18n="references.title.order_types">Типы заказов</h1>
-</div>
-<div class="table-card">
-<table>
-<thead><tr><th data-i18n="col.stock.code">Код</th><th data-i18n="col.stock.name">Наименование</th></tr></thead>
-<tbody id="orderTypesBody"></tbody>
-</table>
-</div>
-</div>
-
-<div class="admin-sub ref-sub" id="ref-sub-docTypes">
-<div class="panel-head">
-<h1 data-i18n="references.title.expected_document_types">Типы ожидаемых документов</h1>
-</div>
-<div class="table-card">
-<table>
-<thead><tr><th data-i18n="col.stock.code">Код</th><th data-i18n="col.stock.name">Наименование</th></tr></thead>
-<tbody id="docTypesBody"></tbody>
-</table>
-</div>
-</div>
-
-<div class="admin-sub ref-sub" id="ref-sub-depositorsDir">
-<div class="panel-head">
-<h1><span data-i18n="references.title.depositors">Поклажедатели</span> <span class="count" id="depositorsDirCount"></span></h1>
-</div>
-<div class="table-card">
-<table>
-<thead><tr>
-<th data-i18n="col.stock.code" style="cursor:pointer;" onclick="onDirSortClick('depositorsDir','code')" data-i18n-title="references.hint.sort" title="Сортировать">Код</th>
-<th data-i18n="admin.column.organization_name" style="cursor:pointer;" onclick="onDirSortClick('depositorsDir','org')" data-i18n-title="references.hint.sort" title="Сортировать">Наименование организации</th>
-<th data-i18n="references.column.company_bin" style="cursor:pointer;" onclick="onDirSortClick('depositorsDir','bin')" data-i18n-title="references.hint.sort" title="Сортировать">БИН организации</th>
-<th data-i18n="references.column.legal_address" style="cursor:pointer;" onclick="onDirSortClick('depositorsDir','legalAddress')" data-i18n-title="references.hint.sort" title="Сортировать">Юр. адрес</th>
-<th data-i18n="references.column.phone" style="cursor:pointer;" onclick="onDirSortClick('depositorsDir','phone')" data-i18n-title="references.hint.sort" title="Сортировать">Телефон</th>
-<th style="cursor:pointer;" onclick="onDirSortClick('depositorsDir','email')" data-i18n-title="references.hint.sort" title="Сортировать">Email</th>
-<th data-i18n="references.column.contract_number" style="cursor:pointer;" onclick="onDirSortClick('depositorsDir','contractNumber')" data-i18n-title="references.hint.sort" title="Сортировать">Номер договора</th>
-<th data-i18n="references.column.contract_valid_until" style="cursor:pointer;" onclick="onDirSortClick('depositorsDir','contractValidUntil')" data-i18n-title="references.hint.sort" title="Сортировать">Срок действия договора</th>
-</tr></thead>
-<tbody id="depositorsDirBody"></tbody>
-</table>
-</div>
-</div>
-
-<div class="admin-sub ref-sub" id="ref-sub-warehousesDir">
-<div class="panel-head">
-<h1><span data-i18n="references.title.warehouses">Склады</span> <span class="count" id="warehousesDirCount"></span></h1>
-</div>
-<div class="table-card">
-<table>
-<thead><tr>
-<th data-i18n="col.stock.code" style="cursor:pointer;" onclick="onDirSortClick('warehousesDir','code')" data-i18n-title="references.hint.sort" title="Сортировать">Код</th>
-<th data-i18n="references.column.warehouse_name" style="cursor:pointer;" onclick="onDirSortClick('warehousesDir','name')" data-i18n-title="references.hint.sort" title="Сортировать">Наименование склада</th>
-<th data-i18n="references.column.address" style="cursor:pointer;" onclick="onDirSortClick('warehousesDir','address')" data-i18n-title="references.hint.sort" title="Сортировать">Адрес</th>
-<th data-i18n="references.column.responsible_person" style="cursor:pointer;" onclick="onDirSortClick('warehousesDir','responsible')" data-i18n-title="references.hint.sort" title="Сортировать">Ответственный</th>
-<th data-i18n="references.column.phone" style="cursor:pointer;" onclick="onDirSortClick('warehousesDir','phone')" data-i18n-title="references.hint.sort" title="Сортировать">Телефон</th>
-<th style="cursor:pointer;" onclick="onDirSortClick('warehousesDir','email')" data-i18n-title="references.hint.sort" title="Сортировать">Email</th>
-</tr></thead>
-<tbody id="warehousesDirBody"></tbody>
-</table>
-</div>
-</div>
-
-<div class="admin-sub ref-sub" id="ref-sub-users">
-<div class="panel-head">
-<div data-i18n="references.title.portal_users" class="section-title" style="margin:0;">Пользователи портала</div>
-<div class="actions" id="usersRefActions">
-<button data-i18n="references.button.create_user" class="btn primary" onclick="notify('Открыта форма создания пользователя')">+ Создать пользователя</button>
-</div>
-</div>
-<div class="table-card">
-<table>
-<thead><tr><th data-i18n="references.column.full_name">ФИО</th><th data-i18n="references.column.role">Роль</th><th data-i18n="references.column.organization_scope">Организация / зона</th><th data-i18n="references.column.login">Логин</th><th data-i18n="references.column.artwms_binding">Привязка в ArtWMS</th><th data-i18n="billing.column.status">Статус</th></tr></thead>
-<tbody id="adminUsersBody"></tbody>
-</table>
-</div>
-</div>
 </section>
 <!-- ================= ТОВАРЫ: детали ================= -->
 <section class="view" id="view-sku-detail">
@@ -770,14 +665,12 @@
 <div class="panel-head">
 <h1 data-i18n="admin.title.portal_administration">Администрирование портала</h1>
 </div>
-<div class="admin-subtabs">
-<button class="admin-subtab-btn active" data-i18n="admin.button.manager_access" data-sub="access" onclick="showAdminSub('access')">Доступы менеджеров</button>
-<button data-i18n="admin.button.depositor_access" class="admin-subtab-btn" data-sub="depositor-access" onclick="showAdminSub('depositor-access')">Доступы поклажедателей</button>
-<button data-i18n="admin.button.warehouse_staff_access" class="admin-subtab-btn" data-sub="staff-access" onclick="showAdminSub('staff-access')">Доступы сотрудников склада</button>
-<button class="admin-subtab-btn" data-i18n="admin.button.integration_errors" data-sub="integration" onclick="showAdminSub('integration')">Ошибки интеграции</button>
-<button class="admin-subtab-btn" data-i18n="admin.button.excel_import_errors" data-sub="excel" onclick="showAdminSub('excel')">Ошибки загрузки Excel</button>
-<button data-i18n="admin.button.report_settings" class="admin-subtab-btn" data-sub="reports-config" onclick="showAdminSub('reports-config')">Настройка отчётов</button>
-</div>
+<!-- Два ряда вкладок собирает js/portal/admin-tabs.js: верхний —
+     группы, нижний — вкладки выбранной группы. Состав описан там
+     одним списком, иначе порядок вкладок зависел бы от порядка
+     загрузки файлов — часть кнопок добавляют модули. -->
+<div class="admin-subtabs" id="adminGroupTabs"></div>
+<div class="admin-subtabs admin-subtabs-2" id="adminSubTabs"></div>
 <!-- Доступы менеджеров -->
 <div class="admin-sub active" id="admin-sub-access">
 <div data-i18n="admin.title.assigning_depositors_to_managers" class="section-title" style="margin-top:0;">Назначение поклажедателей менеджерам</div>
@@ -865,6 +758,85 @@
 </div>
 </div>
 
+<div class="admin-sub" id="admin-sub-warehousesDir">
+<div class="panel-head">
+<h1><span data-i18n="references.title.warehouses">Склады</span> <span class="count" id="warehousesDirCount"></span></h1>
+</div>
+<div class="table-card">
+<table>
+<thead><tr>
+<th data-i18n="col.stock.code" style="cursor:pointer;" onclick="onDirSortClick('warehousesDir','code')" data-i18n-title="references.hint.sort" title="Сортировать">Код</th>
+<th data-i18n="references.column.warehouse_name" style="cursor:pointer;" onclick="onDirSortClick('warehousesDir','name')" data-i18n-title="references.hint.sort" title="Сортировать">Наименование склада</th>
+<th data-i18n="references.column.address" style="cursor:pointer;" onclick="onDirSortClick('warehousesDir','address')" data-i18n-title="references.hint.sort" title="Сортировать">Адрес</th>
+<th data-i18n="references.column.responsible_person" style="cursor:pointer;" onclick="onDirSortClick('warehousesDir','responsible')" data-i18n-title="references.hint.sort" title="Сортировать">Ответственный</th>
+<th data-i18n="references.column.phone" style="cursor:pointer;" onclick="onDirSortClick('warehousesDir','phone')" data-i18n-title="references.hint.sort" title="Сортировать">Телефон</th>
+<th style="cursor:pointer;" onclick="onDirSortClick('warehousesDir','email')" data-i18n-title="references.hint.sort" title="Сортировать">Email</th>
+</tr></thead>
+<tbody id="warehousesDirBody"></tbody>
+</table>
+</div>
+</div>
+
+<div class="admin-sub" id="admin-sub-users">
+<div class="panel-head">
+<div data-i18n="references.title.portal_users" class="section-title" style="margin:0;">Пользователи портала</div>
+<div class="actions" id="usersRefActions">
+<button data-i18n="references.button.create_user" class="btn primary" onclick="notify('Открыта форма создания пользователя')">+ Создать пользователя</button>
+</div>
+</div>
+<div class="table-card">
+<table>
+<thead><tr><th data-i18n="references.column.full_name">ФИО</th><th data-i18n="references.column.role">Роль</th><th data-i18n="references.column.organization_scope">Организация / зона</th><th data-i18n="references.column.login">Логин</th><th data-i18n="references.column.artwms_binding">Привязка в ArtWMS</th><th data-i18n="billing.column.status">Статус</th></tr></thead>
+<tbody id="adminUsersBody"></tbody>
+</table>
+</div>
+</div>
+
+<div class="admin-sub" id="admin-sub-depositorsDir">
+<div class="panel-head">
+<h1><span data-i18n="references.title.depositors">Поклажедатели</span> <span class="count" id="depositorsDirCount"></span></h1>
+</div>
+<div class="table-card">
+<table>
+<thead><tr>
+<th data-i18n="col.stock.code" style="cursor:pointer;" onclick="onDirSortClick('depositorsDir','code')" data-i18n-title="references.hint.sort" title="Сортировать">Код</th>
+<th data-i18n="admin.column.organization_name" style="cursor:pointer;" onclick="onDirSortClick('depositorsDir','org')" data-i18n-title="references.hint.sort" title="Сортировать">Наименование организации</th>
+<th data-i18n="references.column.company_bin" style="cursor:pointer;" onclick="onDirSortClick('depositorsDir','bin')" data-i18n-title="references.hint.sort" title="Сортировать">БИН организации</th>
+<th data-i18n="references.column.legal_address" style="cursor:pointer;" onclick="onDirSortClick('depositorsDir','legalAddress')" data-i18n-title="references.hint.sort" title="Сортировать">Юр. адрес</th>
+<th data-i18n="references.column.phone" style="cursor:pointer;" onclick="onDirSortClick('depositorsDir','phone')" data-i18n-title="references.hint.sort" title="Сортировать">Телефон</th>
+<th style="cursor:pointer;" onclick="onDirSortClick('depositorsDir','email')" data-i18n-title="references.hint.sort" title="Сортировать">Email</th>
+<th data-i18n="references.column.contract_number" style="cursor:pointer;" onclick="onDirSortClick('depositorsDir','contractNumber')" data-i18n-title="references.hint.sort" title="Сортировать">Номер договора</th>
+<th data-i18n="references.column.contract_valid_until" style="cursor:pointer;" onclick="onDirSortClick('depositorsDir','contractValidUntil')" data-i18n-title="references.hint.sort" title="Сортировать">Срок действия договора</th>
+</tr></thead>
+<tbody id="depositorsDirBody"></tbody>
+</table>
+</div>
+</div>
+
+<div class="admin-sub" id="admin-sub-orderTypes">
+<div class="panel-head">
+<h1 data-i18n="references.title.order_types">Типы заказов</h1>
+</div>
+<div class="table-card">
+<table>
+<thead><tr><th data-i18n="col.stock.code">Код</th><th data-i18n="col.stock.name">Наименование</th></tr></thead>
+<tbody id="orderTypesBody"></tbody>
+</table>
+</div>
+</div>
+
+<div class="admin-sub" id="admin-sub-docTypes">
+<div class="panel-head">
+<h1 data-i18n="references.title.expected_document_types">Типы поступлений</h1>
+</div>
+<div class="table-card">
+<table>
+<thead><tr><th data-i18n="col.stock.code">Код</th><th data-i18n="col.stock.name">Наименование</th></tr></thead>
+<tbody id="docTypesBody"></tbody>
+</table>
+</div>
+</div>
+
 </section>
 <!-- ================= НАСТРОЙКИ РАЗРАБОТЧИКА (только для developer) ================= -->
 <section class="view" id="view-dev-settings">
@@ -884,7 +856,7 @@
 </section>
 <!-- ================= АДМИН: редактирование пользователя ================= -->
 <section class="view" id="view-admin-user-edit">
-<button data-i18n="admin.button.back_to_users" class="back-btn" id="adminUserEditBack" onclick="showTab('references'); showReferencesSub('users');">← Назад к пользователям</button>
+<button data-i18n="admin.button.back_to_users" class="back-btn" id="adminUserEditBack" onclick="showTab('admin'); showAdminSub('users');">← Назад к пользователям</button>
 <div id="adminUserEditContent"></div>
 </section>
 <!-- ================= АДМИН: доступы менеджера ================= -->
@@ -1318,6 +1290,7 @@
      эндпоинтов они переключаются тем же способом.
 ================================================================================ -->
 <script src="js/portal/core.js"></script>
+<script src="js/portal/admin-tabs.js"></script>
 
 <!-- ============ ЭТАП 6: экраны «Поступления» и «Заказы» из реального API ============
      Тот же приём, что и для «Запасов»: вёрстка демо не меняется, подменяется

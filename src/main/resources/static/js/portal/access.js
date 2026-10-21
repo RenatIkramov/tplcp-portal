@@ -101,7 +101,7 @@
     const el = byId('adminUserEditContent');
     el.insertAdjacentHTML('afterbegin', '<div style="background:#eef2ff;border:1px solid #c7d2fe;'
       + 'color:#3730a3;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:13px;">'
-      + '👁 Режим просмотра — менять доступы вправе только администратор.</div>');
+      + T('admin.text.view_mode_access') + '</div>');
     el.querySelectorAll('input').forEach(e => e.disabled = true);
     const button = el.querySelector('[data-save]');
     if (button) button.style.display = 'none';
@@ -136,13 +136,13 @@
 
     byId('adminUserEditContent').innerHTML = ''
       + '<div class="detail-head"><div>'
-      + '  <h2>Доступы менеджера — ' + esc(u.fullName) + '</h2>'
+      + '  <h2>' + T('admin.title.manager_access') + ' — ' + esc(u.fullName) + '</h2>'
       + '  <div class="meta">' + esc(u.userPosition || '—') + ' · '
       +      esc(u.login) + '</div></div></div>'
       + '<div class="section-title" style="margin-top:0;">' + T('admin.text.depositors_this_manager_works_with') + '</div>'
       + '<div class="table-card" style="padding:18px 20px;">'
-      + '  <div class="hint" style="margin:-4px 0 10px;">Менеджер видит только отмеченных. '
-      + 'Если доступен не один, портал при входе спросит, с кем он работает.</div>'
+      + '  <div class="hint" style="margin:-4px 0 10px;">'
+      + T('admin.hint.manager_sees_only_checked') + '</div>'
       + checkboxes(store.depositors.map(d => ({id: d.depositorId, name: d.orgName, code: d.code})),
                 granted, 'data-depositor-id', x => x.name, x => x.code)
       + '</div>'
@@ -184,7 +184,7 @@
           + '<td><strong>' + esc(u.fullName) + '</strong>'
           + '<div style="color:var(--muted);font-size:12.5px;">' + esc(u.login) + '</div></td>'
           + '<td>' + esc(u.scope) + '</td>'
-          + '<td>' + esc(u.depositorCodes || 'по складам') + '</td></tr>').join('')
+          + '<td>' + esc(u.depositorCodes || T('admin.text.by_warehouses')) + '</td></tr>').join('')
       : '<tr><td colspan="3" style="color:var(--muted);">' + T('admin.text.no_warehouse_staff_defined') + '</td></tr>';
   }
 
@@ -197,13 +197,13 @@
 
     byId('adminUserEditContent').innerHTML = ''
       + '<div class="detail-head"><div>'
-      + '  <h2>Доступы сотрудника — ' + esc(u.fullName) + '</h2>'
+      + '  <h2>' + T('admin.title.employee_access') + ' — ' + esc(u.fullName) + '</h2>'
       + '  <div class="meta">' + esc(u.userPosition || '—') + ' · '
       +      esc(u.login) + '</div></div></div>'
       + '<div class="section-title" style="margin-top:0;">' + T('admin.text.warehouses_this_employee_works_at') + '</div>'
       + '<div class="table-card" style="padding:18px 20px;">'
-      + '  <div class="hint" style="margin:-4px 0 10px;">Поклажедатели сотруднику не назначаются '
-      + 'отдельно: он видит тех, чей товар лежит на его складах.</div>'
+      + '  <div class="hint" style="margin:-4px 0 10px;">'
+      + T('admin.hint.employee_sees_by_warehouses') + '</div>'
       + checkboxes(store.warehouseList.map(w => ({id: w.warehouseId, name: w.name, address: w.address})),
                 granted, 'data-warehouse-id', x => x.name, x => x.address)
       + '</div>'
@@ -258,13 +258,13 @@
 
     byId('adminUserEditContent').innerHTML = ''
       + '<div class="detail-head"><div>'
-      + '  <h2>Доступные склады — ' + esc(d.orgName) + '</h2>'
-      + '  <div class="meta">Код поклажедателя: ' + esc(d.code) + '</div></div></div>'
+      + '  <h2>' + T('admin.title.available_warehouses') + ' — ' + esc(d.orgName) + '</h2>'
+      + '  <div class="meta">' + T('admin.label.depositor_code') + ': '
+      +      esc(d.code) + '</div></div></div>'
       + '<div class="section-title" style="margin-top:0;">' + T('admin.text.warehouses_where_this_depositor_st') + '</div>'
       + '<div class="table-card" style="padding:18px 20px;">'
-      + '  <div class="hint" style="margin:-4px 0 10px;">Отмеченные склады поклажедатель видит '
-      + 'в документах. Если не отмечен ни один — доступны все: так забытая настройка '
-      + 'не оставит клиента без складов.</div>'
+      + '  <div class="hint" style="margin:-4px 0 10px;">'
+      + T('admin.hint.depositor_warehouses') + '</div>'
       + checkboxes(store.warehouseList.map(w => ({id: w.warehouseId, name: w.name, address: w.address})),
                 granted, 'data-warehouse-id', x => x.name, x => x.address)
       + '</div>'

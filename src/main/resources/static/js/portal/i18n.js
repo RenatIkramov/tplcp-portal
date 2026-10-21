@@ -84,6 +84,12 @@
     safely('панели фильтров', () => {
       if (typeof PORTAL.rebuildFilters === 'function') PORTAL.rebuildFilters();
     });
+    // Окно смены пароля строится один раз и подписей с data-i18n
+    // не несёт: без этой строки оно остаётся на прежнем языке —
+    // и именно в нём человеку чаще всего и нужен другой язык.
+    safely('окно смены пароля', () => {
+      if (typeof PORTAL.refreshPasswordDialog === 'function') PORTAL.refreshPasswordDialog();
+    });
     rerender();
     markSwitch(code);
   }
@@ -270,8 +276,10 @@
    * нужно тому, кто код не опознал.
    */
   function fillSwitch(box){
+    // Запасная подпись — ключ, а не русская фраза: T здесь может
+    // ещё не быть, и тогда сырой ключ честнее подписи на одном языке.
     const label = (typeof T === 'function' ? T('common.aria.choose_language')
-                                           : 'Язык интерфейса');
+                                           : 'common.aria.choose_language');
     box.innerHTML = '<span class="active lang-current" role="button" tabindex="0"'
       + ' aria-haspopup="listbox" aria-expanded="false"'
       + ' data-i18n-aria="common.aria.choose_language" aria-label="' + esc(label) + '">'
@@ -425,6 +433,26 @@
     }
   };
 
+  /**
+   * Поставить переключатель языка в чужую разметку.
+   *
+   * <p>Шапка портала — не единственное место, где язык нужно сменить.
+   * На форме входа свой переключатель стоит давно: подписи полей надо
+   * прочесть до входа, а шапка до входа скрыта. То же и у окна смены
+   * пароля — оно накладка во весь экран, и переключатель шапки
+   * остаётся под ней: он есть, но дотянуться до него нельзя.
+   *
+   * <p>Список языков уже прочитан при сборке шапки, второго запроса
+   * не делаем. markSwitch и rebuildSwitch обходят все .lang на
+   * странице, поэтому новый переключатель держится в строю сам.
+   */
+  PORTAL.mountLanguageSwitch = box => {
+    if (!box) return;
+    box.classList.add('lang');
+    fillSwitch(box);
+    markSwitch(state.code);
+  };
+
   PORTAL.resetLocale = () => {
     state.fromAccount = false;
     const initial = (state.locales.find(l => l.isDefault) || state.locales[0] || {}).code;
@@ -441,17 +469,10 @@
   // потому что ведёт туда же, куда и они.
   function ensureScreen(){
     if (document.getElementById('admin-sub-uitexts')) return;
+    // Кнопку вкладки не создаём: ряд собирает admin-tabs.js по своему
+    // списку. Здесь — только панель и то, чем её наполнить.
     const host = document.getElementById('view-admin');
-    const tabs = document.querySelector('#view-admin .admin-subtabs');
-    if (!host || !tabs) return;
-
-    const btn = document.createElement('button');
-    btn.className = 'admin-subtab-btn';
-    btn.setAttribute('data-sub', 'uitexts');
-    btn.setAttribute('data-i18n', 'admin.button.interface_texts');
-    btn.textContent = T('common.text.interface_texts');
-    btn.onclick = () => window.portalOpenUiTexts();
-    tabs.appendChild(btn);
+    if (!host) return;
 
     const section = document.createElement('div');
     section.className = 'admin-sub';
@@ -464,13 +485,14 @@
       + '</div>'
       + '<div class="filters">'
       + '<div class="fgroup"><label for="uiTextsSearch">' + T('common.text.search_by_text_or_key') + '</label>'
-      + '<input id="uiTextsSearch" oninput="portalUiTextsRender()" placeholder="напр. Создать"/></div>'
-      + '<div class="fgroup"><label for="uiTextsScope">Раздел</label>'
+      + '<input id="uiTextsSearch" oninput="portalUiTextsRender()" placeholder="'
+      + esc(T('admin.placeholder.ui_texts_search')) + '"/></div>'
+      + '<div class="fgroup"><label for="uiTextsScope">' + T('admin.label.scope') + '</label>'
       + '<select id="uiTextsScope" onchange="portalUiTextsRender()">'
-      + '<option value="">Все разделы</option></select></div>'
-      + '<div class="fgroup"><label for="uiTextsElement">Вид</label>'
+      + '<option value="">' + T('admin.option.all_scopes') + '</option></select></div>'
+      + '<div class="fgroup"><label for="uiTextsElement">' + T('admin.label.element') + '</label>'
       + '<select id="uiTextsElement" onchange="portalUiTextsRender()">'
-      + '<option value="">Все виды</option></select></div>'
+      + '<option value="">' + T('admin.option.all_elements') + '</option></select></div>'
       + '<div class="fgroup"><label for="uiTextsFilter">' + T('common.text.show') + '</label>'
       + '<select id="uiTextsFilter" onchange="portalUiTextsRender()">'
       + '<option value="">' + T('common.text.all_keys') + '</option>'
@@ -482,7 +504,14 @@
     host.appendChild(section);
   }
 
-  window.portalOpenUiTexts = async function(){
+  /**
+   * Читает тексты и рисует таблицу — БЕЗ перехода на вкладку.
+   *
+   * <p>Разделено нарочно: наполнение вкладки вызывает admin-tabs.js
+   * в ответ на её открытие. Если бы наполнение само просило открыть
+   * вкладку, вызовы пошли бы по кругу.
+   */
+  async function loadUiTexts(){
     ensureScreen();
     try {
       state.matrix = await api('GET', '/api/admin/ui-texts');
@@ -494,9 +523,15 @@
     }
     fillFilter('uiTextsScope', state.matrix.map(r => r.scope));
     fillFilter('uiTextsElement', state.matrix.map(r => r.element));
-    showView('admin');
-    showAdminSub('uitexts');
     portalUiTextsRender();
+  }
+
+  window.portalOpenUiTexts = function(){
+    ensureScreen();
+    showView('admin');
+    // Наполнит вкладку admin-tabs.js — тем же вызовом, каким
+    // наполняет её при щелчке по кнопке.
+    showAdminSub('uitexts');
   };
 
   /** Заполняет выпадающий список значениями, которые реально встречаются. */
@@ -519,8 +554,9 @@
     const codes = (state.allLocales || state.locales).map(l => l.code);
     const head = document.getElementById('uiTextsHead');
     if (head){
-      head.innerHTML = '<th style="min-width:90px;">' + T('common.text.key') + '</th><th>Раздел</th><th>Вид</th>'
-        + '<th>Относится к</th>'
+      head.innerHTML = '<th style="min-width:90px;">' + T('common.text.key') + '</th>'
+        + '<th>' + T('admin.label.scope') + '</th><th>' + T('admin.label.element') + '</th>'
+        + '<th>' + T('admin.column.belongs_to') + '</th>'
         + codes.map(c => '<th>' + esc(c.toUpperCase()) + '</th>').join('');
     }
     const q = (document.getElementById('uiTextsSearch')?.value || '').trim().toLowerCase();
@@ -574,8 +610,9 @@
    * куда они, — отсюда путаница. Кнопку подвкладки и саму панель
    * создаёт ensureScreen.
    */
-  function addAdminButton(){
+  function addAdminScreen(){
     ensureScreen();
+    if (PORTAL.adminTabs) PORTAL.adminTabs.onOpen('uitexts', loadUiTexts);
   }
 
   /* ================= Установка ================= */
@@ -602,7 +639,7 @@
     // доступны все клиенты, не получал ни того, ни другого до выбора.
     PORTAL.onSession(() => {
       if (['admin', 'developer'].includes(PORTAL.session && PORTAL.session.roleCode)){
-        addAdminButton();
+        addAdminScreen();
       }
       // язык из учётной записи: он мог отличаться от языка формы входа.
       // Обещание ВОЗВРАЩАЕМ — вход его ждёт, прежде чем собирать подписи.
