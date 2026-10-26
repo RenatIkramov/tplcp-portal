@@ -443,7 +443,7 @@
       state.row = card;
       state.packagings = card.packagings || [];
       state.draft = {};
-      await reloadList();
+      await PORTAL.reloadProducts();
       products.length = 0;
       products.push(PORTAL.skuToProduct(card));
       openSkuItem(card.code);
@@ -458,7 +458,7 @@
       const card = await api('POST', '/api/sku/' + state.skuId + '/archive', {active: archived});
       state.row = card;
       state.packagings = card.packagings || [];
-      await reloadList();
+      await PORTAL.reloadProducts();
       products.length = 0;
       products.push(PORTAL.skuToProduct(card));
       openSkuItem(card.code);
@@ -474,7 +474,7 @@
         + '\n' + T('sku.text.if_it_is_used_anywhere_the_portal'))) return;
     try {
       await api('DELETE', '/api/sku/' + state.skuId);
-      await reloadList();
+      await PORTAL.reloadProducts();
       say(T('sku.message.item_deleted'));
       showTab('references');
       showReferencesSub('sku');
@@ -525,7 +525,7 @@
   window.portalPackagingDefault = async function(id){
     try {
       state.packagings = await api('POST', '/api/packagings/' + id + '/default');
-      await reloadList();
+      await PORTAL.reloadProducts();
       await reloadPackagingScreen();
       openSkuItem(state.row.code);
     } catch (e){
@@ -549,30 +549,10 @@
 
   /* ================= Экран «Упаковки» ================= */
 
-  /**
-   * Список товаров. С сервера забираем вместе с архивом и держим полный
-   * набор отдельно: иначе архивную позицию нечем вернуть в работу — её
-   * просто не видно. В списке по умолчанию показываем рабочие, а архив
-   * открывается флажком.
-   */
-  async function reloadList(){
-    try {
-      PORTAL.catalog.skuAll = await api('GET', '/api/sku?withArchived=true');
-      PORTAL.catalogError.sku = null;
-    } catch (e){
-      PORTAL.catalog.skuAll = PORTAL.catalog.skuAll || [];
-      PORTAL.catalogError.sku = e.message;
-    }
-    applyArchiveFilter();
-  }
-
-  function applyArchiveFilter(){
-    const show = document.getElementById('skuShowArchived')?.checked;
-    PORTAL.catalog.sku = (PORTAL.catalog.skuAll || []).filter(s => show || s.isActive !== false);
-    if (typeof renderSku === 'function') renderSku();
-  }
-
-  window.portalSkuArchiveFilter = applyArchiveFilter;
+  // Список товаров и отбор архива ушли на сервер: страницу читает
+  // catalog.js (PORTAL.reloadProducts), а галочку «показать архив»
+  // рисует панель фильтров — архив стал свойством списка, а не
+  // отбором, который экран делает у себя после загрузки.
 
   /** Архивную позицию в списке надо отличать глазом, а не по памяти. */
   function markArchivedRows(){
@@ -583,25 +563,28 @@
       + (p.isActive === false ? ' <span class="count">' + T('portal.text.archived2') + '</span>' : '');
   }
 
-  function addArchiveCheckbox(){
-    const filters = document.querySelector('#ref-sub-sku .filters');
-    if (!filters || document.getElementById('skuShowArchived')) return;
-    const box = document.createElement('div');
-    box.className = 'fgroup';
-    box.innerHTML = '<label>' + PORTAL.t('sku.text.archive')
-      + '</label><label style="font-size:13px; font-weight:500;">'
-      + '<input type="checkbox" id="skuShowArchived" onchange="portalSkuArchiveFilter()"/> '
-      + PORTAL.t('portal.text.show_archived') + '</label>';
-    const spacer = filters.querySelector('.spacer');
-    filters.insertBefore(box, spacer || null);
-  }
-
+  /**
+   * Страница упаковок с сервера.
+   *
+   * <p>Справочник упаковок целиком тоже нужен — колонке «Используются
+   * упаковки» в товарах и выбору упаковки в окне строки, — но это
+   * другой набор и другой адрес: {@code /api/packaging/options}, его
+   * читает draft.js. Один набор на две задачи означал бы, что открытая
+   * вторая страница упаковок меняет выбор в окне строки.
+   */
   async function reloadPackagingScreen(){
     try {
-      PORTAL.catalog.packaging = await api('GET', '/api/packaging');
+      if (PORTAL.filtersReady) await PORTAL.filtersReady;
+      const data = await api('GET', '/api/packaging' + PORTAL.listQuery('packaging'));
+      PORTAL.page.packaging = data.rows || [];
+      PORTAL.pageTotal.packaging = data.total || 0;
+      if (typeof paginationState !== 'undefined' && paginationState.packaging && data.page){
+        paginationState.packaging.page = data.page;
+      }
       PORTAL.catalogError.packaging = null;
     } catch (e){
-      PORTAL.catalog.packaging = [];
+      PORTAL.page.packaging = [];
+      PORTAL.pageTotal.packaging = 0;
       PORTAL.catalogError.packaging = e.message;
     }
     renderPackagingFromApi();
@@ -672,25 +655,15 @@
   function renderPackagingFromApi(){
     const body = document.getElementById('packagingBody');
     if (!body) return;
-    const val = id => (document.getElementById(id)?.value || '').trim().toLowerCase();
-    const codeQ = val('packagingSearchCode');
-    const nameQ = val('packagingSearchName');
-
-    let rows = (PORTAL.catalog.packaging || []).map(withDisplayName);
-    if (codeQ) rows = rows.filter(r => (r.skuCode || '').toLowerCase().includes(codeQ));
-    if (nameQ) rows = rows.filter(r => (r.skuName || '').toLowerCase().includes(nameQ));
-
-    // Сортировка теперь общая — та же, что у прочих списков: щелчок
-    // по заголовку обрабатывает onSortColumnClick, который ставит
-    // renderTableHead. Прежний отдельный порядок (dirSortState)
-    // упаковкам больше не нужен.
-    if (typeof fcApplySort === 'function') rows = fcApplySort('packaging', rows);
-
-    let items = rows, totalPages = 1, total = rows.length;
-    if (typeof getPage === 'function'){
-      const page = getPage('packaging', rows);
-      items = page.items; totalPages = page.totalPages; total = page.total;
-    }
+    // Отбор, порядок и страницы считает сервер — экран рисует то,
+    // что прислали. «Наименование упаковки» по-прежнему собирается
+    // здесь: такого поля в ответе нет, есть тип, коэффициент
+    // и единица измерения.
+    const items = (PORTAL.page.packaging || []).map(withDisplayName);
+    const total = PORTAL.pageTotal.packaging || 0;
+    const size = (typeof paginationState !== 'undefined' && paginationState.packaging)
+        ? paginationState.packaging.pageSize : items.length;
+    const totalPages = Math.max(1, Math.ceil(total / (size || 1)));
     const counter = document.getElementById('packagingCount');
     if (counter) counter.textContent = '(' + total + ')';
 
@@ -729,11 +702,16 @@
     // а он подключается в index.html позже этого файла.
     seedPackagingColumns();
     window.renderPackaging = renderPackagingFromApi;
+    // Ряд страниц упаковок зовёт TABLE_RENDER_FN.packaging — у прототипа
+    // такой записи не было вовсе, и кнопки «вперёд/назад» падали молча.
+    if (typeof TABLE_RENDER_FN !== 'undefined'){
+      TABLE_RENDER_FN.packaging = reloadPackagingScreen;
+    }
+    // Панель фильтров перечитывает список этим вызовом.
+    PORTAL.reloadPackaging = reloadPackagingScreen;
 
     PORTAL.onLogin(() => {
       markArchivedRows();
-      addArchiveCheckbox();
-      reloadList().catch(() => {});
       reloadPackagingScreen().catch(() => {});
       if (mayEdit()) addCreateButton();
     });

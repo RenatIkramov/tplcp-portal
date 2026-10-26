@@ -247,7 +247,7 @@ class SkuDirectoryTest extends PortalTestBase {
     /* ---------------- Вспомогательное ---------------- */
 
     private List<Object> codes(boolean withArchived) {
-        return catalogs.list(CatalogType.SKU, null, null, null, withArchived)
+        return catalogs.list(CatalogType.SKU, withArchived)
                 .stream().map(r -> r.get("code")).toList();
     }
 

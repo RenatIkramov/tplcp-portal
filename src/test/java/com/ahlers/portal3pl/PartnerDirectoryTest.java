@@ -214,7 +214,7 @@ class PartnerDirectoryTest extends PortalTestBase {
     /* ---------------- Вспомогательное ---------------- */
 
     private List<Object> codes(CatalogType type, boolean withArchived) {
-        return catalogs.list(type, null, null, null, withArchived)
+        return catalogs.list(type, withArchived)
                 .stream().map(r -> r.get("code")).toList();
     }
 

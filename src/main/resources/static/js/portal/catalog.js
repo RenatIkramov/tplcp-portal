@@ -5,8 +5,15 @@
   const PORTAL = window.PORTAL;
   if (!PORTAL) return;
 
+  // Справочник целиком — для выбора: окно строки документа и карточка
+  // ищут товар по всему набору, а не по показанной странице.
   PORTAL.catalog = {};
   PORTAL.catalogError = {};
+  // Страница списка — то, что сейчас на экране. Держится отдельно
+  // от набора для выбора: одно имя на двоих означало бы, что открытая
+  // вторая страница товаров сужает поиск в окне строки.
+  PORTAL.page = {};
+  PORTAL.pageTotal = {};
 
   const dash = v => (v === null || v === undefined || v === '') ? '—' : v;
   const yesNo = v => v === true ? T('sku.text.yes') : (v === false ? T('sku.text.no') : '—');
@@ -79,39 +86,77 @@
     });
   }
 
+  /**
+   * Страница товаров: строки те, что прислал сервер.
+   *
+   * <p>Отбор, порядок и страницы здесь больше не считаются. Считались:
+   * экран держал весь справочник и резал его сам. У клиента с тысячей
+   * позиций это значило тысячу строк в браузере на каждый вход — и,
+   * что хуже, сортировку, которая упорядочивала только показанные
+   * двадцать, оставаясь на вид настоящей.
+   */
   function renderSkuFromApi(){
     const body = document.getElementById('skuBody');
     if (!body) return;
-    const val = id => (document.getElementById(id)?.value || '').trim().toLowerCase();
-    const codeQ = val('skuSearchCode');
-    const nameQ = val('skuSearchName');
-    const groupQ = document.getElementById('skuFilterGroup')?.value || '';
-    const typeQ = document.getElementById('skuFilterType')?.value || '';
+    const rows = PORTAL.page.sku || [];
+    const total = PORTAL.pageTotal.sku || 0;
+    const size = (typeof paginationState !== 'undefined' && paginationState.sku)
+        ? paginationState.sku.pageSize : rows.length;
+    const totalPages = Math.max(1, Math.ceil(total / (size || 1)));
 
-    let rows = (PORTAL.catalog.sku || []).slice();
-    if (codeQ)  rows = rows.filter(p => (p.code || '').toLowerCase().includes(codeQ)
-                                     || (p.itemCode || '').toLowerCase().includes(codeQ));
-    if (nameQ)  rows = rows.filter(p => (p.name || '').toLowerCase().includes(nameQ));
-    if (groupQ && groupQ !== T('admin.option.all')) rows = rows.filter(p => p.itemGroupName === groupQ);
-    if (typeQ && typeQ !== T('admin.option.all'))   rows = rows.filter(p => p.itemTypeName === typeQ);
-
-    if (typeof fcApplySort === 'function') rows = fcApplySort('sku', rows);
-
-    let items = rows, totalPages = 1, total = rows.length;
-    if (typeof getPage === 'function'){
-      const page = getPage('sku', rows);
-      items = page.items; totalPages = page.totalPages; total = page.total;
-    }
     const counter = document.getElementById('skuCount');
     if (counter) counter.textContent = '(' + total + ')';
 
     if (typeof renderTableHead === 'function') renderTableHead('sku');
-    body.innerHTML = items.length
-      ? items.map(p => renderTableRow('sku', p, 'portalOpenSku')).join('')
+    body.innerHTML = rows.length
+      ? rows.map(p => renderTableRow('sku', p, 'portalOpenSku')).join('')
       : '<tr><td colspan="24" style="color:var(--muted);">'
         + (PORTAL.catalogError.sku ? T('partners.text.data_unavailable') : T('stock.text.nothing_found')) + '</td></tr>';
     if (typeof renderPaginationBar === 'function') renderPaginationBar('sku', totalPages, total);
     if (typeof updateTopScrollWidth === 'function') setTimeout(() => updateTopScrollWidth('sku'), 0);
+  }
+
+  /**
+   * Сходить за страницей товаров.
+   *
+   * <p>Ждём панель фильтров: без неё запрос ушёл бы без отбора, и
+   * человек, вошедший с отмеченным архивом или заполненным полем,
+   * увидел бы не свой список, а весь.
+   */
+  async function loadSku(){
+    try {
+      if (PORTAL.filtersReady) await PORTAL.filtersReady;
+      const data = await PORTAL.fetchJson('/api/sku' + PORTAL.listQuery('sku'));
+      PORTAL.page.sku = data.rows || [];
+      PORTAL.pageTotal.sku = data.total || 0;
+      // Номер страницы из ответа: сервер мог вернуть первую вместо
+      // запрошенной пятой, если отбор сузился и пятой больше нет.
+      if (typeof paginationState !== 'undefined' && paginationState.sku && data.page){
+        paginationState.sku.page = data.page;
+      }
+      PORTAL.catalogError.sku = null;
+    } catch (e){
+      PORTAL.page.sku = [];
+      PORTAL.pageTotal.sku = 0;
+      PORTAL.catalogError.sku = e.message;
+    }
+    renderSkuFromApi();
+  }
+
+  /**
+   * Справочник товаров целиком — для выбора, не для экрана.
+   *
+   * <p>Вместе с архивом: погашенную позицию надо уметь открыть, иначе
+   * вернуть её в работу нечем — отмеченный на панели архив показывает
+   * строку, а щёлкнуть по ней было бы некуда.
+   */
+  async function loadSkuOptions(){
+    try {
+      PORTAL.catalog.sku = await fetchCatalog('sku/options?withArchived=true');
+    } catch (e){
+      PORTAL.catalog.sku = PORTAL.catalog.sku || [];
+      console.warn('Справочник товаров для выбора: ' + e.message);
+    }
   }
 
   // Заглушка portalOpenSku удалена: карточку товара открывает sku.js,
@@ -162,6 +207,9 @@
   function install(){
     patchSkuColumns();
     window.renderSku = renderSkuFromApi;
+    // Ряд страниц прототипа зовёт TABLE_RENDER_FN[ключ] — а новая
+    // страница теперь приходит с сервера, перерисовкой её не добыть.
+    if (typeof TABLE_RENDER_FN !== 'undefined') TABLE_RENDER_FN.sku = loadSku;
     window.renderBillingServices = renderTariffsFromApi;
     window.renderBillingInvoices = renderInvoicesFromApi;
     // Поставщиков и грузополучателей ведёт отдельный блок (этап 7б):
@@ -170,8 +218,9 @@
 
     // Перечитать список товаров умеют теперь и другие блоки: после
     // загрузки из Excel созданные позиции должны оказаться в списке,
-    // а не ждать следующего входа.
-    PORTAL.reloadProducts = () => load('sku', renderSkuFromApi);
+    // а не ждать следующего входа. Перечитываются оба набора: и страница
+    // экрана, и справочник для выбора — созданный товар нужен и там.
+    PORTAL.reloadProducts = () => Promise.all([loadSku(), loadSkuOptions()]);
 
     PORTAL.onLogin(() => {
       PORTAL.reloadProducts();

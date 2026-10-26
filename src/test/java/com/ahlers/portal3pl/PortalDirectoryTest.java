@@ -205,7 +205,7 @@ class PortalDirectoryTest extends PortalTestBase {
     private List<Object> warehouseCodes() {
         signIn();
         try {
-            return catalogs.list(CatalogType.WAREHOUSES, null, null, null, false)
+            return catalogs.list(CatalogType.WAREHOUSES, false)
                     .stream().map(r -> r.get("code")).toList();
         } finally {
             com.ahlers.portal3pl.config.DepositorContext.clear();

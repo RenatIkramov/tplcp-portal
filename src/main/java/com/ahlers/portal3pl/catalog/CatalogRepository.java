@@ -6,10 +6,15 @@ import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 /**
- * Чтение справочников. Фильтра по поклажедателю нет — его накладывает RLS.
+ * Чтение справочников целиком. Фильтра по поклажедателю нет — его
+ * накладывает RLS.
+ *
+ * <p>Страниц здесь нет намеренно: это списки, которые экран держит
+ * целиком — склады, поставщики, тарифы, а также товары и упаковки
+ * для выбора в окне строки. У кого есть экран с отбором и страницами,
+ * тот читается через {@code ListRepository}.
  */
 @Repository
 public class CatalogRepository {
@@ -20,44 +25,21 @@ public class CatalogRepository {
         this.jdbc = jdbc;
     }
 
-    public List<Map<String, Object>> list(CatalogType type, String search, String group, String itemType,
-                                          boolean withArchived) {
-        String searchCondition = type.searchColumns().stream()
-                .map(c -> "COALESCE(" + c + "::text,'') ILIKE :search::text")
-                .collect(Collectors.joining(" OR "));
-
+    public List<Map<String, Object>> list(CatalogType type, boolean withArchived) {
         // Архивные записи по умолчанию не показываем: в документах их выбрать
         // нельзя, и в рабочем списке они только мешают. Экран может попросить
-        // их отдельно — флажком «показать архив».
-        String archive = type.hasArchive() ? "AND (:withArchived::boolean OR is_active)" : "";
-        String extra = type == CatalogType.SKU
-                ? """
-                  AND (:group::text IS NULL OR item_group_name = :group::text)
-                  AND (:itemType::text IS NULL OR item_type_name = :itemType::text)
-                  """
+        // их отдельно — чтобы открыть карточку и вернуть позицию в работу.
+        String archive = type.hasArchive()
+                ? "WHERE (:withArchived::boolean OR is_active)"
                 : "";
 
-        String sql = """
-                SELECT * FROM dbo.%s
-                WHERE (:search::text IS NULL OR (%s))
-                %s
-                %s
-                ORDER BY %s
-                """.formatted(type.view(), searchCondition, extra, archive, type.orderBy());
+        String sql = "SELECT * FROM dbo.%s %s ORDER BY %s"
+                .formatted(type.view(), archive, type.orderBy());
 
-        var spec = jdbc.sql(sql)
-                .param("search", blank(search) ? null : "%" + search.trim() + "%");
-        if (type == CatalogType.SKU) {
-            spec = spec.param("group", blank(group) ? null : group)
-                       .param("itemType", blank(itemType) ? null : itemType);
-        }
+        var spec = jdbc.sql(sql);
         if (type.hasArchive()) {
             spec = spec.param("withArchived", withArchived);
         }
         return SqlRows.toCamelCase(spec.query().listOfRows());
-    }
-
-    private static boolean blank(String s) {
-        return s == null || s.isBlank();
     }
 }
