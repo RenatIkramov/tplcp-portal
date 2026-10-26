@@ -112,7 +112,23 @@ class ColumnDirectoryTest extends PortalTestBase {
         PortalUser admin = portalAdmin();
         signInAs(ADMIN, DEPOSITOR);
         List<Map<String, Object>> tables = columns.tables(admin);
-        assertEquals(12, tables.size(), "таблиц в справочнике двенадцать");
+
+        // Сверяется с самим каталогом, а не с запомненным числом.
+        // Здесь стояло «ровно двенадцать» — и проверка упала, когда
+        // упаковки переехали на справочник колонок (V76): таблиц стало
+        // тринадцать. Поднять число до тринадцати значило бы оставить
+        // ту же мину следующей новой таблице, ничего при этом
+        // не проверив. Правило: разделов столько, сколько таблиц
+        // в каталоге.
+        Integer distinct = jdbc.sql("SELECT count(DISTINCT table_key)::int FROM dbo.table_column")
+                .query(Integer.class)
+                .single();
+        assertEquals(distinct.intValue(), tables.size(),
+                "разделов экрана настройки не столько же, сколько таблиц в каталоге");
+        // Грубый порог: пустой ответ прошёл бы сверку сам с собой.
+        assertTrue(tables.size() >= 10,
+                "таблиц в справочнике подозрительно мало — " + tables.size());
+
         assertTrue(tables.stream()
                         .allMatch(t -> ((Number) t.get("columnCount")).intValue() > 0),
                 "таблица без колонок — это незаполненный раздел экрана настройки");
@@ -162,7 +178,13 @@ class ColumnDirectoryTest extends PortalTestBase {
         // действует портальный, а он английский (см. labelOf)
         localeOf(user, "ru");
         List<Map<String, Object>> sku = columns.layout(user, "sku");
-        assertEquals(62, sku.size(), "у товара 62 колонки, включая десять доп. параметров");
+        // Порог грубый нарочно. Здесь стояло «ровно 62 колонки» —
+        // снимок, который падает от каждой новой колонки товара
+        // и ничего при этом не проверяет: речь в проверке про доп.
+        // параметры, а не про общий объём каталога. Что раскладка
+        // показывает каталог целиком, держит catalogCoversEveryTable.
+        assertTrue(sku.size() > 40,
+                "колонок товара подозрительно мало — " + sku.size());
         assertEquals(10, sku.stream()
                 .filter(r -> String.valueOf(r.get("columnId")).startsWith("customAttr"))
                 .count());
@@ -173,8 +195,17 @@ class ColumnDirectoryTest extends PortalTestBase {
         assertEquals("Доп. параметр 1",
                 labelOf(sku, "customAttr1"));
 
-        assertEquals(15, columns.layout(user, "receiptLineDetail").size(),
-                "в деталях строки поступления 5 колонок плюс десять доп. полей");
+        // Доп. поля обязаны дойти и до деталей строки — ради этого
+        // проверка и написана. Прежде сверялось общее число, 15,
+        // и падало бы от любой новой колонки деталей, хотя к доп.
+        // полям та не имеет отношения.
+        List<Map<String, Object>> details = columns.layout(user, "receiptLineDetail");
+        assertEquals(10, details.stream()
+                        .filter(r -> String.valueOf(r.get("columnId")).startsWith("customField"))
+                        .count(),
+                "в деталях строки поступления должны быть все десять доп. полей");
+        assertTrue(details.size() > 10,
+                "кроме доп. полей в деталях строки нет ничего — " + details.size());
     }
 
     @Test
@@ -606,8 +637,18 @@ class ColumnDirectoryTest extends PortalTestBase {
         // её настроить, не понимая, почему её нет.
         assertTrue(sku.stream().noneMatch(r -> r.get("groupKey") == null),
                 "у каждой колонки товара есть вкладка");
-        assertEquals(8, sku.stream().map(r -> r.get("groupKey")).distinct().count(),
-                "вкладок восемь — как в карточке, без упаковок");
+        // Сверяется с каталогом, а не с запомненной восьмёркой:
+        // беспокоит нас потеря вкладки при группировке, а не их число.
+        // Появится в карточке девятая — проверка это переживёт,
+        // а пропажу восьмой поймает по-прежнему.
+        Integer tabs = jdbc.sql("SELECT count(DISTINCT group_key)::int"
+                        + " FROM dbo.table_column WHERE table_key = 'sku'")
+                .query(Integer.class)
+                .single();
+        assertEquals(tabs.intValue(),
+                (int) sku.stream().map(r -> r.get("groupKey")).distinct().count(),
+                "при группировке по вкладкам вкладка потерялась");
+        assertTrue(tabs > 1, "вкладок у карточки товара подозрительно мало — " + tabs);
         assertTrue(sku.stream().anyMatch(r ->
                         "Основная информация".equals(r.get("groupLabel"))),
                 "подпись вкладки приходит переведённой, а не ключом");

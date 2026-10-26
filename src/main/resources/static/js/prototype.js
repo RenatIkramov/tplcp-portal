@@ -883,19 +883,22 @@ function renderPaginationBar(key, totalPages, total){
   if(!el) return;
   const st = paginationState[key];
   if(total === 0){ el.innerHTML = ''; return; }
-  const t = currentLang === 'en'
-    ? {rows:'Rows per page:', prev:'‹ Prev', next:'Next ›', page:'Page', of:'of', total:'total'}
-    : {rows:'Строк на странице:', prev:'‹ Назад', next:'Вперёд ›', page:'Стр.', of:'из', total:'всего'};
+  // Подписи — из каталога текстов. Прежде они были вписаны сюда
+  // условием currentLang === 'en': мимо переводов, мимо переключателя
+  // языка и мимо проверки, которая следит, что человек не видит
+  // непереведённых надписей. «Стр. 2 из 7 · всего 134» — одна фраза
+  // с подстановками, а не четыре обрывка: собранная из кусков, она
+  // намертво закрепляет русский порядок слов.
   el.innerHTML = `
-    <div class="page-size-select">${t.rows}
+    <div class="page-size-select">${T('common.label.rows_per_page')}
       <select onchange="changePageSize('${key}', this.value)">
         ${[10,20,50,100].map(n=>`<option value="${n}" ${st.pageSize===n?'selected':''}>${n}</option>`).join('')}
       </select>
     </div>
     <div class="pager">
-      <button onclick="changePage('${key}', -1)" ${st.page<=1?'disabled':''}>${t.prev}</button>
-      <span class="page-info">${t.page} ${st.page} ${t.of} ${totalPages} · ${t.total} ${total}</span>
-      <button onclick="changePage('${key}', 1)" ${st.page>=totalPages?'disabled':''}>${t.next}</button>
+      <button onclick="changePage('${key}', -1)" ${st.page<=1?'disabled':''}>${T('common.button.prev_page')}</button>
+      <span class="page-info">${T('common.text.page_of', {page: st.page, pages: totalPages, total: total})}</span>
+      <button onclick="changePage('${key}', 1)" ${st.page>=totalPages?'disabled':''}>${T('common.button.next_page')}</button>
     </div>`;
 }
 const TABLE_RENDER_FN = {};

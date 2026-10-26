@@ -3,6 +3,7 @@ package com.ahlers.portal3pl.documents;
 import com.ahlers.portal3pl.auth.PortalUser;
 import com.ahlers.portal3pl.common.Fail;
 import com.ahlers.portal3pl.config.DepositorScope;
+import com.ahlers.portal3pl.lists.ListService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,57 +21,28 @@ public class DocumentService {
     private final DepositorScope depositorScope;
     private final DocumentRepository repository;
     private final DraftService drafts;
-    private final DocumentFilters filters;
+    /** Отбор, порядок и страницы — общие для всех списков портала. */
+    private final ListService lists;
 
     public DocumentService(DepositorScope depositorScope, DocumentRepository repository,
-                           DraftService drafts, DocumentFilters filters) {
+                           DraftService drafts, ListService lists) {
         this.depositorScope = depositorScope;
         this.repository = repository;
         this.drafts = drafts;
-        this.filters = filters;
+        this.lists = lists;
     }
 
     /**
-     * Список документов с фильтрами из справочника колонок.
+     * Список документов: отбор, порядок и страница.
      *
-     * <p>Контекст поклажедателя выставляется до разбора фильтров, а не
-     * после: справочник фильтров читает запреты клиента через
-     * {@code current_depositor_id()}, и без контекста он отдал бы пустой
-     * список разрешённых — то есть отказ на любой фильтр.
+     * <p>Делается это ровно так же, как в запасах и справочниках,
+     * поэтому делается не здесь: {@link ListService}. Повторять тут
+     * то же самое значило бы завести копию, которая разойдётся
+     * с оригиналом на первой же правке и разойдётся молча.
      */
-    @Transactional(readOnly = true)
-    public List<Map<String, Object>> list(PortalUser user, DocumentType type,
-                                          Map<String, String> params) {
-        depositorScope.apply();
-        return repository.list(type, filters.parse(user, type, params));
-    }
-
-    /** Какие фильтры этот человек может поставить на этом экране. */
-    @Transactional(readOnly = true)
-    public List<Map<String, Object>> filters(PortalUser user, DocumentType type) {
-        depositorScope.apply();
-        return filters.catalogue(user, type);
-    }
-
-    /**
-     * Выбор фильтров человека: какие из них на панели и в каком порядке.
-     *
-     * <p>Пустой список отвергается: ноль строк в таблице выбора уже
-     * означает «не настраивал», и панель вернулась бы к набору
-     * по умолчанию вместо того, чтобы опустеть.
-     */
-    @Transactional
-    public List<Map<String, Object>> saveFilters(PortalUser user, DocumentType type,
-                                                 List<String> columns) {
-        depositorScope.apply();
-        return filters.saveMine(user, type, columns);
-    }
-
-    /** Вернуть набор фильтров по умолчанию. */
-    @Transactional
-    public List<Map<String, Object>> resetFilters(PortalUser user, DocumentType type) {
-        depositorScope.apply();
-        return filters.resetMine(user, type);
+    public Map<String, Object> list(PortalUser user, DocumentType type,
+                                    Map<String, String> params) {
+        return lists.page(user, type, params);
     }
 
     /**

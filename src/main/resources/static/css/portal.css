@@ -176,6 +176,15 @@
   .filters label{font-size:11px;color:var(--muted);}
   .filters .spacer{flex:1;}
 
+  /* Фильтр-флажок («Только брак»): подпись читается как обычная
+     подпись поля, а не как мелкий серый ярлык сверху, — щёлкают
+     ведь по ней. Высота равна высоте соседних полей ввода, иначе
+     флажок висит выше строки. */
+  .filters .filter-flag{
+    display:flex;align-items:center;gap:6px;height:33px;
+    font-size:13.5px;color:var(--ink);cursor:pointer;white-space:nowrap;
+  }
+
   /* ===== Table ===== */
   .table-card{
     background:var(--white);border:1px solid var(--line);border-radius:var(--radius);

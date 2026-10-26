@@ -6,9 +6,12 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 
 /**
- * Доступ к данным запасов. Читаем представление v_stock_lines напрямую
- * через JdbcClient — без ORM: представление уже отдаёт готовые для экрана
- * колонки, и заворачивать его в сущности Hibernate смысла нет (§4 ТЗ).
+ * Доступ к данным запасов: разбивка остатка по партиям.
+ *
+ * <p>Сам список запасов читает общий {@code ListRepository}: отбор,
+ * порядок и страницы у всех списков портала устроены одинаково,
+ * и запрос у них один. Здесь остаётся то, чего нет у других, —
+ * партии одного товара.
  * <p>
  * Фильтра по поклажедателю в запросе НЕТ намеренно: его накладывает сама
  * база по политике RLS, опираясь на app.depositor_id (см. StockService).
@@ -16,19 +19,6 @@ import java.util.List;
  */
 @Repository
 public class StockRepository {
-
-    private static final String SQL = """
-            SELECT sku_code, sku_name, item_group_name,
-                   warehouse_id, warehouse_name, unit_name,
-                   quantity, reserved_qty, blocked_qty, available_qty,
-                   defect_qty, incoming_qty,
-                   batch_count, synced_at
-            FROM dbo.v_stock_lines
-            WHERE (:warehouseId::text IS NULL OR warehouse_id = :warehouseId::text)
-              AND (:search::text IS NULL OR sku_code ILIKE :search::text
-                                         OR sku_name ILIKE :search::text)
-            ORDER BY sku_code
-            """;
 
     private final JdbcClient jdbc;
 
@@ -54,13 +44,5 @@ public class StockRepository {
                 .param("warehouseId", warehouseId == null || warehouseId.isBlank() ? null : warehouseId)
                 .query()
                 .listOfRows());
-    }
-
-    public List<StockLine> find(String warehouseId, String search) {
-        return jdbc.sql(SQL)
-                .param("warehouseId", warehouseId)
-                .param("search", search == null || search.isBlank() ? null : "%" + search + "%")
-                .query(StockLine.class)
-                .list();
     }
 }

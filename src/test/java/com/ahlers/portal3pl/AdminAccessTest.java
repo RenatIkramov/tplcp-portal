@@ -75,10 +75,18 @@ class AdminAccessTest extends PortalTestBase {
         PortalUser actor = portalAdmin();
         String d1 = depositorId(ADMIN, DEPOSITOR);
 
+        // Сколько складов всего — спрашиваем базу, а не помним.
+        // Здесь стояла двойка: столько складов в демо-данных сегодня.
+        // Появится третий — и проверка упадёт на строках, которые
+        // о числе складов не говорят вовсе.
+        int allWarehouses = warehouseCount();
+        assertTrue(allWarehouses >= 2,
+                "для этой проверки нужно хотя бы два склада, а их " + allWarehouses);
+
         // оба склада — клиент видит оба
         access.saveWarehousesOfDepositor(actor, d1, List.of("WH-ALA", "WH-KGD"));
         signIn();
-        assertEquals(2, warehouses().size());
+        assertEquals(2, warehouses().size(), "отмечены два склада — видно два");
 
         // оставили один — в документах остался один
         access.saveWarehousesOfDepositor(actor, d1, List.of("WH-ALA"));
@@ -91,7 +99,8 @@ class AdminAccessTest extends PortalTestBase {
         // забытая настройка не должна оставлять клиента без складов
         access.saveWarehousesOfDepositor(actor, d1, List.of());
         signIn();
-        assertEquals(2, warehouses().size());
+        assertEquals(allWarehouses, warehouses().size(),
+                "без ограничений клиенту доступны все склады портала");
     }
 
     @Test
@@ -116,7 +125,14 @@ class AdminAccessTest extends PortalTestBase {
                 depositorId(ADMIN, DEPOSITOR), List.of("WH-ALA")));
     }
 
+    /** Сколько складов в портале всего — чтобы не помнить это числом. */
+    private int warehouseCount() {
+        return jdbc.sql("SELECT count(*)::int FROM dbo.warehouse WHERE COALESCE(is_active, true)")
+                .query(Integer.class)
+                .single();
+    }
+
     private List<Map<String, Object>> warehouses() {
-        return catalogs.list(CatalogType.WAREHOUSES, null, null, null, false);
+        return catalogs.list(CatalogType.WAREHOUSES, false);
     }
 }

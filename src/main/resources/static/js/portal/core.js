@@ -148,10 +148,19 @@
     PORTAL.error = null;
     renderStatusBar();
     try {
-      PORTAL.rows = (await PORTAL.fetchJson('/api/stock')).map(toRow);
+      if (PORTAL.filtersReady) await PORTAL.filtersReady;
+      const data = await PORTAL.fetchJson('/api/stock' + PORTAL.listQuery('stock'));
+      PORTAL.rows = (data.rows || []).map(toRow);
+      PORTAL.rowsTotal = data.total || 0;
+      // Номер страницы из ответа: сервер мог вернуть первую вместо
+      // запрошенной пятой, если отбор сузился и пятой больше нет.
+      if (typeof paginationState !== 'undefined' && paginationState.stock && data.page){
+        paginationState.stock.page = data.page;
+      }
       PORTAL.loadedAt = new Date();
     } catch (e){
       PORTAL.rows = [];
+      PORTAL.rowsTotal = 0;
       PORTAL.error = e.message;
     } finally {
       PORTAL.loading = false;
@@ -160,6 +169,9 @@
     }
   }
   window.portalReloadStock = loadStock;
+  // Этим же вызовом за списком ходит панель фильтров: отбор изменился —
+  // надо идти к серверу, перерисовкой имеющихся строк тут не обойтись.
+  PORTAL.reloadStock = loadStock;
 
   /**
    * Экраны не грузят данные сами по себе: до входа запрашивать нечего,
@@ -396,14 +408,20 @@
    */
   PORTAL.forgetAll = () => {
     PORTAL.rows = [];
+    PORTAL.rowsTotal = 0;
     PORTAL.loadedAt = null;
     PORTAL.error = null;
-    [PORTAL.docs, PORTAL.docsError, PORTAL.docsLoadedAt, PORTAL.catalog, PORTAL.catalogError]
+    // PORTAL.page и PORTAL.pageTotal — страницы товаров и упаковок.
+    // Забывать их обязательно: это строки ПРЕДЫДУЩЕГО клиента, и до
+    // ответа сервера они оставались бы на экране нового.
+    [PORTAL.docs, PORTAL.docsError, PORTAL.docsLoadedAt, PORTAL.catalog, PORTAL.catalogError,
+     PORTAL.page, PORTAL.pageTotal]
       .forEach(store => {
         if (!store) return;
         Object.keys(store).forEach(k => { store[k] = Array.isArray(store[k]) ? [] : null; });
       });
     ['renderStock','renderReceipts','renderOrders','renderTransfers','renderSku',
+     'renderPackaging',
      'renderBillingServices','renderBillingInvoices','renderSuppliers','renderConsignees']
       .forEach(fn => { if (typeof window[fn] === 'function'){ try { window[fn](); } catch (e) {} } });
   };
@@ -415,31 +433,25 @@
   // не исполняет, — тратить работу дважды.
 
   /**
-   * Замена штатного renderStock: та же фильтрация, сортировка и постраничный
-   * вывод, но источник — PORTAL.rows вместо массива products.
+   * Замена штатного renderStock: источник — PORTAL.rows, то есть
+   * страница, которую отдал сервер.
+   *
+   * <p>Отбор, порядок и страница считаются на сервере (V79), и здесь
+   * не осталось ничего, кроме отрисовки. Прежде экран отбирал сам,
+   * по четырём полям, вписанным в разметку: список групп в одном
+   * из них был наследством демо («Сырьё», «Мясная продукция»…),
+   * а группа товара с V38 — свободный текст поклажедателя, так что
+   * совпадение было случайным.
    */
   function renderStockFromApi(){
     const body = document.getElementById('stockBody');
     if (!body) return;
 
-    const codeQ = (document.getElementById('stockSearchCode')?.value || '').trim().toLowerCase();
-    const nameQ = (document.getElementById('stockSearchName')?.value || '').trim().toLowerCase();
-    const groupQ = document.getElementById('stockFilterGroup')?.value || '';
-    const defectOnly = document.getElementById('stockDefectFilterCb')?.checked;
-
-    let rows = PORTAL.rows.slice();
-    if (codeQ)  rows = rows.filter(p => (p.code || '').toLowerCase().includes(codeQ));
-    if (nameQ)  rows = rows.filter(p => (p.name || '').toLowerCase().includes(nameQ));
-    if (groupQ) rows = rows.filter(p => p.group === groupQ);
-    if (defectOnly) rows = rows.filter(p => p.defect > 0);
-
-    if (typeof fcApplySort === 'function') rows = fcApplySort('stock', rows);
-
-    let items = rows, totalPages = 1, total = rows.length;
-    if (typeof getPage === 'function'){
-      const page = getPage('stock', rows);
-      items = page.items; totalPages = page.totalPages; total = page.total;
-    }
+    const items = PORTAL.rows;
+    const total = PORTAL.rowsTotal || 0;
+    const size = (typeof paginationState !== 'undefined' && paginationState.stock)
+        ? paginationState.stock.pageSize : items.length;
+    const totalPages = Math.max(1, Math.ceil(total / (size || 1)));
 
     const counter = document.getElementById('stockCount');
     if (counter) counter.textContent = '(' + total + ')';
@@ -458,6 +470,9 @@
   function install(){
     patchColumns();
     window.renderStock = renderStockFromApi;
+    // Ряд страниц ведёт за данными, а не перерисовывает имеющиеся:
+    // страницу и порядок решает сервер.
+    if (typeof TABLE_RENDER_FN !== 'undefined') TABLE_RENDER_FN.stock = loadStock;
     PORTAL.onLogin(loadStock);
   }
 

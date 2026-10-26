@@ -22,7 +22,7 @@ import java.util.Map;
  * Тип приходит частью адреса и проверяется по перечислению DocumentType.
  * <p>
  *   GET /api/receipts?filter.status=received&filter.date.from=2026-09-01
- *   GET /api/document-filters/receipts — какие фильтры доступны человеку
+ *   GET /api/list-filters/receipts     — какие фильтры доступны человеку
  *   GET /api/orders/{docId}            — карточка: шапка, состав, детализация
  *   GET /api/transfers/{docId}/lines   — только состав
  */
@@ -47,10 +47,20 @@ public class DocumentController {
      * (для дат и чисел — {@code filter.<колонка>.from} и {@code .to}),
      * поэтому принимаются картой целиком: набор колонок задаётся
      * справочником и меняется миграцией, а не подписью этого метода.
-     * Что из присланного законно, решает {@link DocumentFilters}.
+     * Что из присланного законно, решает {@code ListFilters}.
+     *
+     * <p>Страница и порядок — тем же способом: {@code page},
+     * {@code pageSize}, {@code sort} (идентификатор колонки экрана)
+     * и {@code dir} ({@code asc} / {@code desc}); проверяет их
+     * {@code ListPaging}.
+     *
+     * <p>Ответ — не массив, а конверт
+     * {@code {rows, total, page, pageSize}}: вместе со строками экрану
+     * нужно «всего 134», а по двадцати присланным строкам это число
+     * не сосчитать.
      */
     @GetMapping
-    public List<Map<String, Object>> list(
+    public Map<String, Object> list(
             @PathVariable String docType,
             @RequestParam Map<String, String> params,
             HttpServletRequest request) {

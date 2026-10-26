@@ -56,8 +56,22 @@ class AuthTest extends PortalTestBase {
 
     @Test
     void managerSeesSeveralDepositors() {
-        List<Map<String, Object>> items = auth.availableDepositors("n.nazarbayev@ahlers.com");
-        assertEquals(2, items.size());
+        // Сверяется с тем, что менеджеру выдано, а не с запомненной
+        // двойкой: выдач в демо-данных может стать больше, и проверка
+        // падала бы, ничего не проверив. Правило же такое — менеджер
+        // видит ровно тех, кого ему выдали: не меньше (иначе он
+        // не доберётся до клиента) и не больше (иначе это утечка).
+        String manager = "n.nazarbayev@ahlers.com";
+        Integer granted = jdbc.sql("SELECT count(*)::int FROM dbo.user_depositor_access ud"
+                        + " JOIN dbo.app_user u ON u.user_id = ud.user_id"
+                        + " WHERE u.login = :login::text")
+                .param("login", manager)
+                .query(Integer.class)
+                .single();
+        assertTrue(granted >= 2,
+                "менеджеру выдан " + granted + " поклажедатель — проверять «несколько» не на чем");
+        assertEquals(granted.intValue(), auth.availableDepositors(manager).size(),
+                "менеджер видит не тех поклажедателей, что ему выданы");
     }
 
     @Test

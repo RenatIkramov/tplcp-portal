@@ -30,66 +30,26 @@
   /* ================= Разметка вкладки ================= */
 
   function createTab(){
-    const tabs = document.querySelector('#view-references .admin-subtabs');
-    if (!tabs || document.getElementById('ref-sub-units')) return;
+    if (document.getElementById('admin-sub-units')) return;
+    const host = document.getElementById('view-admin');
+    if (!host) return;
 
-    const button = document.createElement('button');
-    button.className = 'admin-subtab-btn ref-subtab-btn';
-    button.type = 'button';
-    button.id = 'refSubBtnUnits';
-    button.setAttribute('data-refsub', 'units');
-    PORTAL.label(button, 'references.button.units');
-    button.onclick = () => showReferencesSub('units');
-    // После грузополучателей, последней из рабочих справочников:
-    // единицы измерения ведёт администратор, и каждый день в них
-    // не ходят — в отличие от товаров, упаковок и контрагентов.
-    const after = tabs.querySelector('[data-refsub="consignees"]');
-    if (after && after.nextSibling) tabs.insertBefore(button, after.nextSibling);
-    else tabs.appendChild(button);
-
+    // Кнопку вкладки не создаём: ряд собирает admin-tabs.js по своему
+    // списку. Прежде вкладка жила в «Справочниках» рядом с товарами
+    // клиента — а единицы измерения ведёт администратор, и они одни
+    // на весь портал.
     const panel = document.createElement('div');
-    panel.className = 'admin-sub ref-sub';
-    panel.id = 'ref-sub-units';
+    panel.className = 'admin-sub';
+    panel.id = 'admin-sub-units';
     panel.innerHTML = ''
-      + '<div class="panel-head"><h1>' + PORTAL.t('references.title.units') + '</h1>'
+      + '<div class="panel-head"><h1 data-i18n="references.title.units">'
+      + PORTAL.t('references.title.units') + '</h1>'
       + '<div class="actions" id="unitsActions"></div></div>'
-      + '<div class="hint" style="margin:-6px 0 12px;">'
+      + '<div class="hint" data-i18n="references.hint.units" style="margin:-6px 0 12px;">'
       + PORTAL.t('references.hint.units') + '</div>'
       + '<div class="table-card"><table><thead><tr id="unitsHead"></tr></thead>'
       + '<tbody id="unitsBody"></tbody></table></div>';
-    const near = document.getElementById('ref-sub-packaging');
-    if (near && near.parentNode){
-      near.parentNode.insertBefore(panel, near.nextSibling);
-    } else {
-      document.getElementById('view-references').appendChild(panel);
-    }
-  }
-
-  /**
-   * Переключение подвкладок прототипа перебирает свой список имён
-   * и о наших не знает. Поэтому оборачиваем: вкладку единиц
-   * показываем сами, остальное отдаём прототипу.
-   */
-  function interceptSwitch(){
-    if (!window.showReferencesSub || window.showReferencesSub.__units) return;
-    const previous = window.showReferencesSub;
-    const wrapper = function(sub){
-      const isOurs = sub === 'units';
-      const panel = document.getElementById('ref-sub-units');
-      if (!isOurs){
-        if (panel) panel.classList.remove('active');
-        return previous(sub);
-      }
-      document.querySelectorAll('#view-references .ref-sub').forEach(d => {
-        d.classList.toggle('active', d.id === 'ref-sub-units');
-      });
-      document.querySelectorAll('[data-refsub]').forEach(b => {
-        b.classList.toggle('active', b.getAttribute('data-refsub') === 'units');
-      });
-      load();
-    };
-    wrapper.__units = true;
-    window.showReferencesSub = wrapper;
+    host.appendChild(panel);
   }
 
   /* ================= Данные ================= */
@@ -279,8 +239,13 @@
     // не зависит — иначе вкладка появлялась бы только после выбора
     // поклажедателя, а администратору выбор обязателен.
     PORTAL.onSession(() => {
+      // Вкладка живёт в администрировании, и раздел этот открыт
+      // администратору и разработчику. Поклажедателю единица
+      // измерения подписана в товарах и упаковках.
+      if (!['admin', 'developer'].includes(PORTAL.session && PORTAL.session.roleCode)){
+        return;
+      }
       createTab();
-      interceptSwitch();
       state.form = null;
       state.loaded = false;
       // Права и список — чужие после смены поклажедателя или роли.
@@ -288,9 +253,11 @@
       // на экране остались бы кнопки правки от прошлого входа.
       state.rows = [];
       state.canEdit = false;
-      const panel = document.getElementById('ref-sub-units');
-      if (panel && panel.classList.contains('active')) load();
-      else render();
+      render();
+      // Список короткий и меняется редко — читаем при открытии вкладки,
+      // а не при входе: незачем спрашивать сервер о том, на что никто
+      // не смотрит.
+      if (PORTAL.adminTabs) PORTAL.adminTabs.onOpen('units', load);
     });
   }
 

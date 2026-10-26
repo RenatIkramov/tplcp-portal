@@ -6,7 +6,8 @@ import com.ahlers.portal3pl.catalog.CatalogType;
 import com.ahlers.portal3pl.documents.DocumentService;
 import com.ahlers.portal3pl.auth.PortalUser;
 import com.ahlers.portal3pl.documents.DocumentType;
-import com.ahlers.portal3pl.stock.StockLine;
+import com.ahlers.portal3pl.lists.CatalogList;
+import com.ahlers.portal3pl.lists.ListService;
 import com.ahlers.portal3pl.stock.StockService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -38,6 +39,9 @@ class ReadApiTest extends PortalTestBase {
     CatalogService catalog;
 
     @Autowired
+    ListService lists;
+
+    @Autowired
     AuthService auth;
 
     // ---------- Запасы ----------
@@ -54,9 +58,9 @@ class ReadApiTest extends PortalTestBase {
     @Test
     void depositorStock() {
         signIn();
-        List<StockLine> rows = stock.list(null, null);
+        List<Map<String, Object>> rows = listRows(stockPage(Map.of()));
         assertFalse(rows.isEmpty(), "запасы поклажедателя отдаются");
-        assertTrue(rows.stream().anyMatch(r -> "RK-ROG-01".equals(r.skuCode())),
+        assertTrue(rows.stream().anyMatch(r -> "RK-ROG-01".equals(r.get("skuCode"))),
                 "в запасах есть демо-позиция RK-ROG-01");
     }
 
@@ -73,19 +77,32 @@ class ReadApiTest extends PortalTestBase {
     @Test
     void stockFilters() {
         signIn();
-        List<StockLine> all = stock.list(null, null);
+        int all = listTotal(stockPage(Map.of()));
 
-        List<StockLine> almaty = stock.list("WH-ALA", null);
-        assertFalse(almaty.isEmpty(), "на складе Алматы есть запасы");
-        assertTrue(almaty.size() <= all.size(), "один склад — не больше, чем все");
-        assertTrue(almaty.stream().allMatch(r -> "WH-ALA".equals(r.warehouseId())),
+        // Отбор идёт теми же фильтрами справочника, что у документов:
+        // filter.<колонка>. Прежде у запасов были свои два параметра,
+        // warehouseId и search, и экран всё равно отбирал по-своему.
+        Map<String, Object> almaty = stockPage(Map.of("filter.warehouse", "WH-ALA"));
+        assertFalse(listRows(almaty).isEmpty(), "на складе Алматы есть запасы");
+        assertTrue(listTotal(almaty) <= all, "один склад — не больше, чем все");
+        assertTrue(listRows(almaty).stream()
+                        .allMatch(r -> "WH-ALA".equals(r.get("warehouseId"))),
                 "в выдаче только запрошенный склад");
 
-        List<StockLine> found = stock.list(null, "рога");
-        assertFalse(found.isEmpty(), "поиск по наименованию находит");
-        assertTrue(found.stream().allMatch(r -> contains(r.skuName(), "рога")
-                        || contains(r.skuCode(), "рога")),
+        Map<String, Object> found = stockPage(Map.of("filter.name", "рога"));
+        assertFalse(listRows(found).isEmpty(), "поиск по наименованию находит");
+        assertTrue(listRows(found).stream()
+                        .allMatch(r -> contains(String.valueOf(r.get("skuName")), "рога")),
                 "в выдаче нет строк, не подходящих под поиск");
+
+        // Флажок «Только брак» — свой вид фильтра: вопрос «есть ли»,
+        // а не диапазон. Числом это выражалось бы как «брак с 0,001»,
+        // и человеку пришлось бы вместо щелчка вспоминать число.
+        Map<String, Object> defective = stockPage(Map.of("filter.defect", "true"));
+        assertTrue(listTotal(defective) <= all, "флажок не расширяет список");
+        assertTrue(listRows(defective).stream()
+                        .allMatch(r -> Double.parseDouble(String.valueOf(r.get("defectQty"))) > 0),
+                "в выдаче есть строки без брака");
     }
 
     /**
@@ -112,13 +129,13 @@ class ReadApiTest extends PortalTestBase {
     @Test
     void noDepositorNoData() {
         signInAs(USER, null);
-        expectRejection(409, () -> stock.list(null, null));
+        expectRejection(409, () -> stockPage(Map.of()));
     }
 
     /** А без входа вообще — 401, независимо от поклажедателя. */
     @Test
     void noLoginNoData() {
-        expectRejection(401, () -> stock.list(null, null));
+        expectRejection(401, () -> stockPage(Map.of()));
     }
 
     /**
@@ -175,7 +192,7 @@ class ReadApiTest extends PortalTestBase {
     }
 
     private List<String> documentNumbers(DocumentType type) {
-        return documents.list(currentUser(), type, Map.of()).stream()
+        return listRows(documents.list(currentUser(), type, Map.of())).stream()
                 .map(r -> String.valueOf(r.get("documentNo")))
                 .toList();
     }
@@ -190,22 +207,25 @@ class ReadApiTest extends PortalTestBase {
     @Test
     void documentFilters() {
         PortalUser user = signedInUser();
-        List<Map<String, Object>> all = documents.list(user, DocumentType.RECEIPTS, Map.of());
+        // Сравниваются ИТОГИ отбора, а не длины страниц: страницу режет
+        // сервер, и двадцать строк на ней не говорят ничего о том,
+        // сколько документов нашлось.
+        int all = listTotal(documents.list(user, DocumentType.RECEIPTS, Map.of()));
 
-        List<Map<String, Object>> received = documents.list(user, DocumentType.RECEIPTS,
+        Map<String, Object> received = documents.list(user, DocumentType.RECEIPTS,
                 Map.of("filter.status", "received"));
-        assertTrue(column(received, "documentNo").contains(RECEIPT_NO),
+        assertTrue(column(listRows(received), "documentNo").contains(RECEIPT_NO),
                 "принятое поступление " + RECEIPT_NO + " попадает под фильтр по статусу");
-        assertTrue(received.size() <= all.size(), "фильтр по статусу не расширяет список");
+        assertTrue(listTotal(received) <= all, "фильтр по статусу не расширяет список");
 
         // Поставщик — такой же фильтр по колонке, как остальные.
         // Здесь был общий поиск по номерам и контрагенту одной строкой;
         // поле убрано с панели, и проверять нечего, кроме отбора
         // по названной колонке.
-        List<Map<String, Object>> bySupplier = documents.list(user, DocumentType.RECEIPTS,
+        Map<String, Object> bySupplier = documents.list(user, DocumentType.RECEIPTS,
                 Map.of("filter.supplier", "козлов"));
-        assertFalse(bySupplier.isEmpty(), "отбор по поставщику находит");
-        assertTrue(bySupplier.size() <= all.size(), "отбор не расширяет список");
+        assertFalse(listRows(bySupplier).isEmpty(), "отбор по поставщику находит");
+        assertTrue(listTotal(bySupplier) <= all, "отбор не расширяет список");
     }
 
     /** Вход и ссылка на вошедшего: фильтры читаются от его имени. */
@@ -225,7 +245,7 @@ class ReadApiTest extends PortalTestBase {
         // Список читается глазами ВОШЕДШЕГО: подставить сюда основного
         // пользователя значило бы проверить не ту изоляцию.
         PortalUser other = authService.authenticate(OTHER_USER, USER_PASSWORD);
-        assertEquals(0, documents.list(other, DocumentType.RECEIPTS, Map.of()).size());
+        assertEquals(0, listTotal(documents.list(other, DocumentType.RECEIPTS, Map.of())));
     }
 
     /**
@@ -288,25 +308,28 @@ class ReadApiTest extends PortalTestBase {
     @Test
     void skuAndFilters() {
         signIn();
-        List<Map<String, Object>> all = catalog.list(CatalogType.SKU, null, null, null, false);
+        List<Map<String, Object>> all = catalog.list(CatalogType.SKU, false);
         assertTrue(column(all, "code").containsAll(List.of("RK-ROG-01", "RK-ROG-02", "RK-MYA-01")),
                 "демо-позиции в справочнике");
 
-        List<Map<String, Object>> found = catalog.list(CatalogType.SKU, "рога", null, null, false);
+        // Отбор ушёл на сервер и идёт через общий механизм списков:
+        // тот же, что у документов и запасов. Поиск по наименованию —
+        // подстрокой, по группе — точным значением, поэтому и проверка
+        // по группе точная: ни одной позиции чужой группы в выдаче.
+        List<Map<String, Object>> found = listRows(lists.page(signedInUser(), CatalogList.SKU,
+                Map.of("filter.name", "рога")));
         assertTrue(found.size() < all.size(), "поиск сужает список");
         assertTrue(column(found, "code").containsAll(List.of("RK-ROG-01", "RK-ROG-02")),
                 "поиск находит то, что искали");
 
-        // Фильтр по группе сравнивает значение точно, поэтому и проверка
-        // точная: в выдаче не должно быть ни одной позиции другой группы.
-        List<Map<String, Object>> meat =
-                catalog.list(CatalogType.SKU, null, "Мясная продукция", null, false);
+        List<Map<String, Object>> meat = listRows(lists.page(signedInUser(), CatalogList.SKU,
+                Map.of("filter.group", "Мясная продукция")));
         assertFalse(meat.isEmpty(), "фильтр по группе находит");
         assertTrue(meat.stream().allMatch(r -> "Мясная продукция".equals(r.get("itemGroupName"))),
                 "в выдаче только запрошенная группа");
 
         signInAs(OTHER_USER, OTHER_DEPOSITOR);
-        List<String> theirs = column(catalog.list(CatalogType.SKU, null, null, null, false), "code");
+        List<String> theirs = column(catalog.list(CatalogType.SKU, false), "code");
         assertFalse(theirs.isEmpty(), "у другого клиента своя номенклатура");
         assertTrue(Collections.disjoint(column(all, "code"), theirs),
                 "и она не пересекается с нашей");
@@ -323,21 +346,21 @@ class ReadApiTest extends PortalTestBase {
     @Test
     void catalogsAndBilling() {
         signIn();
-        assertFalse(catalog.list(CatalogType.SUPPLIERS, null, null, null, false).isEmpty(),
+        assertFalse(catalog.list(CatalogType.SUPPLIERS, false).isEmpty(),
                 "поставщики отдаются");
-        assertFalse(catalog.list(CatalogType.CONSIGNEES, null, null, null, false).isEmpty(),
+        assertFalse(catalog.list(CatalogType.CONSIGNEES, false).isEmpty(),
                 "грузополучатели отдаются");
-        assertFalse(catalog.list(CatalogType.WAREHOUSES, null, null, null, false).isEmpty(),
+        assertFalse(catalog.list(CatalogType.WAREHOUSES, false).isEmpty(),
                 "склады отдаются");
-        assertFalse(catalog.list(CatalogType.SERVICE_TARIFFS, null, null, null, false).isEmpty(),
+        assertFalse(catalog.list(CatalogType.SERVICE_TARIFFS, false).isEmpty(),
                 "тарифы отдаются");
 
-        List<Map<String, Object>> invoices = catalog.list(CatalogType.INVOICES, null, null, null, false);
+        List<Map<String, Object>> invoices = catalog.list(CatalogType.INVOICES, false);
         assertFalse(invoices.isEmpty(), "счета отдаются");
         assertNotNull(invoices.getFirst().get("amountWithVat"), "сумма с НДС рассчитана в представлении");
 
         signInAs(OTHER_USER, OTHER_DEPOSITOR);
-        assertEquals(0, catalog.list(CatalogType.INVOICES, null, null, null, false).size(),
+        assertEquals(0, catalog.list(CatalogType.INVOICES, false).size(),
                 "своих счетов у второго поклажедателя нет, а чужие ему не видны");
     }
 
@@ -347,9 +370,19 @@ class ReadApiTest extends PortalTestBase {
     private static final String RECEIPT_NO = "ПН-000148";
 
     private String receiptId() {
-        return documents.list(currentUser(), DocumentType.RECEIPTS,
-                        Map.of("filter.no", RECEIPT_NO))
+        return listRows(documents.list(currentUser(), DocumentType.RECEIPTS,
+                        Map.of("filter.no", RECEIPT_NO)))
                 .getFirst().get("docId").toString();
+    }
+
+    /**
+     * Страница запасов от имени вошедшего.
+     *
+     * <p>Запасы отдаются конвертом {@code {rows, total, page, pageSize}},
+     * как и документы: страницу режет сервер.
+     */
+    private Map<String, Object> stockPage(Map<String, String> params) {
+        return stock.list(currentUser(), params);
     }
 
     /** Значения одной колонки списка — для проверок «такие строки есть». */
@@ -359,8 +392,8 @@ class ReadApiTest extends PortalTestBase {
 
     /** Коды позиций в запасах текущего поклажедателя. */
     private Set<String> skuCodesInStock() {
-        return stock.list(null, null).stream()
-                .map(StockLine::skuCode)
+        return listRows(stockPage(Map.of())).stream()
+                .map(r -> String.valueOf(r.get("skuCode")))
                 .collect(Collectors.toSet());
     }
 

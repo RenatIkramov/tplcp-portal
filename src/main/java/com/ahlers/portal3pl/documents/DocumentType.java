@@ -1,13 +1,14 @@
 package com.ahlers.portal3pl.documents;
 
 import com.ahlers.portal3pl.common.Fail;
+import com.ahlers.portal3pl.lists.ListKind;
 
 /**
  * Три типа документов портала. Перечисление заодно защищает от подстановки
  * произвольного имени таблицы в запрос: в SQL попадают только значения
  * отсюда, а не то, что пришло из адреса.
  */
-public enum DocumentType {
+public enum DocumentType implements ListKind {
 
     RECEIPTS("receipts", "v_receipts", "v_receipt_lines", "v_receipt_line_details",
             "eta_date"),
@@ -66,6 +67,30 @@ public enum DocumentType {
         return path;
     }
 
+    /* ---- ListKind: общее у всех списков портала (отбор, порядок, страницы) ---- */
+
+    @Override
+    public String tableKey() {
+        return path;
+    }
+
+    @Override
+    public String view() {
+        return headerView;
+    }
+
+    /**
+     * Список документов открывается свежими сверху.
+     *
+     * <p>Хвост {@code doc_id} — не украшение: без него два документа
+     * одной даты идут в произвольном порядке, и при листании один
+     * попадётся дважды, а другой не попадётся вовсе.
+     */
+    @Override
+    public String defaultOrder() {
+        return "doc_date DESC NULLS LAST, doc_id DESC";
+    }
+
     /** Имя таблицы-заголовка. Совпадает с путём, но это совпадение не гарантировано. */
     public String headerTable() {
         return switch (this) {
@@ -84,6 +109,7 @@ public enum DocumentType {
     }
 
     /** enum_object_type.id — нужен для поиска статусов нужного типа документа. */
+    @Override
     public short objectTypeId() {
         return switch (this) {
             case RECEIPTS -> (short) 1;

@@ -32,16 +32,21 @@
 
   async function loadDirectories(){
     if (refs.loaded) return refs;
-    // Упаковки могли быть уже прочитаны экраном «Упаковки» — он кладёт их
-    // в PORTAL.catalog.packaging. Берём оттуда, а свои складываем туда же:
-    // две копии одного справочника однажды разойдутся, и окно строки
-    // покажет не то, что показывает экран.
+    // Берём справочники ДЛЯ ВЫБОРА — /options, весь набор без страниц:
+    // товар человек ищет с середины наименования, и страницами такой
+    // поиск не собрать. Страница экрана справочника — это другой адрес
+    // и другой набор.
+    //
+    // Прочитанные упаковки складываем в PORTAL.catalog.packaging
+    // и оттуда же берём, если они уже там: по этому набору считает
+    // колонка «Используются упаковки», и две копии одного справочника
+    // однажды разойдутся.
     const [w, s, c, sku, packagings, types, meResponse] = await Promise.all([
       api('GET','/api/warehouses'), api('GET','/api/suppliers'),
-      api('GET','/api/consignees'), api('GET','/api/sku'),
+      api('GET','/api/consignees'), api('GET','/api/sku/options'),
       (PORTAL.catalog && PORTAL.catalog.packaging && PORTAL.catalog.packaging.length)
         ? Promise.resolve(PORTAL.catalog.packaging)
-        : api('GET','/api/packaging'),
+        : api('GET','/api/packaging/options'),
       api('GET','/api/document-dictionaries'),
       api('GET','/api/me')
     ]);
@@ -1013,18 +1018,63 @@
     transferLineEdit: 'tf_fromWarehouse'
   };
 
-  // Прочитанные остатки: склад → код товара → строка. Склады клиента
-  // наперёд не читаем — спрашиваем тот, который понадобился.
+  // Прочитанные остатки: склад → код товара → строка (или null, если
+  // товара на складе нет). Спрашиваем по одному товару, а не склад
+  // целиком: запасы отдаются страницами (V79), и «прочитать весь
+  // склад» теперь значит «прочитать первые двести строк» — на двести
+  // первой позиции окно молча показало бы ноль вместо остатка.
   const stockByWarehouse = {};
 
-  async function stockOf(warehouseId){
-    if (!warehouseId) return null;
-    if (stockByWarehouse[warehouseId]) return stockByWarehouse[warehouseId];
-    const rows = await api('GET', '/api/stock?warehouseId=' + encodeURIComponent(warehouseId));
-    const byCode = {};
-    (rows || []).forEach(r => { byCode[r.skuCode] = r; });
-    stockByWarehouse[warehouseId] = byCode;
-    return byCode;
+  async function stockFor(warehouseId, code){
+    if (!warehouseId || !code) return null;
+    const byCode = stockByWarehouse[warehouseId]
+        || (stockByWarehouse[warehouseId] = {});
+    if (Object.prototype.hasOwnProperty.call(byCode, code)) return byCode[code];
+
+    const answer = await api('GET', '/api/stock'
+        + '?filter.warehouse=' + encodeURIComponent(warehouseId)
+        + '&filter.code=' + encodeURIComponent(code)
+        + '&pageSize=50');
+    // Текстовый фильтр ищет ВХОЖДЕНИЕ: «RK-1» находит и «RK-10».
+    // Поэтому нужную строку выбираем сами — и по коду, и по складу.
+    //
+    // Склад сверяется второй раз нарочно. Он уже стоял в запросе,
+    // но если его значение окажется не тем, чем мы его считаем
+    // (например именем склада вместо идентификатора), сервер вернёт
+    // строки другого склада, а окно покажет их как свои. Лучше
+    // показать ноль, чем чужое число.
+    const same = (a, b) => String(a === null || a === undefined ? '' : a).trim().toUpperCase()
+        === String(b === null || b === undefined ? '' : b).trim().toUpperCase();
+    const rows = answer.rows || [];
+    const row = rows.find(r => same(r.skuCode, code) && same(r.warehouseId, warehouseId))
+        || null;
+    if (!row && rows.length){
+      // Строки пришли, а нужной среди них нет — это не «нет остатка»,
+      // это непонимание между экраном и сервером, и молчать о нём
+      // нельзя: в окне появится ноль, похожий на ответ.
+      console.warn(`остатки: ${code}/${warehouseId} — среди ${rows.length} строк нужной нет`);
+    }
+    byCode[code] = row;
+    return row;
+  }
+
+  /** Дочитать остаток выбранного товара и перерисовать числа окна. */
+  function refreshStock(prefix){
+    const product = selectedProduct(prefix);
+    const warehouseId = warehouseForModal(prefix);
+    const code = product && product.code;
+    return stockFor(warehouseId, code)
+        .then(() => paintStock(prefix))
+        .catch(() => {
+          // Запрос не удался — числа НЕИЗВЕСТНЫ, и сказать об этом
+          // обязательно. Прежде ошибку просто глотали, а в полях
+          // оставались нули, нарисованные демо-вёрсткой до нашего
+          // ответа. Ноль выглядит как ответ: человек прочтёт
+          // «остатка нет» там, где портал просто не смог спросить.
+          const byCode = stockByWarehouse[warehouseId];
+          if (byCode) delete byCode[code];
+          paintStock(prefix);
+        });
   }
 
   /** Склад, по которому считаются остатки для этого окна. */
@@ -1071,13 +1121,20 @@
       .map(name => document.getElementById(prefix + name));
     const product = selectedProduct(prefix);
     const byCode = stockByWarehouse[warehouseForModal(prefix)];
-    if (!product || !byCode){
+    const row = product && byCode ? byCode[product.code] : undefined;
+    // Три разных случая, и путать их нельзя:
+    //   товара не выбрано или про него ещё не спрашивали — «—»;
+    //   спросили, на складе нет                          — ноль;
+    //   спросили, есть                                   — числа.
+    // Прежде первые два были одним: окно показывало ноль, пока летел
+    // ответ, и ноль же оставался, если остатка нет. Ноль выглядит
+    // как ответ, и человек верит ему раньше, чем он стал правдой.
+    if (!product || row === undefined){
       fields.forEach(el => { if (el) el.textContent = '—'; });
       return;
     }
-    const row = byCode[product.code] || {};
     const unit = product.unit || '';
-    const values = [row.quantity, row.availableQty, row.incomingQty];
+    const values = row ? [row.quantity, row.availableQty, row.incomingQty] : [0, 0, 0];
     fields.forEach((el, i) => {
       if (el) el.textContent = (values[i] === undefined ? 0 : values[i]) + ' ' + unit;
     });
@@ -1090,7 +1147,9 @@
     if (typeof original !== 'function') return;
     window[name] = function(){
       const result = original.apply(this, arguments);
-      paintStock(prefix);
+      // Товар выбран — спрашиваем остаток именно по нему. До ответа
+      // в полях стоит «—», а не ноль.
+      refreshStock(prefix);
       return result;
     };
   }
@@ -1129,7 +1188,7 @@
    * объявлен через const, присвоить ему нельзя.
    *
    * <p>Поле depositorId проставляем текущим значением прототипа: окно
-   * фильтрует по нему список, а /api/packaging и так отдаёт упаковки
+   * фильтрует по нему список, а /api/packaging/options и так отдаёт упаковки
    * только того клиента, с которым работают, — RLS не отдаст чужих.
    */
   function fillPackagings(){
@@ -1183,9 +1242,7 @@
           const result = original.apply(this, arguments);
           // Запрос уходит после открытия окна: ждать его значит показать
           // человеку пустое окно на время ответа. Числа дорисуются сами.
-          stockOf(warehouseForModal(prefix))
-            .then(() => paintStock(prefix))
-            .catch(() => {});
+          refreshStock(prefix);
           // Правка строки приходит с её номером, добавление — без него.
           applyPriceSetting(prefix, fieldName.indexOf('Edit') >= 0 ? arguments[0] : null);
           return result;

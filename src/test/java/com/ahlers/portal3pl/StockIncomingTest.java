@@ -2,7 +2,6 @@ package com.ahlers.portal3pl;
 
 import com.ahlers.portal3pl.documents.DocumentType;
 import com.ahlers.portal3pl.documents.DraftService;
-import com.ahlers.portal3pl.stock.StockLine;
 import com.ahlers.portal3pl.stock.StockService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -87,14 +86,14 @@ class StockIncomingTest extends PortalTestBase {
 
         String docId = createSentReceipt(skuCode, warehouseId, 200);
         try {
-            List<StockLine> rows = linesFor(skuCode, warehouseId);
+            List<Map<String, Object>> rows = linesFor(skuCode, warehouseId);
             assertFalse(rows.isEmpty(), "товар с ожидаемым поступлением не появился в запасах");
-            StockLine row = rows.getFirst();
-            assertEquals(0, row.quantity().intValue(),
+            Map<String, Object> row = rows.getFirst();
+            assertEquals(0, number(row.get("quantity")),
                     "остатка нет, и это ноль, а не пропуск строки");
-            assertEquals(200, row.incomingQty().intValue(), "ожидаемое количество не то");
-            assertEquals(0, row.batchCount(), "партий нет");
-            assertNotNull(row.unitName(),
+            assertEquals(200, number(row.get("incomingQty")), "ожидаемое количество не то");
+            assertEquals(0, number(row.get("batchCount")), "партий нет");
+            assertNotNull(row.get("unitName"),
                     "единицу измерения тут можно взять только из карточки товара — она пуста");
         } finally {
             removeReceipt(docId);
@@ -143,11 +142,26 @@ class StockIncomingTest extends PortalTestBase {
         return found.split("\\|");
     }
 
-    /** Строки запасов по одной паре «товар + склад». */
-    private List<StockLine> linesFor(String skuCode, String warehouseId) {
-        return stock.list(warehouseId, skuCode).stream()
-                .filter(r -> skuCode.equals(r.skuCode()))
+    /**
+     * Строки запасов по одной паре «товар + склад».
+     *
+     * <p>Отбор идёт фильтрами справочника колонок (V79), как с экрана:
+     * своих параметров {@code warehouseId} и {@code search} у запасов
+     * больше нет. Код товара сверяется ещё раз точным равенством —
+     * текстовый фильтр ищет вхождение, и «RK-1» нашло бы и «RK-10».
+     */
+    private List<Map<String, Object>> linesFor(String skuCode, String warehouseId) {
+        return listRows(stock.list(authService.authenticate(USER, USER_PASSWORD),
+                        Map.of("filter.warehouse", warehouseId,
+                               "filter.code", skuCode,
+                               "pageSize", "200"))).stream()
+                .filter(r -> skuCode.equals(r.get("skuCode")))
                 .toList();
+    }
+
+    /** Число из ответа: количества приходят numeric, а не int. */
+    private static int number(Object value) {
+        return value == null ? 0 : (int) Double.parseDouble(String.valueOf(value));
     }
 
     /**

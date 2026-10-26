@@ -6,6 +6,10 @@
   if (!PORTAL) return;
 
   PORTAL.docs = { receipts: [], orders: [] };
+  // Сколько строк нашлось ВСЕГО — не на странице. Ряду страниц
+  // нужно «всего 134», а по двадцати присланным строкам это
+  // не сосчитать.
+  PORTAL.docsTotal = { receipts: 0, orders: 0, transfers: 0 };
   PORTAL.docsLoadedAt = { receipts: null, orders: null };
   PORTAL.docsError = { receipts: null, orders: null };
 
@@ -170,12 +174,21 @@
   async function load(table){
     try {
       if (PORTAL.filtersReady) await PORTAL.filtersReady;
-      const data = await PORTAL.fetchJson('/api/' + table + PORTAL.filterQuery(table));
-      PORTAL.docs[table] = data.map(table === 'receipts' ? toReceipt : toOrder);
+      const data = await PORTAL.fetchJson('/api/' + table + PORTAL.listQuery(table));
+      PORTAL.docs[table] = (data.rows || []).map(table === 'receipts' ? toReceipt : toOrder);
+      PORTAL.docsTotal[table] = data.total || 0;
+      // Сервер мог вернуть не ту страницу, которую просили: отбор
+      // сузился, и пятой страницы больше нет. Номер в ответе —
+      // не любезность, а то, что экран обязан подхватить, иначе
+      // ряд страниц покажет «Стр. 5», а на экране будет первая.
+      if (typeof paginationState !== 'undefined' && paginationState[table] && data.page){
+        paginationState[table].page = data.page;
+      }
       PORTAL.docsLoadedAt[table] = new Date();
       PORTAL.docsError[table] = null;
     } catch (e){
       PORTAL.docs[table] = [];
+      PORTAL.docsTotal[table] = 0;
       PORTAL.docsError[table] = e.message;
     }
     render(table);
@@ -185,24 +198,20 @@
     const body = document.getElementById(table + 'Body');
     if (!body) return;
 
-    // Отбор делает сервер (см. filters.js и DocumentFilters): здесь
-    // остались только сортировка и разбивка на страницы — то, что
-    // действительно про показ, а не про выборку.
+    // Отбор, порядок и страница — всё на сервере (DocumentFilters,
+    // DocumentPaging). Здесь не осталось ничего, кроме отрисовки.
     //
-    // Прежний отбор жил тут и отбирал по тому, что уже лежит
-    // на странице. Он сравнивал статус по переведённой подписи —
-    // на английском языке не находилось ничего, — а «дата по» резала
-    // последний день диапазона: дата стала отметкой времени, а
-    // сравнение осталось строковым.
-    let rows = PORTAL.docs[table].slice();
-
-    if (typeof fcApplySort === 'function') rows = fcApplySort(table, rows);
-
-    let items = rows, totalPages = 1, total = rows.length;
-    if (typeof getPage === 'function'){
-      const page = getPage(table, rows);
-      items = page.items; totalPages = page.totalPages; total = page.total;
-    }
+    // Так было не всегда. Отбор жил тут и отбирал по тому, что уже
+    // лежит на странице: статус сравнивался по переведённой подписи,
+    // и на английском не находилось ничего. Сортировка осталась
+    // клиентской дольше — и ошибалась тише: она упорядочивала
+    // двадцать строк текущей страницы, так что «самый тяжёлый
+    // документ» был самым тяжёлым из видимых.
+    const items = PORTAL.docs[table];
+    const total = PORTAL.docsTotal[table] || 0;
+    const size = (typeof paginationState !== 'undefined' && paginationState[table])
+        ? paginationState[table].pageSize : items.length;
+    const totalPages = Math.max(1, Math.ceil(total / (size || 1)));
 
     const counter = document.getElementById(table + 'Count');
     if (counter) counter.textContent = '(' + total + ')';
@@ -243,6 +252,16 @@
     // изменился — за данными надо идти заново, перерисовкой
     // имеющихся строк тут не обойтись.
     PORTAL.reloadDocs = load;
+
+    // Ряд страниц и щелчки по заголовкам ведут за данными, а не
+    // перерисовывают имеющиеся: страницу и порядок решает сервер.
+    // Прототип зовёт TABLE_RENDER_FN[ключ] — подменяем запись,
+    // а не кнопки: кнопок в ряду три, и каждая нашла бы свой путь
+    // мимо подмены.
+    if (typeof TABLE_RENDER_FN !== 'undefined'){
+      TABLE_RENDER_FN.receipts = () => load('receipts');
+      TABLE_RENDER_FN.orders = () => load('orders');
+    }
     PORTAL.onLogin(() => { load('receipts'); load('orders'); });
   }
 

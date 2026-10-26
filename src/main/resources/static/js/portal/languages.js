@@ -45,65 +45,24 @@
   /* ================= Разметка вкладки ================= */
 
   function createTab(){
-    const tabs = document.querySelector('#view-references .admin-subtabs');
-    if (!tabs || document.getElementById('ref-sub-languages')) return;
+    if (document.getElementById('admin-sub-languages')) return;
+    const host = document.getElementById('view-admin');
+    if (!host) return;
 
-    const button = document.createElement('button');
-    button.className = 'admin-subtab-btn ref-subtab-btn';
-    button.type = 'button';
-    button.id = 'refSubBtnLanguages';
-    button.setAttribute('data-refsub', 'languages');
-    PORTAL.label(button, 'references.button.languages');
-    button.onclick = () => showReferencesSub('languages');
-    // Последней в ряду: это настройка портала, а не рабочий справочник,
-    // к которому обращаются каждый день.
-    tabs.appendChild(button);
-
+    // Кнопку вкладки не создаём: ряд собирает admin-tabs.js по своему
+    // списку. Прежде вкладка стояла в «Справочниках», в одном ряду
+    // с товарами клиента, — а языки портала ведёт администратор.
     const panel = document.createElement('div');
-    panel.className = 'admin-sub ref-sub';
-    panel.id = 'ref-sub-languages';
+    panel.className = 'admin-sub';
+    panel.id = 'admin-sub-languages';
     panel.innerHTML = ''
-      + '<div class="panel-head"><h1>' + PORTAL.t('references.title.languages') + '</h1></div>'
-      + '<div class="hint" style="margin:-6px 0 12px;">'
+      + '<div class="panel-head"><h1 data-i18n="references.title.languages">'
+      + PORTAL.t('references.title.languages') + '</h1></div>'
+      + '<div class="hint" data-i18n="references.hint.languages" style="margin:-6px 0 12px;">'
       + PORTAL.t('references.hint.languages') + '</div>'
       + '<div class="table-card"><table><thead><tr id="languagesHead"></tr></thead>'
       + '<tbody id="languagesBody"></tbody></table></div>';
-    const view = document.getElementById('view-references');
-    if (view) view.appendChild(panel);
-  }
-
-  /**
-   * Вкладка открыта — показываем панель и читаем список.
-   *
-   * <p>Переключатель подвкладок в прототипе перебирает **жёсткий список**
-   * имён и наши панели в нём не числятся: сами по себе они не появятся
-   * и не спрячутся. Поэтому обёртка, как у единиц измерения: наша
-   * вкладка — переключаем сами, чужая — отдаём прототипу, предварительно
-   * убрав свою панель.
-   *
-   * <p>Список языков короткий и меняется раз в год, поэтому читается
-   * при открытии вкладки, а не при входе: незачем спрашивать сервер
-   * о том, на что никто не смотрит.
-   */
-  function interceptSwitch(){
-    if (!window.showReferencesSub || window.showReferencesSub.__languages) return;
-    const previous = window.showReferencesSub;
-    const wrapper = function(sub){
-      const panel = document.getElementById('ref-sub-languages');
-      if (sub !== 'languages'){
-        if (panel) panel.classList.remove('active');
-        return previous(sub);
-      }
-      document.querySelectorAll('#view-references .ref-sub').forEach(d => {
-        d.classList.toggle('active', d.id === 'ref-sub-languages');
-      });
-      document.querySelectorAll('[data-refsub]').forEach(b => {
-        b.classList.toggle('active', b.getAttribute('data-refsub') === 'languages');
-      });
-      load();
-    };
-    wrapper.__languages = true;
-    window.showReferencesSub = wrapper;
+    host.appendChild(panel);
   }
 
   async function load(){
@@ -207,9 +166,11 @@
     PORTAL.onSession(() => {
       if (!isAdmin()) return;
       createTab();
-      interceptSwitch();
       state.rows = [];
       state.loaded = false;
+      // Список языков короткий и меняется раз в год — читается
+      // при открытии вкладки, а не при входе.
+      if (PORTAL.adminTabs) PORTAL.adminTabs.onOpen('languages', load);
     });
   }
 

@@ -54,6 +54,18 @@ class PortalTextsTest extends PortalTestBase {
 
     private static final Pattern CYRILLIC = Pattern.compile("[А-Яа-яЁё]");
 
+    /**
+     * Узел с ключом перевода и его содержимое: {@code <тег … data-i18n="ключ" …>…</тег>}.
+     *
+     * <p>Разбор нарочно простой — он ищет пару «открывающий тег
+     * с ключом — ближайший закрывающий того же имени». Вложенности
+     * одноимённых тегов в разметке портала нет, а полноценный разбор
+     * HTML ради одной проверки — лишняя зависимость.
+     */
+    private static final Pattern TRANSLATED_NODE = Pattern.compile(
+            "<(h1|h2|h3|div|span|label|button|th|td|p|li|a)\\b[^>]*\\bdata-i18n=\"([^\"]+)\"[^>]*>"
+                    + "(.*?)</\\1>", Pattern.DOTALL);
+
     /** Вызов с подстановками: T('ключ', {имя: значение}). */
     private static final Pattern WITH_PARAMS =
             Pattern.compile("\\bT\\(\\s*'([a-z][a-zA-Z0-9_.]+)'\\s*,\\s*\\{");
@@ -134,6 +146,69 @@ class PortalTextsTest extends PortalTestBase {
         assertTrue(wrong.isEmpty(),
                 "подстановка в тексте и значение в коде называются по-разному — человек увидит"
                         + " плашку с дырой:\n" + String.join("\n", new TreeSet<>(wrong)));
+    }
+
+    /**
+     * Переводимый узел не прячет в себе другие узлы.
+     *
+     * <p>ПОЧЕМУ ЭТО ВАЖНО. Перевод применяется присваиванием
+     * {@code el.innerHTML = текст}: всё, что лежало внутри узла
+     * с {@code data-i18n}, при первой же смене языка исчезает.
+     * Поломка тихая вдвойне — она не видна, пока язык не применён,
+     * и не видна потом, потому что исчезает ровно то, чего человек
+     * на экране не ищет.
+     *
+     * <p>Так пропадали: счётчик строк в заголовке списков
+     * ({@code <h1 data-i18n>Запасы <span id="stockCount"></span></h1>}),
+     * кнопка ⚙ Колонки в блоке «Детализация» и цветная точка
+     * в бейджах журнала интеграции.
+     *
+     * <p>Вложенность законна в одном случае: когда сам текст
+     * в каталоге тоже содержит разметку — тогда перевод не стирает
+     * узлы, а приносит их с собой.
+     */
+    @Test
+    void translatedNodesDoNotHideOtherNodes() {
+        Map<String, String> russian = new HashMap<>();
+        for (Map<String, Object> row : jdbc.sql("""
+                SELECT t.text_key, t.value
+                  FROM dbo.ui_text t
+                  JOIN dbo.dictionary_locale l ON l.locale_id = t.locale_id
+                 WHERE l.code = 'ru'
+                """).query().listOfRows()) {
+            russian.put(String.valueOf(row.get("text_key")), String.valueOf(row.get("value")));
+        }
+
+        List<String> hidden = new ArrayList<>();
+        int nodes = 0;
+        // Разметка — это .html, а screenFiles() отдаёт только .js:
+        // соседние проверки смотрят код, а не вёрстку. Обходим
+        // страницы отдельным списком, иначе проверка молча смотрит
+        // в пустоту — на чём она и попалась в первом же прогоне.
+        for (Path file : markupFiles()) {
+            Matcher m = TRANSLATED_NODE.matcher(read(file));
+            while (m.find()) {
+                nodes++;
+                String key = m.group(2);
+                String inner = m.group(3);
+                if (!inner.contains("<")) {
+                    continue;
+                }
+                // Текст с разметкой приносит свои узлы сам.
+                if (russian.getOrDefault(key, "").contains("<")) {
+                    continue;
+                }
+                hidden.add(file.getFileName() + ": " + key + " прячет "
+                        + inner.replaceAll("\\s+", " ").trim());
+            }
+        }
+
+        assertTrue(nodes > 200,
+                "переводимых узлов нашлось подозрительно мало (" + nodes
+                        + ") — сломалось само выражение поиска");
+        assertTrue(hidden.isEmpty(),
+                "смена языка сотрёт содержимое этих узлов — ключ надо перенести"
+                        + " на отдельный span внутри:\n" + String.join("\n", hidden));
     }
 
     /**
@@ -342,6 +417,18 @@ class PortalTextsTest extends PortalTestBase {
 
     private static List<Path> portalFiles() {
         return walk(PORTAL_JS);
+    }
+
+    /** Страницы портала: разметка, в которой живут ключи перевода. */
+    private static List<Path> markupFiles() {
+        try (Stream<Path> files = Files.walk(STATIC)) {
+            List<Path> found = files.filter(p -> p.getFileName().toString().endsWith(".html"))
+                    .sorted().toList();
+            assertTrue(!found.isEmpty(), "не нашлось разметки в " + STATIC.toAbsolutePath());
+            return found;
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
     }
 
     private static List<Path> screenFiles() {

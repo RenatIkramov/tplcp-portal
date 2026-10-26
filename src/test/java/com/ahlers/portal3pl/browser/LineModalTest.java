@@ -1,10 +1,14 @@
 package com.ahlers.portal3pl.browser;
 
 import com.ahlers.portal3pl.admin.DepositorSettingsService;
+import com.ahlers.portal3pl.stock.StockService;
 import com.ahlers.portal3pl.auth.PortalUser;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -32,40 +36,142 @@ class LineModalTest extends BrowserTestBase {
     @Autowired
     DepositorSettingsService settings;
 
+    /** Тот же сервис, в который ходит экран, — для разбора расхождений. */
+    @Autowired
+    StockService stock;
+
     private String docId;
 
     /**
-     * Остаток, доступное и «К получению» — числа по складу документа,
-     * а не нули и не выдумка.
+     * Запросы окна к запасам — для сообщения об ошибке.
+     *
+     * <p>Проверка однажды упала с «показан нулём: 0 шт», и по этому
+     * сообщению нельзя было понять ничего: то ли экран спросил не тот
+     * склад, то ли не тот товар, то ли сервер не нашёл строку.
+     * Сообщение, по которому нельзя начать разбор, стоит дешевле
+     * своего отсутствия — оно только отнимает прогон.
+     */
+    private final List<String> stockAsked = new ArrayList<>();
+
+    /**
+     * Окно строки показывает те же числа, что список запасов.
+     *
+     * <p>ОТКУДА БЕРЁТСЯ ОЖИДАЕМОЕ. Прежде проверка выбирала пару
+     * «товар + склад» запросом к базе — от имени поклажедателя,
+     * которого назначала сама. А окно работает от имени ВОШЕДШЕГО,
+     * и его поклажедатель определяется входом. Пока он совпадал,
+     * проверка была зелёной; стоило им разойтись — и проверка ждала
+     * числа по строке, которой вошедший не видит вовсе, а окно честно
+     * показывало ноль.
+     *
+     * <p>Поэтому пара берётся с экрана запасов: это ровно то, что
+     * видит вошедший. Заодно проверка стала строже — сравниваются
+     * не «не ноль», а сами числа: список и окно читают один и тот же
+     * остаток, и расходиться им нельзя.
      */
     @Test
-    void stockNumbersComeFromTheWarehouseOfTheDocument() {
+    void stockNumbersMatchTheStockScreen() {
+        page.onRequest(request -> {
+            if (request.url().contains("/api/stock") && !request.url().contains("/details")) {
+                stockAsked.add(request.url().replaceAll("^.*/api/stock", "/api/stock"));
+            }
+        });
         PortalUser user = signedInUser();
         localeOf(user, "ru");
         priceSetting(false, false);
 
-        // Товар, который точно лежит на складе документа: его числа
-        // и должны появиться в окне.
-        String[] pair = stockedSkuAndWarehouse();
-
         signInUiAsClient();
-        createDraftWithWarehouse(pair[1]);
-        openLineModalWith(pair[0]);
+
+        // Строка запасов глазами вошедшего: товар, склад и три числа.
+        //
+        // Страницу берём побольше: список режет сервер (V79), и строка
+        // с остатком может не попасть в первые двадцать — проверка
+        // упала бы на пустом ожидании, а причина была бы в размере
+        // страницы, а не в окне.
+        page.evaluate("() => { showTab('stock');"
+                + " if (typeof paginationState !== 'undefined') paginationState.stock.pageSize = 100;"
+                + " return portalReloadStock(); }");
+        page.waitForFunction("() => (PORTAL.rows || []).some(r => Number(r.stock) > 0)");
+        @SuppressWarnings("unchecked")
+        List<String> row = (List<String>) page.evaluate("""
+                () => {
+                  const r = (PORTAL.rows || []).find(x => Number(x.stock) > 0);
+                  return [r.code, r.warehouse, String(r.stock), String(r.available),
+                          String(r.incoming)];
+                }
+                """);
+        String skuCode = row.get(0);
+        String warehouseId = row.get(1);
+
+        createDraftWithWarehouse(warehouseId);
+        openLineModalWith(skuCode);
 
         String total = text("lineEditStockTotal");
         String avail = text("lineEditStockAvail");
         String incoming = text("lineEditStockIncoming");
 
-        assertNotEquals("—", total, "остаток в окне не заполнился: " + total);
+        // Что именно спрашивал экран — в сообщении: без этого
+        // «показан нулём» не говорит, где искать причину.
+        String asked = "\nтовар " + skuCode + ", склад документа " + warehouseId
+                + "\nсписок запасов показывает: " + row
+                + "\nпоклажедатель сеанса: " + page.evaluate("() => PORTAL.depositorCode")
+                + "\nэкран выбрал склад: " + page.evaluate(
+                        "() => { const f = document.getElementById('rf_warehouse');"
+                                + " return f ? f.value : 'поля нет'; }")
+                + "\nэкран выбрал товар: " + page.evaluate(
+                        "() => typeof lineEditSelectedProduct !== 'undefined'"
+                                + " && lineEditSelectedProduct"
+                                + " ? lineEditSelectedProduct.code : 'не выбран'")
+                + "\nзапросы к запасам: " + stockAsked
+                // Значения в кавычках и с длиной: невидимый пробел
+                // в коде или в складе выглядит в сообщении так же,
+                // как его отсутствие, а отбор ломает намертво.
+                + "\nзначения: товар «" + skuCode + "» (" + skuCode.length()
+                + "), склад «" + warehouseId + "» (" + warehouseId.length() + ")"
+                // Отказы сервера: 400 на запрос окна экран проглатывает
+                // молча, а в полях остаются нули, которые прототип
+                // написал до нашего ответа. Ноль выглядит как ответ.
+                + "\nотказы сервера за сеанс: " + refusedRequests()
+                // И тот же отбор, сделанный сервисом напрямую: если
+                // здесь строка есть, а в окне её нет, дело не в отборе,
+                // а в пути от сервера до экрана.
+                + "\nсервис по тому же отбору: " + directly(user, warehouseId, skuCode);
+
+        assertNotEquals("—", total, "остаток в окне не заполнился: " + total + asked);
         assertTrue(total.matches("^\\d+([.,]\\d+)?\\s+\\S+$"),
-                "остаток должен быть числом с единицей измерения, а пришло: " + total);
-        assertFalse(total.startsWith("0 "),
-                "остаток товара, который лежит на складе, показан нулём: " + total);
-        assertNotEquals("—", avail, "доступное в окне не заполнилось");
-        // «К получению» по этому товару может быть и нулём — это законно.
-        // Незаконно «—»: склад выбран, остатки прочитаны.
-        assertNotEquals("—", incoming, "«К получению» в окне не заполнилось");
+                "остаток должен быть числом с единицей измерения, а пришло: " + total + asked);
+        assertEquals(number(row.get(2)), number(total),
+                "остаток в окне и в списке запасов разошлись" + asked);
+        assertEquals(number(row.get(3)), number(avail),
+                "доступное в окне и в списке запасов разошлись" + asked);
+        assertEquals(number(row.get(4)), number(incoming),
+                "«К получению» в окне и в списке запасов разошлись" + asked);
         assertNoJsErrors();
+    }
+
+    /**
+     * Тот же отбор сервисом, в обход экрана.
+     *
+     * <p>Отказ не роняет разбор, а становится его частью: ради него
+     * этот вызов и сделан.
+     */
+    private String directly(PortalUser user, String warehouseId, String skuCode) {
+        try {
+            // Контекст поклажедателя для прямого вызова: без него база
+            // честно вернёт ноль строк, и разбор уведёт не туда.
+            signIn();
+            return String.valueOf(listRows(stock.list(user,
+                    java.util.Map.of("filter.warehouse", warehouseId,
+                            "filter.code", skuCode, "pageSize", "50"))));
+        } catch (RuntimeException e) {
+            return "отказ — " + e.getMessage();
+        }
+    }
+
+    /** Число из подписи «180.000 шт» или «180» — для сравнения списка с окном. */
+    private static double number(String text) {
+        String digits = text.trim().split("\\s+")[0].replace(',', '.');
+        return digits.isBlank() ? 0 : Double.parseDouble(digits);
     }
 
     /**

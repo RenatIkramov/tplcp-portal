@@ -12,6 +12,9 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.List;
+import java.util.Map;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -194,6 +197,34 @@ public abstract class PortalTestBase {
                     .param("id", depositorId(USER, DEPOSITOR)).query(String.class).single();
             return jdbc.sql(sql).query(String.class).single();
         });
+    }
+
+    /**
+     * Строки из ответа списка документов.
+     *
+     * <p>Имя не {@code rowsOf}: так называется помощник в проверках
+     * загрузки Excel, и у него свой предмет — строки разобранного
+     * файла. Два одноимённых помощника с разным смыслом, один
+     * в основе проверок, другой рядом, — это ловушка, а не удобство.
+     *
+     * <p>Список отдаёт конверт {@code {rows, total, page, pageSize}},
+     * а не массив: страницу режет сервер (V78), и вместе со строками
+     * экрану нужно, сколько всего строк нашлось.
+     */
+    @SuppressWarnings("unchecked")
+    protected List<Map<String, Object>> listRows(Map<String, Object> answer) {
+        return (List<Map<String, Object>>) answer.get("rows");
+    }
+
+    /**
+     * Сколько строк нашлось всего — по всему отбору, а не на странице.
+     *
+     * <p>Проверки «фильтр сузил список» должны сравнивать именно это:
+     * число строк на странице ограничено её размером и о величине
+     * отбора не говорит ничего.
+     */
+    protected int listTotal(Map<String, Object> answer) {
+        return ((Number) answer.get("total")).intValue();
     }
 
     /** Изменение в базе под контекстом поклажедателя. */

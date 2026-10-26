@@ -212,11 +212,18 @@
   async function loadTransfers(){
     try {
       if (PORTAL.filtersReady) await PORTAL.filtersReady;
-      const data = await PORTAL.fetchJson('/api/transfers' + PORTAL.filterQuery('transfers'));
-      PORTAL.docs.transfers = data.map(toTransfer);
+      const data = await PORTAL.fetchJson('/api/transfers' + PORTAL.listQuery('transfers'));
+      PORTAL.docs.transfers = (data.rows || []).map(toTransfer);
+      PORTAL.docsTotal.transfers = data.total || 0;
+      // Номер страницы из ответа: сервер мог вернуть первую вместо
+      // запрошенной пятой, если отбор сузился и пятой больше нет.
+      if (typeof paginationState !== 'undefined' && paginationState.transfers && data.page){
+        paginationState.transfers.page = data.page;
+      }
       PORTAL.docsError.transfers = null;
     } catch (e){
       PORTAL.docs.transfers = [];
+      PORTAL.docsTotal.transfers = 0;
       PORTAL.docsError.transfers = e.message;
     }
     renderTransfersFromApi();
@@ -225,17 +232,14 @@
   function renderTransfersFromApi(){
     const el = document.getElementById('transfersBody');
     if (!el) return;
-    // Отбор делает сервер (см. filters.js): здесь остались сортировка
-    // и страницы. Поиск по номеру ищет во всех трёх номерах документа
-    // и в контрагенте — это параметр search, он тоже уходит на сервер.
-    let rows = (PORTAL.docs.transfers || []).slice();
+    // Отбор, порядок и страница — на сервере (DocumentFilters,
+    // DocumentPaging): здесь только отрисовка.
+    const items = PORTAL.docs.transfers || [];
+    const total = PORTAL.docsTotal.transfers || 0;
+    const size = (typeof paginationState !== 'undefined' && paginationState.transfers)
+        ? paginationState.transfers.pageSize : items.length;
+    const totalPages = Math.max(1, Math.ceil(total / (size || 1)));
 
-    if (typeof fcApplySort === 'function') rows = fcApplySort('transfers', rows);
-    let items = rows, totalPages = 1, total = rows.length;
-    if (typeof getPage === 'function'){
-      const page = getPage('transfers', rows);
-      items = page.items; totalPages = page.totalPages; total = page.total;
-    }
     const counter = document.getElementById('transfersCount');
     if (counter) counter.textContent = '(' + total + ')';
 
@@ -256,6 +260,9 @@
     // Общее «перечитать списки документов» должно обновлять все три,
     // иначе созданное или сохранённое перемещение в списке не появится.
     PORTAL.reloadTransfers = loadTransfers;
+    // Ряд страниц ведёт за данными, а не перерисовывает: страницу
+    // и порядок решает сервер.
+    if (typeof TABLE_RENDER_FN !== 'undefined') TABLE_RENDER_FN.transfers = loadTransfers;
     PORTAL.onLogin(loadTransfers);
   }
 

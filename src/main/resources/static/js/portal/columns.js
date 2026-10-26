@@ -171,7 +171,8 @@
     transferComposition: 'renderTransferComposition',
     receiptLineDetail: 'renderReceiptLineDetailTable',
     orderLineDetail: 'renderOrderLineDetailTable',
-    transferLineDetail: 'renderTransferLineDetailTable'
+    transferLineDetail: 'renderTransferLineDetailTable',
+    packaging: 'renderPackaging'
   };
 
   // Таблица может быть на скрытом экране, и её отрисовка падает на
@@ -206,9 +207,24 @@
         // прочитать ДО вызова оригинала: он закрывает окно и обнуляет обе
         const tableKey = hasGlobal('colPickerTable') ? colPickerTable : null;
         const draft = hasGlobal('colPickerDraft') ? colPickerDraft : null;
-        // прототип сначала применяет выбор у себя — экран меняется сразу,
-        // не дожидаясь ответа сервера
-        applyOrig.apply(this, arguments);
+        // Прототип сначала применяет выбор у себя — экран меняется
+        // сразу, не дожидаясь ответа сервера.
+        //
+        // В try нарочно. Отрисовку он ищет по своей карте таблиц,
+        // а таблиц у портала больше: упаковки (V76) там нет вовсе,
+        // и вызов падал на undefined — окно оставалось открытым,
+        // а выбор не доходил до сервера. Своя перерисовка идёт ниже
+        // и этой карты не спрашивает.
+        try {
+          applyOrig.apply(this, arguments);
+        } catch (e){
+          // Выбор он к этому моменту уже применил — падает позже,
+          // на отрисовке, и до закрытия окна не доходит. Закрываем
+          // сами: окно, оставшееся висеть после «Применить», человек
+          // читает как «не сработало» и жмёт второй раз.
+          console.warn('Окно колонок, применение в прототипе: ' + e.message);
+          if (typeof closeColumnPicker === 'function') closeColumnPicker();
+        }
         if (!tableKey || !draft) return;
         const chosen = draft.order.filter(id => !draft.hidden.has(id));
         const locked = (layout[tableKey] || []).filter(r => r.isPinned).map(r => r.columnId);
@@ -262,6 +278,8 @@
     window.resetColumnPicker = function(){
       const tableKey = hasGlobal('colPickerTable') ? colPickerTable : null;
       if (!tableKey) return;
+      // Сброс рисует экран сам (redraw ниже), карта прототипа
+      // здесь не участвует — но таблицу он всё равно должен знать.
       api('DELETE', '/api/table-columns/' + encodeURIComponent(tableKey))
         .then(rows => {
           applyTable(tableKey, rows);
