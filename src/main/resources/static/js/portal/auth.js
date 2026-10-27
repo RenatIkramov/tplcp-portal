@@ -176,7 +176,10 @@
       canCreateOrders: me.canCreateOrders !== false,
       canCreateTransfers: me.canCreateTransfers !== false,
       canUploadSkuExcel: me.canUploadSkuExcel !== false,
-      canUploadPackagingExcel: me.canUploadSkuExcel !== false,
+      // Своё право, а не право на товары: прежде здесь стояло
+      // me.canUploadSkuExcel, и снятая галочка «загрузка упаковок»
+      // не прятала кнопку — отказ человек получал уже после выбора файла.
+      canUploadPackagingExcel: me.canUploadPackagingExcel !== false,
       defaultDepositor: sess.depositorId
     };
   }

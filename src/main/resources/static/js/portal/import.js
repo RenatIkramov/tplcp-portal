@@ -10,13 +10,69 @@
   const say = m => { if (typeof notify === 'function') notify(m); };
   const T_ = k => (typeof T === 'function' ? T(k) : k);
 
+  /**
+   * Что грузим. Экран проверки один на товары и упаковки: правила
+   * строк одни, отличаются адрес, слова «позиции» / «упаковки»
+   * и то, какой список перечитать после записи.
+   *
+   * dbColumn — колонки, у которых идентификатор колонки справочника
+   * не выводится из имени поля базы общим правилом (camelCase →
+   * snake_case): у ссылочных полей в базе лежит идентификатор,
+   * а колонка называется по тому, что видит человек.
+   */
+  const KINDS = {
+    sku: {
+      url: '/api/sku/excel-import',
+      title: 'sku.title.import_check',
+      tabNew: 'sku.tab.new_items', tabExisting: 'sku.tab.existing_items',
+      showNew: 'sku.label.show_new', showExisting: 'sku.label.show_existing',
+      create: 'sku.button.create_new_items', update: 'sku.button.update_existing_items',
+      created: 'sku.message.created_items', updated: 'sku.message.updated_items',
+      // Группа и тип товара стали свободным текстом (V38), поэтому
+      // отдельного соответствия им больше не нужно: item_group
+      // и item_type получаются из group и productType по общему правилу.
+      dbColumn: {
+        unit: 'uom_id', group: 'item_group', productType: 'item_type',
+        currency: 'currency_id', hazardClass: 'hazard_class_id',
+        hazardGroup: 'hazard_group_id'
+      },
+      // Новые товары нужны и справочнику под окном, и окну строки
+      // документа, которое держит товары у себя.
+      reload: () => Promise.all([
+        typeof PORTAL.reloadProducts === 'function' ? PORTAL.reloadProducts() : null,
+        typeof PORTAL.reloadDirectories === 'function' ? PORTAL.reloadDirectories() : null
+      ])
+    },
+    packaging: {
+      url: '/api/packaging/excel-import',
+      title: 'references.title.packaging_import_check',
+      tabNew: 'references.tab.new_packagings', tabExisting: 'references.tab.existing_packagings',
+      showNew: 'references.tab.new_packagings', showExisting: 'references.tab.existing_packagings',
+      create: 'references.button.create_new_packagings',
+      update: 'references.button.update_existing_packagings',
+      created: 'references.message.created_packagings',
+      updated: 'references.message.updated_packagings',
+      dbColumn: {
+        skuCode: 'sku_id', packagingTypeName: 'packaging_type_id'
+      },
+      // Единица заказа живёт у товара — его список перечитываем тоже.
+      reload: () => Promise.all([
+        typeof PORTAL.reloadPackaging === 'function' ? PORTAL.reloadPackaging() : null,
+        typeof PORTAL.reloadProducts === 'function' ? PORTAL.reloadProducts() : null,
+        typeof PORTAL.reloadDirectories === 'function' ? PORTAL.reloadDirectories() : null
+      ])
+    }
+  };
+
   const state = {
+    kind: 'sku',               // sku | packaging
     result: null,              // ответ сервера целиком
     tab: 'all',                // all | new | existing
     onlyErrors: false,
     showNew: false,
     showExisting: false
   };
+  const kind = () => KINDS[state.kind] || KINDS.sku;
 
   /* ================= Разбор ответа ================= */
 
@@ -124,9 +180,21 @@
     return prepared !== undefined && prepared !== null ? prepared : row.values[field];
   }
 
+  /**
+   * Замечание, которое строку не портит: объём пересчитан по размерам
+   * (V82). Ячейка подсвечивается жёлтым и показывает, что было, — но
+   * строка остаётся годной и в ошибки не считается.
+   */
+  const NOTE_KINDS = ['recalculated'];
+
   function cell(row, column){
     const shownValue = show(row, column);
-    const cellIssues = issuesOfColumn(row, column.columnId);
+    const all = issuesOfColumn(row, column.columnId);
+    const cellIssues = all.filter(i => NOTE_KINDS.indexOf(i.kind) < 0);
+    if (!cellIssues.length && all.length){
+      return '<td class="cell-note">' + esc(shownValue === undefined ? '' : shownValue)
+        + '<div class="cell-note-text">' + esc(all[0].message) + '</div></td>';
+    }
     if (!cellIssues.length){
       return '<td>' + esc(shownValue === undefined ? '' : shownValue) + '</td>';
     }
@@ -147,17 +215,9 @@
   // Колонки файла приходят как {header, columnId}; значения разобранной
   // строки лежат под именами полей базы. Связь восстанавливаем по тому
   // же правилу, что на сервере.
-  // Группа и тип товара стали свободным текстом (V38), поэтому
-  // отдельного соответствия им больше не нужно: item_group
-  // и item_type получаются из group и productType по общему правилу.
-  const DB_COLUMN = {
-    unit: 'uom_id', group: 'item_group', productType: 'item_type',
-    currency: 'currency_id', hazardClass: 'hazard_class_id',
-    hazardGroup: 'hazard_group_id'
-  };
   function dbColumnOf(column){
     const id = column.columnId;
-    return DB_COLUMN[id] || id.replace(/[A-Z]/g, c => '_' + c.toLowerCase());
+    return kind().dbColumn[id] || id.replace(/[A-Z]/g, c => '_' + c.toLowerCase());
   }
 
   function table(rows, columns){
@@ -211,8 +271,8 @@
       + (enabled ? ' checked' : '') + '> ' + esc(T_(textKey)) + '</label>';
     return '<div class="filters" style="padding:10px 0;">'
       + checkboxHtml('onlyErrors', 'sku.label.only_errors', state.onlyErrors)
-      + checkboxHtml('showNew', 'sku.label.show_new', state.showNew)
-      + checkboxHtml('showExisting', 'sku.label.show_existing', state.showExisting)
+      + checkboxHtml('showNew', kind().showNew, state.showNew)
+      + checkboxHtml('showExisting', kind().showExisting, state.showExisting)
       + '</div>';
   }
 
@@ -222,8 +282,8 @@
       + ' type="button" data-imp-tab="' + id + '">' + esc(T_(textKey)) + '</button>';
     return '<div class="admin-subtabs" id="impTabs">'
       + button('all', 'sku.tab.all_rows')
-      + button('new', 'sku.tab.new_items')
-      + button('existing', 'sku.tab.existing_items')
+      + button('new', kind().tabNew)
+      + button('existing', kind().tabExisting)
       + '</div>';
   }
 
@@ -233,7 +293,7 @@
     if (!view || !r) return;
 
     let html = '<div style="display:flex;align-items:flex-start;gap:12px;">'
-      + '<h3 style="font-size:17px;flex:1;">' + esc(T_('sku.title.import_check')) + '</h3>'
+      + '<h3 style="font-size:17px;flex:1;">' + esc(T_(kind().title)) + '</h3>'
       + '<button class="btn ghost" type="button" data-imp-close="1">'
       + esc(T_('common.button.close')) + '</button></div>'
       + summary(r) + tabs();
@@ -245,11 +305,11 @@
       // на вопрос «что произойдёт», а не «что лежит в файле».
       const rows = r.rows.filter(x => x.rowClass === 'new' && x.isValid);
       html += table(rows, r.columns)
-        + applyButton('create', 'sku.button.create_new_items', rows);
+        + applyButton('create', kind().create, rows);
     } else {
       const rows = r.rows.filter(x => x.rowClass === 'existing' && x.isValid);
       html += fillHint(rows) + table(rows, r.columns)
-        + applyButton('update', 'sku.button.update_existing_items', rows);
+        + applyButton('update', kind().update, rows);
     }
 
     document.getElementById('skuImportPanel').innerHTML = html;
@@ -311,36 +371,35 @@
    * дважды. Защита от второго нажатия есть и на сервере (признак
    * applied), но заметить разницу человек должен сразу.
    */
-  async function apply(kind){
-    const button = document.querySelector('[data-imp-apply="' + kind + '"]');
+  async function apply(action){
+    const button = document.querySelector('[data-imp-apply="' + action + '"]');
     if (button) button.disabled = true;
     try {
-      const response = await PORTAL.fetchJson('/api/sku/excel-import/'
-          + encodeURIComponent(state.result.importId) + '/' + kind,
+      const response = await PORTAL.fetchJson(kind().url + '/'
+          + encodeURIComponent(state.result.importId) + '/' + action,
           {method: 'POST'});
       state.result = parseAnswer(response);
       render();
-      say(outcome(kind, response));
+      say(outcome(action, response));
       // Справочник под окном показывает прежний список: перечитываем
-      // его, чтобы созданные позиции были на месте, когда окно закроют.
+      // его, чтобы созданные записи были на месте, когда окно закроют.
       // Ждём: без await применение считалось бы законченным раньше, чем
       // список перечитан, и человек, закрывший окно сразу, увидел бы
-      // прежние строки. Отказа здесь быть не может — load() в catalog.js
-      // ловит его сам и показывает «Данные недоступны» в таблице.
-      if (typeof PORTAL.reloadProducts === 'function') await PORTAL.reloadProducts();
+      // прежние строки. Отказа здесь быть не может — загрузчики списков
+      // ловят его сами и показывают «Данные недоступны» в таблице.
+      await kind().reload();
     } catch (e){
       say(e.message);
       if (button) button.disabled = false;
     }
   }
 
-  /** Итог словами: «Создано позиций: 60». */
-  function outcome(kind, response){
+  /** Итог словами: «Создано позиций: 60», «Создано упаковок: 60». */
+  function outcome(action, response){
     const written = response.applied || 0;
     const failedCount = response.failed || 0;
     if (!written && !failedCount) return T_('sku.message.nothing_to_apply');
-    const textKey = kind === 'create'
-      ? 'sku.message.created_items' : 'sku.message.updated_items';
+    const textKey = action === 'create' ? kind().created : kind().updated;
     let text = T_(textKey) + ': ' + written;
     if (failedCount) text += '. ' + T_('sku.message.apply_partly');
     return text;
@@ -368,6 +427,8 @@
     // нет, а подсветка здесь — главное, что человек видит.
     const style = document.createElement('style');
     style.textContent = '#skuImportPanel td.cell-bad{background:#fef2f2;color:#991b1b;}'
+      + '#skuImportPanel td.cell-note{background:#fffbeb;}'
+      + '#skuImportPanel .cell-note-text{font-size:11.5px;color:#92400e;white-space:normal;min-width:180px;}'
       + '#skuImportPanel tr.row-note td{background:#fffbeb;}'
       + '#skuImportPanel .imp-count{font-size:13.5px;color:var(--muted);}'
       + '#skuImportPanel .imp-count b{color:var(--ink);font-size:15px;}'
@@ -402,14 +463,15 @@
     if (modal) modal.classList.remove('active');
     if (importId){
       try {
-        await fetch('/api/sku/excel-import/' + encodeURIComponent(importId),
+        await fetch(kind().url + '/' + encodeURIComponent(importId),
                     {method: 'DELETE'});
       } catch (e){ /* молча: окно уже закрыто */ }
     }
   }
 
-  function open(response){
+  function open(response, what){
     createModal();
+    state.kind = KINDS[what] ? what : (KINDS[response.kind] ? response.kind : 'sku');
     state.result = parseAnswer(response);
     state.tab = 'all';
     state.onlyErrors = false;
@@ -423,12 +485,18 @@
 
   /* ================= Выбор файла ================= */
 
-  function pickFile(){
-    let input = document.getElementById('skuImportFile');
+  /**
+   * Выбор файла. Поле выбора у каждой загрузки своё: общее помнило бы,
+   * для чего его открыли в прошлый раз, и файл упаковок, выбранный
+   * после загрузки товаров, ушёл бы на адрес товаров.
+   */
+  function pickFile(what){
+    const id = what + 'ImportFile';
+    let input = document.getElementById(id);
     if (!input){
       input = document.createElement('input');
       input.type = 'file';
-      input.id = 'skuImportFile';
+      input.id = id;
       input.accept = '.xlsx';
       input.style.display = 'none';
       document.body.appendChild(input);
@@ -437,20 +505,19 @@
         // значение сбрасываем, иначе повторный выбор того же файла
         // не вызовет onchange и человек решит, что кнопка сломалась
         input.value = '';
-        if (file) send(file);
+        if (file) send(file, what);
       };
     }
     input.click();
   }
 
-  async function send(file){
+  async function send(file, what){
     const body = new FormData();
     body.append('file', file);
     try {
       // Заголовок Content-Type для FormData ставит сам браузер:
       // в нём граница между частями, и вручную его задавать нельзя.
-      open(await PORTAL.fetchJson('/api/sku/excel-import',
-          {method: 'POST', body: body}));
+      open(await PORTAL.fetchJson(KINDS[what].url, {method: 'POST', body: body}), what);
     } catch (e){
       say(e.message);
     }
@@ -459,8 +526,8 @@
   /**
    * Прячет кнопки «Загрузить из Excel», которые ещё ничего не делают.
    *
-   * Загрузка сделана только для товаров. На поступлениях, заказах,
-   * перемещениях, отчётах и упаковках кнопки остались заглушками
+   * Загрузка сделана для товаров и упаковок. На поступлениях, заказах,
+   * перемещениях и отчётах кнопки остались заглушками
    * из прототипа: нажатие показывает сообщение и всё. Кнопка, которая
    * выглядит рабочей и не работает, хуже отсутствующей — человек
    * решит, что загрузил.
@@ -468,7 +535,7 @@
    * Вернуть легко: убрать этот вызов.
    */
   function hideStubs(){
-    const own = ['uploadSkuExcelBtn'];
+    const own = Object.keys(UPLOAD_BUTTONS);
     document.querySelectorAll('button').forEach(btn => {
       if (own.indexOf(btn.id) >= 0) return;
       const onclick = btn.getAttribute('onclick') || '';
@@ -478,16 +545,24 @@
     });
   }
 
+  /** Кнопка «Загрузить из Excel» → что она грузит. */
+  const UPLOAD_BUTTONS = {uploadSkuExcelBtn: 'sku', uploadPackagingExcelBtn: 'packaging'};
+
+  /**
+   * Подключение — сразу при загрузке страницы, а не по входу: см. то же
+   * место в excel.js. Через `onLogin` администратор до выбора клиента
+   * получал заглушку прототипа вместо загрузки.
+   */
   function install(){
-    PORTAL.onLogin(() => {
-      const btn = document.getElementById('uploadSkuExcelBtn');
+    Object.keys(UPLOAD_BUTTONS).forEach(id => {
+      const btn = document.getElementById(id);
       if (btn && !btn.dataset.wired){
         btn.dataset.wired = '1';
         btn.removeAttribute('onclick');
-        btn.onclick = () => pickFile();
+        btn.onclick = () => pickFile(UPLOAD_BUTTONS[id]);
       }
-      hideStubs();
     });
+    hideStubs();
   }
 
   if (document.readyState === 'loading'){

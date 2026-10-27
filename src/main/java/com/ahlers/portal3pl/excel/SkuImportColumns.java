@@ -1,6 +1,5 @@
 package com.ahlers.portal3pl.excel;
 
-import com.ahlers.portal3pl.excel.SkuTemplateFields.Field;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Component;
 
@@ -47,9 +46,9 @@ public class SkuImportColumns {
      *
      * @param index    номер столбца в файле, с нуля
      * @param header   заголовок, как он написан в файле
-     * @param field    поле товара, если заголовок опознан, иначе null
+     * @param field    поле справочника, если заголовок опознан, иначе null
      */
-    public record Column(int index, String header, Field field) {
+    public record Column(int index, String header, ExcelField field) {
 
         public boolean recognized() {
             return field != null;
@@ -127,13 +126,29 @@ public class SkuImportColumns {
     }
 
     /**
-     * Опознаёт шапку файла.
+     * Опознаёт шапку файла товаров.
      *
      * @param headers      заголовки по порядку, как прочитаны из файла
      * @param depositorId  поклажедатель — его переименования полей учитываются
      */
     public Layout match(List<String> headers, String depositorId) {
-        Map<String, Field> byLabel = labels(depositorId);
+        return match(headers, depositorId, "sku", SkuTemplateFields.fields());
+    }
+
+    /**
+     * Опознаёт шапку файла любого справочника.
+     *
+     * <p>Правила одни для товаров и упаковок — потому и метод один:
+     * разойдись нормализация заголовков между двумя загрузками, человек
+     * не понял бы, почему файл упаковок не узнаёт столбец, который файл
+     * товаров узнаёт.
+     *
+     * @param tableKey ключ таблицы в справочнике колонок: {@code sku}, {@code packaging}
+     * @param fields   поля справочника, которые можно загрузить
+     */
+    public Layout match(List<String> headers, String depositorId, String tableKey,
+                        Map<String, ExcelField> fields) {
+        Map<String, ExcelField> byLabel = labels(depositorId, tableKey, fields);
 
         List<Column> columns = new ArrayList<>();
         List<String> unrecognized = new ArrayList<>();
@@ -144,7 +159,7 @@ public class SkuImportColumns {
             if (header == null || header.isBlank()) {
                 continue;            // пустой столбец в шапке просто пропускаем
             }
-            Field field = byLabel.get(normalize(header));
+            ExcelField field = byLabel.get(normalize(header));
 
             // Поле могло быть опознано, но уже занято другим столбцом —
             // два столбца на одно поле означают, что непонятно, какое
@@ -184,12 +199,12 @@ public class SkuImportColumns {
      * сопоставление однозначно и не зависит от порядка строк в базе:
      * поэтому выборка упорядочена.
      */
-    private Map<String, Field> labels(String depositorId) {
-        Map<String, Field> fields = SkuTemplateFields.fields();
-        Map<String, Field> byCatalogId = new HashMap<>();
+    private Map<String, ExcelField> labels(String depositorId, String tableKey,
+                                           Map<String, ExcelField> fields) {
+        Map<String, ExcelField> byCatalogId = new HashMap<>();
         fields.values().forEach(f -> byCatalogId.put(f.catalogId(), f));
 
-        Map<String, Field> out = new HashMap<>();
+        Map<String, ExcelField> out = new HashMap<>();
 
         // Название поля на каждом языке портала плюс сам ключ текста:
         // ключ пригодится, если перевода на язык ещё нет.
@@ -204,7 +219,7 @@ public class SkuImportColumns {
                                  ON d.depositor_id = :dep::uuid
                                 AND d.table_key = c.table_key
                                 AND d.column_id = c.column_id
-                          WHERE c.table_key = 'sku'
+                          WHERE c.table_key = :table::text
                             AND COALESCE(d.is_available, true)
                         )
                         SELECT c.column_id, t.value AS label
@@ -223,11 +238,12 @@ public class SkuImportColumns {
                         ORDER BY 1, 2
                         """)
                 .param("dep", depositorId)
+                .param("table", tableKey)
                 .query()
                 .listOfRows();
 
         for (Map<String, Object> row : rows) {
-            Field field = byCatalogId.get(String.valueOf(row.get("column_id")));
+            ExcelField field = byCatalogId.get(String.valueOf(row.get("column_id")));
             if (field == null) {
                 continue;            // колонка есть в справочнике, но не правится
             }

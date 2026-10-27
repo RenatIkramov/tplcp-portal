@@ -280,10 +280,20 @@
     let form = '';
     if (state.pkgForm){
       const f = state.pkgForm.values;
+      const byDimensions = volumeOf(f) !== null;
+      if (byDimensions) f.volume_m3 = volumeOf(f);
       const input = (col, label, num) => '<div class="kv"><label>' + label + '</label><div>'
         + '<input class="kv-input" type="' + (num ? 'number' : 'text') + '"'
-        + (num ? ' step="any"' : '') + ' value="' + esc(f[col] === undefined ? '' : f[col])
-        + '" data-pkg="' + col + '" oninput="portalPackagingField(this)"/></div></div>';
+        + (num ? ' step="any"' : '') + ' value="' + esc(f[col] === undefined || f[col] === null ? '' : f[col])
+        + '" data-pkg="' + col + '" oninput="portalPackagingField(this)"'
+        + (col === 'volume_m3' && byDimensions ? ' readonly style="background:var(--bg);"' : '') + '/>'
+        + (col === 'volume_m3'
+            ? '<div data-pkg-volume-hint style="max-width:200px;margin-top:4px;font-size:11.5px;'
+              + 'line-height:1.3;color:var(--muted);'
+              + (byDimensions ? '' : 'display:none;') + '">'
+              + PORTAL.t('sku.hint.volume_from_dimensions') + '</div>'
+            : '')
+        + '</div></div>';
       form = '<div class="table-card" style="margin-top:12px; padding:12px;">'
         + '<div class="section-title">' + (state.pkgForm.packagingId ? T('sku.text.edit_packaging') : T('sku.text.new_packaging')) + '</div>'
         + '<div class="kv-grid">'
@@ -312,8 +322,51 @@
   }
 
   window.portalPackagingField = function(el){
-    state.pkgForm.values[el.getAttribute('data-pkg')] = el.value === '' ? null : el.value;
+    const col = el.getAttribute('data-pkg');
+    state.pkgForm.values[col] = el.value === '' ? null : el.value;
+    if (DIMENSIONS.includes(col)) syncVolume(el.closest('.kv-grid'));
   };
+
+  /**
+   * Объём по размерам — то же правило, что у триггера в базе (V82):
+   * все три размера больше нуля → Д × Ш × В (см) / 1 000 000, пять
+   * знаков. Иначе null: объём вводится руками.
+   *
+   * <p>Окончательно считает база; здесь — чтобы человек видел число
+   * сразу, а не после сохранения.
+   */
+  const DIMENSIONS = ['length_cm', 'width_cm', 'height_cm'];
+
+  function volumeOf(values){
+    const n = DIMENSIONS.map(c => Number(values[c]));
+    if (n.some(x => !(x > 0))) return null;
+    // В целых кубических сантиметрах до деления — так дробные
+    // размеры не дают хвостов вроде 0.024000000000000004.
+    const cm3 = n[0] * n[1] * n[2];
+    return Number((cm3 / 1e6).toFixed(5));
+  }
+
+  /** Поле «Объём» вслед за размерами — без перерисовки, фокус остаётся. */
+  function syncVolume(grid){
+    if (!grid) return;
+    const values = state.pkgForm.values;
+    const field = grid.querySelector('[data-pkg="volume_m3"]');
+    const hint = grid.querySelector('[data-pkg-volume-hint]');
+    if (!field) return;
+    const volume = volumeOf(values);
+    if (volume !== null){
+      values.volume_m3 = volume;
+      field.value = volume;
+      field.readOnly = true;
+      field.style.background = 'var(--bg)';
+    } else {
+      // Размер стёрли — объём снова вводится руками. Последнее
+      // посчитанное значение остаётся: стирать его за человека незачем.
+      field.readOnly = false;
+      field.style.background = '';
+    }
+    if (hint) hint.style.display = volume !== null ? '' : 'none';
+  }
 
   /** Дорисовываем карточку прототипа: кнопки в шапке и, в правке, поля ввода. */
   function decorate(){
@@ -502,6 +555,15 @@
     openSkuItem(state.row.code);
   };
 
+  /**
+   * Окно строки документа держит упаковки у себя, прочитав их при входе.
+   * Изменили упаковку здесь — пусть перечитает, иначе в документе
+   * предлагалась бы удалённая упаковка и не было бы новой.
+   */
+  function refreshLineModal(){
+    if (typeof PORTAL.reloadDirectories === 'function') PORTAL.reloadDirectories();
+  }
+
   window.portalPackagingCancel = function(){
     state.pkgForm = null;
     openSkuItem(state.row.code);
@@ -515,6 +577,7 @@
         : await api('POST', '/api/sku/' + state.skuId + '/packagings', form.values);
       state.pkgForm = null;
       await reloadPackagingScreen();
+      refreshLineModal();
       openSkuItem(state.row.code);
       say(T('sku.message.packaging_saved'));
     } catch (e){
@@ -527,6 +590,7 @@
       state.packagings = await api('POST', '/api/packagings/' + id + '/default');
       await PORTAL.reloadProducts();
       await reloadPackagingScreen();
+      refreshLineModal();
       openSkuItem(state.row.code);
     } catch (e){
       say(e.message);
@@ -540,6 +604,7 @@
     try {
       state.packagings = await api('DELETE', '/api/packagings/' + id);
       await reloadPackagingScreen();
+      refreshLineModal();
       openSkuItem(state.row.code);
       say(T('sku.text.packaging_deleted'));
     } catch (e){
@@ -638,6 +703,11 @@
     cols.forEach(c => {
       if (NUMERIC.includes(c.id)) c.num = true;
       if (c.id === 'skuCode') c.render = r => '<strong>' + esc(dash(r.skuCode)) + '</strong>';
+      // Единица заказа (V81) — признак, а не текст: без своей отрисовки
+      // в ячейке стояло бы true/false.
+      if (c.id === 'isDefaultOrderUnit'){
+        c.render = r => esc(r.isDefaultOrderUnit === true ? T('sku.text.yes') : T('sku.text.no'));
+      }
     });
   }
 

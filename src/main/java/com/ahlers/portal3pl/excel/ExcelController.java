@@ -24,7 +24,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
 /**
- * Excel: шаблон номенклатуры и загрузка из файла.
+ * Excel: шаблоны и загрузка из файла — товары и упаковки.
  * <pre>
  *   GET    /api/sku/excel-template        шаблон для загрузки товаров
  *   POST   /api/sku/excel-import          разобрать и проверить файл
@@ -32,7 +32,19 @@ import java.util.Map;
  *   DELETE /api/sku/excel-import/{id}     закрыть окно проверки
  *   POST   /api/sku/excel-import/{id}/create  создать новые позиции
  *   POST   /api/sku/excel-import/{id}/update  обновить существующие
+ *
+ *   GET    /api/packaging/excel-template  то же для упаковок
+ *   POST   /api/packaging/excel-import
+ *   GET    /api/packaging/excel-import/{id}
+ *   DELETE /api/packaging/excel-import/{id}
+ *   POST   /api/packaging/excel-import/{id}/create
+ *   POST   /api/packaging/excel-import/{id}/update
  * </pre>
+ *
+ * <p>Адреса упаковок не делят пути с адресами товаров, хотя служба под
+ * ними общая ({@link ExcelImportSupport}): загрузка упаковок,
+ * отправленная на адрес товаров, получила бы «не найдено», а не
+ * применилась бы как товары.
  *
  * <p>Разбор ничего не пишет в справочник товаров: он складывает
  * результат проверки и возвращает его идентификатор. Запись — отдельные
@@ -48,26 +60,35 @@ public class ExcelController {
 
     private final SkuTemplateService template;
     private final SkuImportService imports;
+    private final PackagingTemplateService packagingTemplate;
+    private final PackagingImportService packagingImports;
     private final SessionUser session;
     private final CurrentUser current;
 
     public ExcelController(SkuTemplateService template, SkuImportService imports,
+                           PackagingTemplateService packagingTemplate,
+                           PackagingImportService packagingImports,
                            SessionUser session, CurrentUser current) {
         this.template = template;
         this.imports = imports;
+        this.packagingTemplate = packagingTemplate;
+        this.packagingImports = packagingImports;
         this.session = session;
         this.current = current;
     }
 
     @GetMapping("/api/sku/excel-template")
     public ResponseEntity<Resource> skuTemplate(HttpServletRequest request) {
-        PortalUser user = session.requireUser(request);
-        // §6.3: разрешение проверяется на сервере. Шаблон — часть загрузки:
-        // кому загружать нельзя, тому и шаблон незачем.
-        current.requireExcelUpload("sku");
+        // Право на загрузку проверяет сама служба шаблона (§6.3).
+        return download(template.build(session.requireUser(request)));
+    }
 
-        SkuTemplateService.Template file = template.build(user);
+    @GetMapping("/api/packaging/excel-template")
+    public ResponseEntity<Resource> packagingTemplate(HttpServletRequest request) {
+        return download(packagingTemplate.build(session.requireUser(request)));
+    }
 
+    private static ResponseEntity<Resource> download(SkuTemplateService.Template file) {
         // Имя файла с кодом клиента и по-русски: отдаём и в ASCII-виде,
         // и в UTF-8 (filename*), иначе часть браузеров покажет кракозябры.
         ContentDisposition disposition = ContentDisposition.attachment()
@@ -90,17 +111,29 @@ public class ExcelController {
     public Map<String, Object> importCheck(@RequestParam("file") MultipartFile file,
                                            HttpServletRequest request) {
         PortalUser user = session.requireUser(request);
+        String importId = imports.check(user, file == null ? null : file.getOriginalFilename(),
+                bytesOf(file));
+        return imports.result(importId);
+    }
+
+    @PostMapping("/api/packaging/excel-import")
+    public Map<String, Object> packagingCheck(@RequestParam("file") MultipartFile file,
+                                              HttpServletRequest request) {
+        PortalUser user = session.requireUser(request);
+        String importId = packagingImports.check(user,
+                file == null ? null : file.getOriginalFilename(), bytesOf(file));
+        return packagingImports.result(importId);
+    }
+
+    private static byte[] bytesOf(MultipartFile file) {
         if (file == null || file.isEmpty()) {
             throw Fail.badRequest("error.file.not_chosen");
         }
-        byte[] content;
         try {
-            content = file.getBytes();
+            return file.getBytes();
         } catch (IOException e) {
             throw Fail.badRequest("error.file.unreadable");
         }
-        String importId = imports.check(user, file.getOriginalFilename(), content);
-        return imports.result(importId);
     }
 
     @GetMapping("/api/sku/excel-import/{importId}")
@@ -136,5 +169,32 @@ public class ExcelController {
         session.requireUser(request);
         current.requireExcelUpload("sku");
         imports.cancel(importId);
+    }
+
+    @GetMapping("/api/packaging/excel-import/{importId}")
+    public Map<String, Object> packagingResult(@PathVariable String importId,
+                                               HttpServletRequest request) {
+        session.requireUser(request);
+        current.requireExcelUpload("packaging");
+        return packagingImports.result(importId);
+    }
+
+    @PostMapping("/api/packaging/excel-import/{importId}/create")
+    public Map<String, Object> packagingCreate(@PathVariable String importId,
+                                               HttpServletRequest request) {
+        return packagingImports.apply(session.requireUser(request), importId, true);
+    }
+
+    @PostMapping("/api/packaging/excel-import/{importId}/update")
+    public Map<String, Object> packagingUpdate(@PathVariable String importId,
+                                               HttpServletRequest request) {
+        return packagingImports.apply(session.requireUser(request), importId, false);
+    }
+
+    @DeleteMapping("/api/packaging/excel-import/{importId}")
+    public void packagingCancel(@PathVariable String importId, HttpServletRequest request) {
+        session.requireUser(request);
+        current.requireExcelUpload("packaging");
+        packagingImports.cancel(importId);
     }
 }

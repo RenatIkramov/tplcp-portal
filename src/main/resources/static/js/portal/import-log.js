@@ -12,6 +12,14 @@
   const T_ = k => (typeof T === 'function' ? T(k) : k);
 
   const state = {imports: [], issues: [], depositorId: '', loaded: false};
+
+  /**
+   * Что грузили — словами экрана. С V81 загрузок две, и строка
+   * «не найдено в справочнике» без этой колонки двусмысленна: в каком?
+   * Подписи те же, что у вкладок «Справочников».
+   */
+  const KIND_LABEL = {sku: 'references.button.products', packaging: 'references.title.packaging'};
+  const kindOf = k => KIND_LABEL[k] ? T_(KIND_LABEL[k]) : dash(k);
   PORTAL.importLog = state;
 
   /** «09.10.2026, 13:45» из метки времени, как её отдаёт сервер. */
@@ -65,6 +73,7 @@
       + '<th>' + esc(T_('admin.column.date_and_time')) + '</th>'
       + '<th>' + esc(T_('admin.column.depositor')) + '</th>'
       + '<th>' + esc(T_('admin.column.user')) + '</th>'
+      + '<th>' + esc(T_('admin.column.import_kind')) + '</th>'
       + '<th>' + esc(T_('admin.column.file')) + '</th>'
       + '<th>' + esc(T_('admin.column.line')) + '</th>'
       + '<th>' + esc(T_('admin.column.error')) + '</th>'
@@ -85,12 +94,13 @@
         '<tr><td style="white-space:nowrap;">' + esc(when(i.startedAt)) + '</td>'
       + '<td>' + esc(dash(i.depositorName)) + '</td>'
       + '<td>' + esc(dash(i.login)) + '</td>'
+      + '<td>' + esc(kindOf(i.importKind)) + '</td>'
       + '<td>' + esc(dash(i.fileName)) + '</td>'
       + '<td class="num">' + esc(dash(i.rowNumber)) + '</td>'
       + '<td>' + esc(i.message)
       + (i.fileValue ? ' <span class="count">' + esc(i.fileValue) + '</span>' : '')
       + '</td></tr>').join('')
-      || '<tr><td colspan="6" style="color:var(--muted);">'
+      || '<tr><td colspan="7" style="color:var(--muted);">'
          + esc(T_('admin.text.import_log_empty')) + '</td></tr>';
 
     // Сводка по загрузкам: сколько файлов, сколько позиций создано

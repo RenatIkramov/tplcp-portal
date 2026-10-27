@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -32,27 +33,12 @@ class DocumentListNumbersTest extends BrowserTestBase {
         PortalUser user = signedInUser();
         localeOf(user, "ru");
 
-        // Документ, у которого номер в ERP заполнен и отличается
-        // от номера портала: только на таком видно, какой из двух
-        // попал в колонку.
-        // Запрос обёрнут в SELECT (…), чтобы при пустом результате
-        // вернулся NULL, а не исключение: иначе проверка упала бы
-        // раньше понятного сообщения.
-        String row = singleValue("""
-                SELECT (SELECT document_no || '|' || erp_number
-                          FROM dbo.v_orders
-                         WHERE erp_number IS NOT NULL AND erp_number <> ''
-                           AND erp_number <> document_no
-                         ORDER BY document_no
-                         LIMIT 1)
-                """);
-        assertNotNull(row, "в демо-данных нет заказа с номером в ERP — проверять нечего");
-        String portalNo = row.split("\\|")[0];
-        String erpNo = row.split("\\|")[1];
-
         signInUiAsClient();
         page.evaluate("() => showTab('orders')");
         waitForColumns("orders");
+        // Ждём ответа сервера, а не «появились строки»: строки на экране
+        // бывают и до ответа, и тогда номера на них — не те, что придут.
+        page.waitForFunction("() => window.PORTAL && PORTAL.docsLoadedAt && PORTAL.docsLoadedAt.orders");
         page.waitForFunction("() => document.querySelectorAll('#ordersBody tr').length > 0");
 
         List<String> head = headers("ordersHead");
@@ -61,6 +47,30 @@ class DocumentListNumbersTest extends BrowserTestBase {
         assertTrue(number >= 0, "в списке нет колонки «Номер»: " + head);
         assertTrue(portalId >= 0,
                 "в списке нет колонки «ID документа» — строку нельзя назвать по номеру: " + head);
+
+        // Документ, у которого номер в ERP заполнен и отличается от номера
+        // портала: только на таком видно, какой из двух попал в колонку.
+        //
+        // Ищется СРЕДИ СТРОК НА ЭКРАНЕ. Прежде проверка брала первый такой
+        // заказ из базы, а потом искала его в списке. С V78 список режет
+        // страницы сервер, и на базе, где заказов больше одной страницы,
+        // взятый из базы заказ законно оказывался на другой странице —
+        // проверка падала на работающем экране.
+        String row = singleValue("""
+                SELECT COALESCE((SELECT document_no || '|' || erp_number
+                          FROM dbo.v_orders
+                         WHERE erp_number IS NOT NULL AND erp_number <> ''
+                           AND erp_number <> document_no
+                           AND document_no IN (%s)
+                         ORDER BY document_no
+                         LIMIT 1), '')
+                """.formatted(quoted(column(portalId))));
+        // COALESCE, а не NULL: одиночная выборка на NULL падает исключением
+        // раньше, чем проверка успеет сказать, в чём дело.
+        assertFalse(row.isEmpty(), "на первой странице заказов нет ни одного с номером в ERP,"
+                + " отличным от номера портала, — проверять нечего");
+        String portalNo = row.split("\\|")[0];
+        String erpNo = row.split("\\|")[1];
 
         Map<String, Object> cells = cellsOfRow(portalId, portalNo, number);
         assertNotNull(cells, "в списке не нашлось строки с ID документа " + portalNo);
@@ -91,6 +101,29 @@ class DocumentListNumbersTest extends BrowserTestBase {
                 }
                 """, Map.of("idColumn", idColumn, "idValue", idValue, "wanted", wanted));
         return out;
+    }
+
+    /** Значения колонки во всех строках списка заказов на экране. */
+    private List<String> column(int index) {
+        @SuppressWarnings("unchecked")
+        List<String> out = (List<String>) page.evaluate("""
+                (i) => Array.from(document.querySelectorAll('#ordersBody tr'))
+                         .map(tr => tr.querySelectorAll('td')[i])
+                         .filter(td => !!td)
+                         .map(td => td.textContent.trim())
+                         .filter(t => t.length > 0)
+                """, index);
+        return out;
+    }
+
+    /** Список строк для IN (…): в кавычках, кавычки внутри удвоены. */
+    private static String quoted(List<String> values) {
+        if (values.isEmpty()) {
+            return "NULL";
+        }
+        return String.join(", ", values.stream()
+                .map(v -> "'" + v.replace("'", "''") + "'")
+                .toList());
     }
 
     /** Подпись колонки так, как её видит этот пользователь. */

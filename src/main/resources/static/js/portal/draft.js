@@ -1346,6 +1346,23 @@
     afterLinesChanged('deleteSelectedOrderLines', 'orders');
     afterLinesChanged('saveTransferLineEditModal', 'transfers');
     afterLinesChanged('deleteSelectedTransferLines', 'transfers');
+    // Перечитать справочники окна строки: товары, упаковки, склады.
+    //
+    // Окно читает их один раз за вход и держит у себя (refs). Пока
+    // справочник меняли только руками в другом месте, это выглядело
+    // безобидно, а было ошибкой: заведённая в карточке упаковка не
+    // появлялась в окне строки до следующего входа. С загрузкой из Excel
+    // это стало заметно — сто новых упаковок, и ни одной в окне.
+    //
+    // PORTAL.catalog.packaging сбрасываем тоже: loadDirectories берёт
+    // упаковки оттуда, если они там уже есть, и без сброса прочитала бы
+    // прежний набор.
+    PORTAL.reloadDirectories = () => {
+      refs.loaded = false;
+      if (PORTAL.catalog) PORTAL.catalog.packaging = [];
+      return loadDirectories().catch(() => {});
+    };
+
     // справочники зависят от поклажедателя — перечитываем их при каждом входе
     PORTAL.onLogin(() => {
       refs.loaded = false;

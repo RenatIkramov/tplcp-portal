@@ -73,26 +73,6 @@ public final class SkuTemplateFields {
     public static final Set<String> TEXT_FORMAT = Set.of(
             "code", "barcode", "hs_code", "enstru_code", "abc_class", "xyz_class");
 
-    /** Как вести себя с ячейкой: тип определяет проверку в Excel и разбор. */
-    public enum Kind { TEXT, NUMBER, BOOLEAN, DICTIONARY }
-
-    /**
-     * Колонка шаблона.
-     *
-     * @param column    имя поля в базе
-     * @param catalogId идентификатор колонки в справочнике — по нему берётся подпись
-     * @param kind      чем заполняется
-     * @param dictionary имя справочника для выпадающего списка, иначе null
-     * @param required  обязательна ли
-     */
-    public record Field(String column, String catalogId, Kind kind,
-                        String dictionary, boolean required) {
-
-        public boolean textFormat() {
-            return TEXT_FORMAT.contains(column);
-        }
-    }
-
     /** Поле базы → идентификатор колонки в справочнике. */
     public static String catalogId(String column) {
         String mapped = CATALOG_ID.get(column);
@@ -103,26 +83,26 @@ public final class SkuTemplateFields {
      * Все поля шаблона. Порядок задаётся отдельно, по справочнику
      * колонок, — здесь только состав и свойства.
      */
-    public static Map<String, Field> fields() {
-        Map<String, Field> out = new LinkedHashMap<>();
+    public static Map<String, ExcelField> fields() {
+        Map<String, ExcelField> out = new LinkedHashMap<>();
         for (Map.Entry<String, String> e : SkuColumns.SKU.entrySet()) {
             String column = e.getKey();
             if (EXCLUDED.contains(column)) {
                 continue;
             }
             String dict = DICTIONARY.get(column);
-            Kind kind;
+            ExcelField.Kind kind;
             if (dict != null) {
-                kind = Kind.DICTIONARY;
+                kind = ExcelField.Kind.DICTIONARY;
             } else if ("boolean".equals(e.getValue())) {
-                kind = Kind.BOOLEAN;
+                kind = ExcelField.Kind.BOOLEAN;
             } else if ("numeric".equals(e.getValue())) {
-                kind = Kind.NUMBER;
+                kind = ExcelField.Kind.NUMBER;
             } else {
-                kind = Kind.TEXT;
+                kind = ExcelField.Kind.TEXT;
             }
-            out.put(column, new Field(column, catalogId(column), kind, dict,
-                    REQUIRED.contains(column)));
+            out.put(column, new ExcelField(column, catalogId(column), kind, dict,
+                    REQUIRED.contains(column), TEXT_FORMAT.contains(column), false));
         }
         return out;
     }
@@ -133,20 +113,8 @@ public final class SkuTemplateFields {
      *
      * @param catalogOrder идентификатор колонки справочника → его порядок
      */
-    public static List<Field> ordered(Map<String, Integer> catalogOrder) {
-        return fields().values().stream()
-                .sorted((a, b) -> {
-                    if (a.required() != b.required()) {
-                        return a.required() ? -1 : 1;
-                    }
-                    int pa = catalogOrder.getOrDefault(a.catalogId(), Integer.MAX_VALUE);
-                    int pb = catalogOrder.getOrDefault(b.catalogId(), Integer.MAX_VALUE);
-                    if (pa != pb) {
-                        return Integer.compare(pa, pb);
-                    }
-                    return a.column().compareTo(b.column());
-                })
-                .toList();
+    public static List<ExcelField> ordered(Map<String, Integer> catalogOrder) {
+        return ExcelTemplateWriter.ordered(fields().values(), catalogOrder);
     }
 
     static String camel(String snake) {
