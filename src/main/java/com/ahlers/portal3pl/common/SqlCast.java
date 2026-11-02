@@ -25,7 +25,7 @@ public final class SqlCast {
     /** Небольшие числовые справочные ключи. */
     private static final Set<String> SMALLINT_COLUMNS = Set.of(
             "doc_type_id", "order_type_id", "currency_id", "unit_id", "uom_id",
-            "packaging_type_id", "block_reason_id", "hazard_class_id", "hazard_group_id",
+            "packaging_type_id", "hazard_class_id", "hazard_group_id", "quality_id",
             "object_type_id", "locale_id", "line_number", "sort_order");
 
     /** Целые счётчики в шапке документа. */
@@ -36,7 +36,7 @@ public final class SqlCast {
     private static final Set<String> NUMERIC_COLUMNS = Set.of(
             "expected_qty", "expected_qty_wms", "accepted_qty", "defect_qty",
             "ordered_qty", "ordered_qty_wms", "picked_qty", "qty", "qty_wms",
-            "quantity", "reserved_qty", "blocked_qty", "available_qty",
+            "quantity", "reserved_qty", "available_qty",
             "price", "weight_kg", "volume_m3", "total_pieces", "cost", "rate");
 
     private SqlCast() {

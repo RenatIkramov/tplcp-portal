@@ -14,12 +14,11 @@
   const state = {imports: [], issues: [], depositorId: '', loaded: false};
 
   /**
-   * Что грузили — словами экрана. С V81 загрузок две, и строка
-   * «не найдено в справочнике» без этой колонки двусмысленна: в каком?
-   * Подписи те же, что у вкладок «Справочников».
+   * Что грузили. С V81 загрузок две, и строка «не найдено в справочнике»
+   * без этой колонки двусмысленна: в каком? С V90 вид загрузки —
+   * перечисление, и имя на языке пользователя приходит с сервера.
    */
-  const KIND_LABEL = {sku: 'references.button.products', packaging: 'references.title.packaging'};
-  const kindOf = k => KIND_LABEL[k] ? T_(KIND_LABEL[k]) : dash(k);
+  const kindOf = i => dash(i.importKindName || i.importKind);
   PORTAL.importLog = state;
 
   /** «09.10.2026, 13:45» из метки времени, как её отдаёт сервер. */
@@ -94,7 +93,7 @@
         '<tr><td style="white-space:nowrap;">' + esc(when(i.startedAt)) + '</td>'
       + '<td>' + esc(dash(i.depositorName)) + '</td>'
       + '<td>' + esc(dash(i.login)) + '</td>'
-      + '<td>' + esc(kindOf(i.importKind)) + '</td>'
+      + '<td>' + esc(kindOf(i)) + '</td>'
       + '<td>' + esc(dash(i.fileName)) + '</td>'
       + '<td class="num">' + esc(dash(i.rowNumber)) + '</td>'
       + '<td>' + esc(i.message)

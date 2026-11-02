@@ -235,7 +235,7 @@
      'renderPackaging', 'renderSuppliers', 'renderConsignees', 'renderReports',
      'renderBillingServices', 'renderBillingInvoices', 'renderAdminUsers',
      'renderAdminAccess', 'renderAdminDepositorAccess', 'renderAdminStaffAccess',
-     'renderOrderTypes', 'renderDocTypes', 'renderDepositorsDir', 'renderWarehousesDir',
+     'renderEnumValues', 'renderDepositorsDir', 'renderWarehousesDir',
      'renderReportsConfigTable', 'renderReportRows',
      'populateReportsConfigDepositorFilter'
     ].forEach(name => {

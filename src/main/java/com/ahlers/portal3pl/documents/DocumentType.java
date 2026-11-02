@@ -10,27 +10,20 @@ import com.ahlers.portal3pl.lists.ListKind;
  */
 public enum DocumentType implements ListKind {
 
-    RECEIPTS("receipts", "v_receipts", "v_receipt_lines", "v_receipt_line_details",
-            "eta_date"),
-    ORDERS("orders", "v_orders", "v_order_lines", "v_order_line_details",
-            "planned_ship_date"),
-    TRANSFERS("transfers", "v_transfers", "v_transfer_lines", "v_transfer_line_details",
-            "ship_date");
+    RECEIPTS("receipts", "v_receipts", "v_receipt_lines", "v_receipt_line_details"),
+    ORDERS("orders", "v_orders", "v_order_lines", "v_order_line_details"),
+    TRANSFERS("transfers", "v_transfers", "v_transfer_lines", "v_transfer_line_details");
 
     private final String path;
     private final String headerView;
     private final String linesView;
     private final String lineDetailsView;
-    /** Колонка плановой даты: ожидаемая приёмка / плановая отгрузка. */
-    private final String plannedDateColumn;
 
-    DocumentType(String path, String headerView, String linesView, String lineDetailsView,
-                 String plannedDateColumn) {
+    DocumentType(String path, String headerView, String linesView, String lineDetailsView) {
         this.path = path;
         this.headerView = headerView;
         this.linesView = linesView;
         this.lineDetailsView = lineDetailsView;
-        this.plannedDateColumn = plannedDateColumn;
     }
 
     public static DocumentType ofPath(String path) {
@@ -54,13 +47,12 @@ public enum DocumentType implements ListKind {
         return lineDetailsView;
     }
 
-    public String plannedDateColumn() {
-        return plannedDateColumn;
-    }
-
-    /** У перемещений склад хранится в двух колонках, фильтруем по складу-источнику. */
-    public String warehouseColumn() {
-        return this == TRANSFERS ? "from_warehouse_id" : "warehouse_id";
+    /** Склад из шапки портала: у перемещения — отправитель или получатель (V94). */
+    @Override
+    public java.util.List<String> warehouseColumns() {
+        return this == TRANSFERS
+                ? java.util.List.of("from_warehouse_id", "to_warehouse_id")
+                : java.util.List.of("warehouse_id");
     }
 
     public String path() {
@@ -175,7 +167,10 @@ public enum DocumentType implements ListKind {
                 "custom_field_9", "custom_field_10"));
         switch (this) {
             case RECEIPTS -> common.addAll(java.util.List.of("expected_qty", "price", "currency_id"));
-            case ORDERS -> common.addAll(java.util.List.of("ordered_qty", "weight_kg", "price", "currency_id"));
+            // quality_id — качество строки (V89); экран присылает код,
+            // в quality_id его переводит LineQuality
+            case ORDERS -> common.addAll(java.util.List.of("ordered_qty", "weight_kg", "price", "currency_id",
+                    "quality_id"));
             case TRANSFERS -> common.add("qty");
         }
         return common;

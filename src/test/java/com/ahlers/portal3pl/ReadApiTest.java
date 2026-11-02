@@ -213,7 +213,7 @@ class ReadApiTest extends PortalTestBase {
         int all = listTotal(documents.list(user, DocumentType.RECEIPTS, Map.of()));
 
         Map<String, Object> received = documents.list(user, DocumentType.RECEIPTS,
-                Map.of("filter.status", "received"));
+                Map.of("filter.status", "60"));
         assertTrue(column(listRows(received), "documentNo").contains(RECEIPT_NO),
                 "принятое поступление " + RECEIPT_NO + " попадает под фильтр по статусу");
         assertTrue(listTotal(received) <= all, "фильтр по статусу не расширяет список");

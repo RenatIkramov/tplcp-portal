@@ -97,10 +97,10 @@ class DocumentFilterTest extends PortalTestBase {
     void statusIsFilteredByCodeNotByLabel() {
         PortalUser user = signedInUser();
         List<Map<String, Object>> drafts = listRows(documents.list(user, DocumentType.RECEIPTS,
-                Map.of("filter.status", "draft")));
+                Map.of("filter.status", "01")));
         assertFalse(drafts.isEmpty(), "фильтр по коду статуса ничего не нашёл");
         for (Map<String, Object> row : drafts) {
-            assertEquals("draft", row.get("statusCode"), "в выборке документ другого статуса");
+            assertEquals("01", row.get("statusCode"), "в выборке документ другого статуса");
         }
 
         // Подпись статуса фильтром не является: прислали её — ничего

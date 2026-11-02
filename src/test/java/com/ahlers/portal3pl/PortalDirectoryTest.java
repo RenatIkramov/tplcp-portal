@@ -28,8 +28,7 @@ class PortalDirectoryTest extends PortalTestBase {
 
     private static final String WAREHOUSE = "QA-WH";
     private static final String DEPOSITOR_CODE = "QA-D1";
-    private static final String ENUM_CODE = "qa-type";
-
+    /** Код проверочного типа: две цифры (V88), последний из свободных. */
     @Autowired
     PortalDirectoryService directory;
 
@@ -40,8 +39,6 @@ class PortalDirectoryTest extends PortalTestBase {
     void removeTestRows() {
         inContext("DELETE FROM dbo.depositor_warehouse WHERE warehouse_id LIKE 'QA-%'");
         inContext("DELETE FROM dbo.warehouse WHERE warehouse_id LIKE 'QA-%'");
-        inContext("DELETE FROM dbo.enum_order_type WHERE code LIKE 'qa-%'");
-        inContext("DELETE FROM dbo.enum_receipt_doc_type WHERE code LIKE 'qa-%'");
         // Поклажедатели под RLS: обычным запросом чужие строки не удалить,
         // убираем тем же способом, каким их заводит портал
         new org.springframework.transaction.support.TransactionTemplate(txManager)
@@ -145,46 +142,6 @@ class PortalDirectoryTest extends PortalTestBase {
         expectRejection(409, () -> directory.deleteDepositor(admin, id));
     }
 
-    /* ---------------- Типы заказов и документов ---------------- */
-
-    @Test
-    void enumRowAddedChangedAndDeleted() {
-        PortalUser admin = portalAdmin();
-        var kind = PortalDirectoryService.EnumKind.ORDER_TYPES;
-
-        List<Map<String, Object>> rows = directory.saveEnumRow(admin, kind, null,
-                new PortalDirectoryService.EnumRow(ENUM_CODE, "Проверка", 900, null));
-        Map<String, Object> added = byCode(rows, ENUM_CODE);
-        assertEquals(Boolean.TRUE, added.get("isActive"));
-
-        int id = ((Number) added.get("id")).intValue();
-        rows = directory.saveEnumRow(admin, kind, id,
-                new PortalDirectoryService.EnumRow(ENUM_CODE, "Проверка-2", 900, false));
-        assertEquals("Проверка-2", byCode(rows, ENUM_CODE).get("name"));
-        assertEquals(Boolean.FALSE, byCode(rows, ENUM_CODE).get("isActive"),
-                "тип можно отключить, не удаляя");
-
-        rows = directory.deleteEnumRow(admin, kind, id);
-        assertTrue(rows.stream().noneMatch(r -> ENUM_CODE.equals(r.get("code"))));
-    }
-
-    @Test
-    void usedEnumRowNotDeleted() {
-        PortalUser admin = portalAdmin();
-        var kind = PortalDirectoryService.EnumKind.ORDER_TYPES;
-        String usedId = singleValue("SELECT order_type_id::text FROM dbo.orders"
-                + " WHERE order_type_id IS NOT NULL LIMIT 1");
-        expectRejection(409, () -> directory.deleteEnumRow(admin, kind, Integer.parseInt(usedId)));
-    }
-
-    @Test
-    void enumCodeRequired() {
-        PortalUser admin = portalAdmin();
-        expectRejection(400, () -> directory.saveEnumRow(admin,
-                PortalDirectoryService.EnumKind.RECEIPT_DOC_TYPES, null,
-                new PortalDirectoryService.EnumRow(" ", "Без кода", null, null)));
-    }
-
     /* ---------------- Доступ ---------------- */
 
     @Test
@@ -194,9 +151,6 @@ class PortalDirectoryTest extends PortalTestBase {
         expectRejection(403, () -> directory.depositors(client));
         expectRejection(403, () -> directory.createWarehouse(client,
                 Map.of("warehouse_id", WAREHOUSE, "code", WAREHOUSE, "name", "Чужой склад")));
-        expectRejection(403, () -> directory.saveEnumRow(client,
-                PortalDirectoryService.EnumKind.ORDER_TYPES, null,
-                new PortalDirectoryService.EnumRow(ENUM_CODE, "Проверка", null, null)));
     }
 
     /* ---------------- Вспомогательное ---------------- */
@@ -212,9 +166,6 @@ class PortalDirectoryTest extends PortalTestBase {
         }
     }
 
-    private static Map<String, Object> byCode(List<Map<String, Object>> rows, String code) {
-        return rows.stream().filter(r -> code.equals(r.get("code"))).findFirst().orElseThrow();
-    }
 
     /* ================= Организации оператора (V33) ================= */
 

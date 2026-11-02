@@ -13,11 +13,6 @@ public record PortalUser(
         boolean mustChangePassword
 ) {
 
-    /** Администратор и разработчик управляют пользователями и доступами. */
-    public boolean isAdmin() {
-        return "admin".equals(roleCode) || "developer".equals(roleCode);
-    }
-
     /** Та же учётная запись, но пароль уже свой — после смены пароля. */
     public PortalUser withOwnPassword() {
         return new PortalUser(userId, login, fullName, roleCode, active, false);

@@ -144,8 +144,8 @@
     'sku.text.attributes_and_tracking': [
       {col: 'is_fragile', key: 'sku.label.fragile', bool: true},
       {col: 'is_serial_tracked', key: 'sku.text.serial_number_tracking', bool: true},
-      {col: 'batch_tracking', key: 'sku.label.batch_tracking', yesNoText: true},
-      {col: 'expiry_tracking', key: 'col.sku.expiryTracking', yesNoText: true},
+      {col: 'batch_tracking', key: 'sku.label.batch_tracking', bool: true},
+      {col: 'expiry_tracking', key: 'col.sku.expiryTracking', bool: true},
       {col: 'is_kit', key: 'col.sku.isKit', bool: true},
       {col: 'is_marking_required', key: 'sku.label.mandatory_labelling', bool: true},
       {col: 'is_excise', key: 'sku.label.excisable_goods', bool: true},
@@ -208,13 +208,8 @@
         + '</datalist>';
     } else if (field.bool){
       input = '<select class="kv-input" ' + name + '>'
-        + '<option value="false"' + (v ? '' : ' selected') + '>' + T('sku.text.no') + '</option>'
-        + '<option value="true"' + (v ? ' selected' : '') + '>' + T('sku.text.yes') + '</option></select>';
-    } else if (field.yesNoText){
-      // в базе это текст «Да»/«Нет», а не логический признак
-      input = '<select class="kv-input" ' + name + '><option value="">—</option>'
-        + [T('sku.text.yes'), T('sku.text.no')].map(o => '<option' + (o === v ? ' selected' : '') + '>' + o + '</option>').join('')
-        + '</select>';
+        + '<option value="false"' + (v ? '' : ' selected') + '>' + T('common.value.no') + '</option>'
+        + '<option value="true"' + (v ? ' selected' : '') + '>' + T('common.value.yes') + '</option></select>';
     } else {
       input = '<input class="kv-input" type="' + (field.num ? 'number' : 'text') + '"'
         + (field.num ? ' step="any"' : '') + ' value="' + esc(v === null || v === undefined ? '' : v)
@@ -706,7 +701,7 @@
       // Единица заказа (V81) — признак, а не текст: без своей отрисовки
       // в ячейке стояло бы true/false.
       if (c.id === 'isDefaultOrderUnit'){
-        c.render = r => esc(r.isDefaultOrderUnit === true ? T('sku.text.yes') : T('sku.text.no'));
+        c.render = r => esc(r.isDefaultOrderUnit === true ? T('common.value.yes') : T('common.value.no'));
       }
     });
   }

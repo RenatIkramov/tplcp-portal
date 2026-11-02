@@ -90,8 +90,8 @@ public final class SkuColumns {
         // признаки и учёт
         sku.put("is_fragile", "boolean");
         sku.put("is_serial_tracked", "boolean");
-        sku.put("batch_tracking", "varchar");
-        sku.put("expiry_tracking", "varchar");
+        sku.put("batch_tracking", "boolean");
+        sku.put("expiry_tracking", "boolean");
         sku.put("is_kit", "boolean");
         sku.put("is_marking_required", "boolean");
         sku.put("is_excise", "boolean");

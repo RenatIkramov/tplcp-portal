@@ -122,6 +122,38 @@ class StockIncomingTest extends PortalTestBase {
     }
 
     /**
+     * «Ожидается» — поступления, которые склад ждёт: 02, 10, 30 (V87).
+     * Не ждёт — ошибка отправки (склад о документе не знает), принятое
+     * и отменённое.
+     */
+    @Test
+    void onlyReceiptsTheWarehouseWaitsForAreIncoming() {
+        signIn();
+        String[] pair = pairWithoutStock();
+        String docId = createSentReceipt(pair[0], pair[1], 70);
+        try {
+            for (String code : List.of("02", "10", "30")) {
+                setStatus(docId, code);
+                assertFalse(linesFor(pair[0], pair[1]).isEmpty(),
+                        "поступление в статусе " + code + " должно ожидаться");
+            }
+            for (String code : List.of("03", "60", "61", "90")) {
+                setStatus(docId, code);
+                assertTrue(linesFor(pair[0], pair[1]).isEmpty(),
+                        "поступление в статусе " + code + " не должно ожидаться");
+            }
+        } finally {
+            removeReceipt(docId);
+        }
+    }
+
+    private void setStatus(String docId, String code) {
+        inContext("UPDATE dbo.receipts SET status_id ="
+                + " (SELECT id FROM dbo.enum_status WHERE code = '" + code + "')"
+                + " WHERE doc_id = '" + docId + "'::uuid");
+    }
+
+    /**
      * Пара «товар и склад, на котором его нет» — та, на которой раньше
      * ломалось. Товар берётся свой, склад — из выданных клиенту: иначе
      * поступление создать не выйдет.
@@ -177,7 +209,7 @@ class StockIncomingTest extends PortalTestBase {
         drafts.addLine(DocumentType.RECEIPTS, docId,
                 Map.of("sku_id", skuIdOf(skuCode), "expected_qty", qty));
         inContext("UPDATE dbo.receipts SET status_id ="
-                + " (SELECT id FROM dbo.enum_status WHERE code = 'sent_to_wms' LIMIT 1)"
+                + " (SELECT id FROM dbo.enum_status WHERE code = '02')"
                 + " WHERE doc_id = '" + docId + "'::uuid");
         return docId;
     }

@@ -28,8 +28,8 @@ public class StockRepository {
 
     private static final String DETAILS_SQL = """
             SELECT sku_code, sku_name, warehouse_id, warehouse_name,
-                   batch_number, series_number, expiry_date, quality,
-                   block_reason_name, quantity, reserved_qty, blocked_qty, available_qty,
+                   batch_number, series_number, expiry_date, quality, quality_code,
+                   quantity, reserved_qty, blocked_qty, available_qty,
                    unit_name, updated_at, synced_at
             FROM dbo.v_stock_details
             WHERE sku_code = :skuCode

@@ -792,30 +792,6 @@
 </div>
 </div>
 
-<div class="admin-sub" id="admin-sub-orderTypes">
-<div class="panel-head">
-<h1 data-i18n="references.title.order_types">Типы заказов</h1>
-</div>
-<div class="table-card">
-<table>
-<thead><tr><th data-i18n="col.stock.code">Код</th><th data-i18n="col.stock.name">Наименование</th></tr></thead>
-<tbody id="orderTypesBody"></tbody>
-</table>
-</div>
-</div>
-
-<div class="admin-sub" id="admin-sub-docTypes">
-<div class="panel-head">
-<h1 data-i18n="references.title.expected_document_types">Типы поступлений</h1>
-</div>
-<div class="table-card">
-<table>
-<thead><tr><th data-i18n="col.stock.code">Код</th><th data-i18n="col.stock.name">Наименование</th></tr></thead>
-<tbody id="docTypesBody"></tbody>
-</table>
-</div>
-</div>
-
 </section>
 <!-- ================= НАСТРОЙКИ РАЗРАБОТЧИКА (только для developer) ================= -->
 <section class="view" id="view-dev-settings">
@@ -1111,6 +1087,7 @@
       <input type="number" min="0" step="1" class="kv-input kv-input-editable" id="orderLineEditPackageCount" oninput="onOrderLineEditPackageCountChange()">
     </div>
     <div class="kv"><label for="orderLineEditQty" data-i18n="common.label.ordered" id="orderLineEditQtyLabel">Заказано</label><input type="number" min="0" step="1" class="kv-input kv-input-editable" id="orderLineEditQty" oninput="validateNumericInput(this); onOrderLineEditPriceChange();"></div>
+    <div class="kv"><label for="orderLineEditQuality" data-i18n="orders.label.quality">Качество</label><select class="kv-input kv-input-editable" id="orderLineEditQuality" onchange="onOrderLineEditQualityChange()"></select><div data-i18n="orders.hint.quality_stock" id="orderLineEditQualityHint" style="margin-top:4px; font-size:12px; color:var(--muted);">Остаток и доступное — по выбранному качеству</div></div>
     <div class="kv"><label for="orderLineEditPrice">Цена, <span id="orderLineEditCurrency">—</span></label><input type="number" min="0" step="0.01" class="kv-input kv-input-editable" id="orderLineEditPrice" oninput="onOrderLineEditPriceChange()"></div>
     <div class="kv"><label data-i18n="common.label.amount">Сумма</label><div class="kv-input" id="orderLineEditSum" style="background:var(--bg); border-color:transparent;">—</div></div>
     <div id="orderLineEditExtraFields" style="display:flex; flex-direction:column; gap:16px;"></div>
@@ -1313,6 +1290,7 @@
      теперь те же действия уходят в API.
 ============================================================== -->
 <script src="js/portal/draft.js"></script>
+<script src="js/portal/warehouse-filter.js"></script>
 
 <!-- ================== ЭТАП 5: вход в портал по логину и паролю ==================
      Демо-вход (список пользователей на экране авторизации) убран полностью.
@@ -1411,20 +1389,6 @@
 <script src="js/portal/import.js"></script>
 
 
-<!-- ===== Единицы измерения: вкладка в «Справочниках» =====
-     Справочник один на весь портал: «шт» означает штуку для всех
-     клиентов, и владельца у неё нет. Поэтому список видят все, а
-     правит только администратор — иначе один клиент переименовал бы
-     единицу всем остальным.
-
-     В разметке прототипа такой вкладки нет: единицы жили только
-     внутри карточки товара выпадающим списком. Кнопку и панель
-     добавляем сами, рядом с товарами и упаковками.
-
-     Правка идёт прямо в строке списка, как у типов заказов:
-     справочник короткий, и карточка ему не нужна.
-========================================================================= -->
-<script src="js/portal/units.js"></script>
 
 
 <!-- ===== Фильтры по группе и типу товара: значения из данных =====
@@ -1489,6 +1453,8 @@
 ========================================================================= -->
 <script src="js/portal/contacts.js"></script>
 <script src="js/portal/languages.js"></script>
+<script src="js/portal/enums.js"></script>
+<script src="js/portal/enum-values.js"></script>
 <script src="js/portal/i18n.js"></script>
 
 

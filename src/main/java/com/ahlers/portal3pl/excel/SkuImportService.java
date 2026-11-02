@@ -63,9 +63,6 @@ public class SkuImportService {
      */
     public static final int MAX_ROWS = SkuTemplateService.MAX_ROWS;
 
-    /** Больше 2 МБ для ста строк номенклатуры быть не может. */
-    public static final int MAX_BYTES = ExcelImportSupport.MAX_BYTES;
-
     private static final String SHEET = "Номенклатура";
 
     private final JdbcClient jdbc;

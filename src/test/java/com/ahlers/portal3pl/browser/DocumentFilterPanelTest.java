@@ -125,11 +125,11 @@ class DocumentFilterPanelTest extends BrowserTestBase {
                 r -> r.url().contains("/api/receipts") && r.url().contains("filter.status="),
                 () -> page.evaluate("""
                         () => {
-                          document.getElementById('filter-receipts-status').value = 'draft';
+                          document.getElementById('filter-receipts-status').value = '01';
                           onReceiptsFilterChange();
                         }
                         """)).url();
-        assertTrue(url.contains("filter.status=draft"),
+        assertTrue(url.contains("filter.status=01"),
                 "в запросе нет кода статуса: " + url);
 
         page.waitForTimeout(300);
@@ -162,12 +162,12 @@ class DocumentFilterPanelTest extends BrowserTestBase {
         // она есть с первой загрузки, и ожидание вернулось бы сразу.
         page.waitForResponse(
                 response -> response.url().contains("/api/receipts")
-                        && response.url().contains("filter.status=draft"),
+                        && response.url().contains("filter.status=01"),
                 () -> page.evaluate("""
                         () => {
                           document.getElementById('filter-receipts-date-from').value = '';
                           document.getElementById('filter-receipts-date-to').value = '';
-                          document.getElementById('filter-receipts-status').value = 'draft';
+                          document.getElementById('filter-receipts-status').value = '01';
                           onReceiptsFilterChange();
                         }
                         """));
@@ -179,7 +179,7 @@ class DocumentFilterPanelTest extends BrowserTestBase {
         // Значение в списке — код статуса, а подпись человеку видна
         // переведённая. Если наружу ушла подпись, фильтр снова
         // сломается на следующем языке.
-        assertEquals("draft", page.inputValue("#filter-receipts-status"),
+        assertEquals("01", page.inputValue("#filter-receipts-status"),
                 "в выпадающем списке статусов значение не код");
         assertNoJsErrors();
     }
@@ -431,7 +431,7 @@ class DocumentFilterPanelTest extends BrowserTestBase {
         page.evaluate("""
                 () => {
                   const s = document.getElementById('filter-receipts-status');
-                  s.value = 'draft';
+                  s.value = '01';
                   s.dispatchEvent(new Event('change', {bubbles: true}));
                 }
                 """);
@@ -443,7 +443,7 @@ class DocumentFilterPanelTest extends BrowserTestBase {
         String url = page.waitForRequest(
                 request -> request.url().contains("/api/receipts"),
                 () -> page.evaluate("() => onReceiptsFilterChange()")).url();
-        assertTrue(url.contains("filter.status=draft"),
+        assertTrue(url.contains("filter.status=01"),
                 "по кнопке ушёл запрос без выбранного статуса: " + url);
         assertNoJsErrors();
     }

@@ -16,8 +16,8 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * Справочники уровня портала: склады, поклажедатели, организации оператора,
- * типы заказов и типы приходных документов. Общие для всех клиентов, поэтому ведёт их только
+ * Справочники уровня портала: склады, поклажедатели, организации оператора
+ * (перечисления — с V95 в {@code EnumValueService}). Общие для всех клиентов, поэтому ведёт их только
  * администратор — поклажедатель не должен менять то, чем пользуются другие.
  *
  * <p>Поклажедатели живут под RLS, и обычный запрос показал бы администратору
@@ -266,129 +266,6 @@ public class PortalDirectoryService {
                 .listOfRows();
     }
 
-    /* ======================= Типы заказов и документов ======================= */
-
-    /**
-     * Короткие перечисления: код, наименование, порядок и признак
-     * «используется». Значения пришли из WMS, поэтому ключ — заданное
-     * число, а не автонумерация; новым строкам номер выдаёт база.
-     */
-    public enum EnumKind {
-        ORDER_TYPES("order-types", "enum_order_type", "order_type_usage", "orders",
-                "error.order_type"),
-        RECEIPT_DOC_TYPES("receipt-doc-types", "enum_receipt_doc_type", "receipt_doc_type_usage",
-                "receipts", "error.receipt_doc_type");
-
-        private final String path;
-        private final String table;
-        private final String usageFunction;
-        private final String usageColumn;
-        private final String errorPrefix;
-
-        EnumKind(String path, String table, String usageFunction, String usageColumn,
-                 String errorPrefix) {
-            this.path = path;
-            this.table = table;
-            this.usageFunction = usageFunction;
-            this.usageColumn = usageColumn;
-            this.errorPrefix = errorPrefix;
-        }
-
-        /**
-         * Ключ сообщения об отказе для этого справочника.
-         *
-         * <p>Раньше здесь лежало русское название («Тип заказа»)
-         * и подставлялось в текст ошибки — в английском сообщении оно
-         * так и оставалось русским. Теперь у справочника свой ключ,
-         * и переводчик видит фразу целиком.
-         */
-        public String error(String what) {
-            return errorPrefix + "." + what;
-        }
-
-        public static EnumKind ofPath(String path) {
-            for (EnumKind k : values()) {
-                if (k.path.equals(path)) {
-                    return k;
-                }
-            }
-            throw Fail.notFound("error.directory.unknown", "path", path);
-        }
-    }
-
-    public record EnumRow(String code, String name, Integer sortOrder, Boolean isActive) {
-    }
-
-    @Transactional(readOnly = true)
-    public List<Map<String, Object>> enumRows(PortalUser actor, EnumKind kind) {
-        users.requireAdmin(actor);
-        return SqlRows.toCamelCase(jdbc.sql("""
-                        SELECT id, code, name, sort_order, COALESCE(is_active, true) AS is_active
-                        FROM dbo.%s ORDER BY sort_order NULLS LAST, name
-                        """.formatted(kind.table))
-                .query()
-                .listOfRows());
-    }
-
-    @Transactional
-    public List<Map<String, Object>> saveEnumRow(PortalUser actor, EnumKind kind,
-                                                 Integer id, EnumRow row) {
-        users.requireAdmin(actor);
-        if (isBlank(row.code()) || isBlank(row.name())) {
-            throw Fail.badRequest("error.directory.code_and_name_required");
-        }
-        try {
-            if (id == null) {
-                jdbc.sql("""
-                                INSERT INTO dbo.%s (id, code, name, sort_order, is_active)
-                                VALUES (dbo.next_enum_id(:table::text), :code::varchar, :name::varchar,
-                                        :sortOrder, COALESCE(:isActive, true))
-                                """.formatted(kind.table))
-                        .param("table", kind.table)
-                        .param("code", text(row.code()))
-                        .param("name", text(row.name()))
-                        .param("sortOrder", row.sortOrder())
-                        .param("isActive", row.isActive())
-                        .update();
-            } else {
-                requireEnumRow(kind, id);
-                jdbc.sql("""
-                                UPDATE dbo.%s SET code = :code::varchar, name = :name::varchar,
-                                       sort_order = :sortOrder, is_active = COALESCE(:isActive, true)
-                                 WHERE id = :id
-                                """.formatted(kind.table))
-                        .param("code", text(row.code()))
-                        .param("name", text(row.name()))
-                        .param("sortOrder", row.sortOrder())
-                        .param("isActive", row.isActive())
-                        .param("id", id)
-                        .update();
-            }
-        } catch (DuplicateKeyException e) {
-            throw Fail.conflict(kind.error("code_taken"), "code", row.code());
-        }
-        return enumRows(actor, kind);
-    }
-
-    @Transactional
-    public List<Map<String, Object>> deleteEnumRow(PortalUser actor, EnumKind kind, int id) {
-        users.requireAdmin(actor);
-        requireEnumRow(kind, id);
-
-        Long count = jdbc.sql("SELECT %s FROM dbo.%s(:id::smallint)"
-                        .formatted(kind.usageColumn, kind.usageFunction))
-                .param("id", id)
-                .query(Long.class)
-                .single();
-        if (count != null && count > 0) {
-            throw Fail.conflict(kind.error("in_use"), "count", count);
-        }
-        jdbc.sql("DELETE FROM dbo.%s WHERE id = :id".formatted(kind.table))
-                .param("id", id)
-                .update();
-        return enumRows(actor, kind);
-    }
-
     /* ======================= Вспомогательное ======================= */
 
     private Map<String, Object> warehouseRow(String warehouseId) {
@@ -535,17 +412,6 @@ public class PortalDirectoryService {
             throw Fail.notFound("error.depositor.not_found");
         }
         return new LinkedHashMap<>(asText(SqlRows.toCamelCase(rows)).getFirst());
-    }
-
-    private void requireEnumRow(EnumKind kind, int id) {
-        boolean exists = Boolean.TRUE.equals(jdbc
-                .sql("SELECT EXISTS (SELECT 1 FROM dbo.%s WHERE id = :id)".formatted(kind.table))
-                .param("id", id)
-                .query(Boolean.class)
-                .single());
-        if (!exists) {
-            throw Fail.notFound(kind.error("not_found"));
-        }
     }
 
     private Map<String, Object> usage(String function, String id, String type) {

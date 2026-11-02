@@ -232,13 +232,16 @@ public class PartnerWriteService {
                 .single());
         try {
             jdbc.sql("""
-                            INSERT INTO dbo.delivery_point (consignee_id, address, is_default, sort_order)
-                            VALUES (:consignee::uuid, :address::varchar, :isDefault, :sortOrder)
+                            INSERT INTO dbo.delivery_point
+                              (consignee_id, address, is_default, sort_order, contact)
+                            VALUES (:consignee::uuid, :address::varchar, :isDefault, :sortOrder,
+                                    :contact::varchar)
                             """)
                     .param("consignee", consigneeId)
                     .param("address", address)
                     .param("isDefault", first)
                     .param("sortOrder", intOrNull(values.get("sortOrder")))
+                    .param("contact", contactOf(values))
                     .update();
         } catch (DuplicateKeyException e) {
             throw Fail.conflict("error.address.duplicate");
@@ -259,11 +262,13 @@ public class PartnerWriteService {
         try {
             jdbc.sql("""
                             UPDATE dbo.delivery_point
-                               SET address = :address::varchar, sort_order = :sortOrder
+                               SET address = :address::varchar, sort_order = :sortOrder,
+                                   contact = :contact::varchar
                              WHERE address_id = :id::uuid
                             """)
                     .param("address", address)
                     .param("sortOrder", intOrNull(values.get("sortOrder")))
+                    .param("contact", contactOf(values))
                     .param("id", addressId)
                     .update();
         } catch (DuplicateKeyException e) {
@@ -320,6 +325,21 @@ public class PartnerWriteService {
                     .update();
         }
         return addresses(consigneeId);
+    }
+
+    /** Предел колонки delivery_point.contact — тот же, что у контакта в заказе. */
+    private static final int CONTACT_LIMIT = 255;
+
+    /**
+     * Контактные данные адреса (V83). Пустое — «своего контакта нет»:
+     * в заказ тогда подставятся контакты грузополучателя.
+     */
+    private static String contactOf(Map<String, Object> values) {
+        String contact = text(values.get("contact"));
+        if (contact != null && contact.length() > CONTACT_LIMIT) {
+            throw Fail.badRequest("error.address.contact_too_long", "limit", CONTACT_LIMIT);
+        }
+        return contact;
     }
 
     /* ======================= Вспомогательное ======================= */

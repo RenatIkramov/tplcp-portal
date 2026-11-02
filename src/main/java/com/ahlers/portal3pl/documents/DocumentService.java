@@ -60,7 +60,9 @@ public class DocumentService {
     public Map<String, Object> dictionaries() {
         return Map.of(
                 "orderTypes", repository.enumValues("enum_order_type"),
-                "receiptDocTypes", repository.enumValues("enum_receipt_doc_type"));
+                "receiptDocTypes", repository.enumValues("enum_receipt_doc_type"),
+                // качество строки заказа (V89): экран выбирает его списком
+                "qualities", repository.enumValues("enum_quality"));
     }
 
     /** Карточка документа: шапка + состав + детализация в одном ответе. */
@@ -89,7 +91,7 @@ public class DocumentService {
                 // Считаем только для черновика: у отправленного документа
                 // причин не бывает, а два лишних запроса на каждое
                 // открытие карточки — заметно.
-                "problems", "draft".equals(head.get("statusCode"))
+                "problems", DocumentStatus.DRAFT.equals(head.get("statusCode"))
                         ? drafts.problemTexts(type, docId)
                         : List.of());
     }

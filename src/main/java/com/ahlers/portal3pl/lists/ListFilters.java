@@ -211,23 +211,29 @@ public class ListFilters {
      * сверяется со списком известных: каталог правится миграцией, а
      * опечатка в нём иначе дошла бы до текста запроса.
      *
-     * <p>Статусы разные у поступлений, заказов и перемещений, поэтому
-     * {@code enum_status} отбирается по виду документа. Остальные
-     * справочники общие.
+     * <p>Список статусов у документов общий (V87), но не всякий статус
+     * бывает у всякого документа: «Отгружен» у поступления не бывает.
+     * Поэтому {@code enum_status} отбирается по {@code enum_status_scope}
+     * для вида документа. Остальные справочники общие.
      */
     private List<Map<String, Object>> options(String source, short objectTypeId) {
         return switch (source) {
             case "enum_status" -> SqlRows.toCamelCase(jdbc.sql("""
-                            SELECT code AS value, name AS label
-                              FROM dbo.enum_status
-                             WHERE object_type_id = :objectType::smallint AND is_active
-                             ORDER BY sort_order, name
+                            SELECT s.code AS value,
+                                   dbo.enum_name('enum_status', s.id::text, s.name) AS label
+                              FROM dbo.enum_status s
+                              JOIN dbo.enum_status_scope c ON c.status_id = s.id
+                             WHERE c.object_type_id = :objectType::smallint AND s.is_active
+                             ORDER BY s.sort_order, 2
                             """)
                     .param("objectType", objectTypeId)
                     .query().listOfRows());
             case "enum_order_type", "enum_receipt_doc_type" -> SqlRows.toCamelCase(jdbc
-                    .sql("SELECT id AS value, name AS label FROM dbo.%s WHERE is_active"
-                            .formatted(source) + " ORDER BY sort_order, name")
+                    // имя — на языке пользователя (V86): варианты фильтра
+                    // должны совпадать с тем, что написано в списке
+                    .sql(("SELECT id AS value, dbo.enum_name('%s', id::text, name) AS label"
+                            + " FROM dbo.%s WHERE is_active ORDER BY sort_order, 2")
+                            .formatted(source, source))
                     .query().listOfRows());
             // Группы товара — свободный текст поклажедателя (V38),
             // справочника у них нет. Поэтому список собирается

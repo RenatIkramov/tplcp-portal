@@ -49,8 +49,13 @@ public class ListService {
         ListPaging.Page page = paging.parse(user, kind, params);
         boolean withArchived = params != null
                 && "true".equalsIgnoreCase(params.get("withArchived"));
+        // Склад из шапки портала (V94): пусто — все склады
+        String warehouse = params == null ? null : params.get("warehouse");
+        if (warehouse != null && warehouse.isBlank()) {
+            warehouse = null;
+        }
 
-        List<Map<String, Object>> rows = repository.page(kind, conditions, page, withArchived);
+        List<Map<String, Object>> rows = repository.page(kind, conditions, page, withArchived, warehouse);
         if (rows.isEmpty() && page.page() > 1) {
             // Страница кончилась под ногами: человек стоял на пятой,
             // поставил фильтр — и строк осталось на одну. Пустой экран
@@ -58,7 +63,7 @@ public class ListService {
             // не здесь. Возвращаем первую страницу и говорим об этом
             // номером в ответе — экран подхватит его и перерисует ряд.
             page = new ListPaging.Page(1, page.size(), page.sortColumn(), page.descending());
-            rows = repository.page(kind, conditions, page, withArchived);
+            rows = repository.page(kind, conditions, page, withArchived, warehouse);
         }
         return envelope(rows, page);
     }

@@ -300,21 +300,20 @@
       return;
     }
     body.innerHTML = admin.users.map(u => {
-      const stateBadge = u.isActive
-        ? '<span class="badge ok"><span class="dot"></span>' + T('admin.text.active') + '</span>'
-        : '<span class="badge err"><span class="dot"></span>' + T('admin.text.blocked') + '</span>';
-      const pwd = u.mustChangePassword
-        ? ' <span class="badge warn" title="'
-          + esc(T('admin.hint.must_change_password_badge')) + '">'
-          + '<span class="dot"></span>' + T('admin.text.must_change_password') + '</span>'
-        : '';
+      // Статус пользователя — перечисление (V90): выводится сервером из
+      // «активен» и «нужна смена пароля», имя приходит на языке человека.
+      const badgeClass = {'01': 'ok', '02': 'warn', '03': 'err'}[u.userStatusCode] || 'warn';
+      const hint = u.userStatusCode === '02'
+        ? ' title="' + esc(T('admin.hint.must_change_password_badge')) + '"' : '';
+      const stateBadge = '<span class="badge ' + badgeClass + '"' + hint + '><span class="dot"></span>'
+        + esc(u.userStatusName || '') + '</span>';
       return '<tr onclick="portalOpenAdminUser(\'' + u.userId + '\')">'
         + '<td><strong>' + esc(u.fullName) + '</strong></td>'
         + '<td>' + esc(u.roleName || u.roleCode) + '</td>'
         + '<td>' + esc(u.scope) + '</td>'
         + '<td>' + esc(u.login) + '</td>'
         + '<td>' + esc(u.depositorCodes || '—') + '</td>'
-        + '<td>' + stateBadge + pwd + '</td>'
+        + '<td>' + stateBadge + '</td>'
         + '</tr>';
     }).join('');
   }

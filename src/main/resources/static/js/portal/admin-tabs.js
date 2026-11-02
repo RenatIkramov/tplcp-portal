@@ -26,8 +26,8 @@
    и сообщает, чем её наполнить (`onOpen`); где стоять вкладке,
    решает этот список.
 
-   ПОЧЕМУ ВКЛАДКА ПОЯВЛЯЕТСЯ НЕ СРАЗУ. Панели единиц измерения,
-   языков и организаций оператора создаются кодом уже после входа.
+   ПОЧЕМУ ВКЛАДКА ПОЯВЛЯЕТСЯ НЕ СРАЗУ. Панели перечислений, языков
+   и организаций оператора создаются кодом уже после входа.
    Поэтому ряд пересобирается на каждой записи в `onOpen`, а вкладка
    показывается только тогда, когда её панель существует: кнопка,
    ведущая в пустоту, хуже отсутствующей кнопки.
@@ -47,8 +47,11 @@
   /** Группы и их состав; порядок списка — порядок на экране. */
   const GROUPS = [
     {id: 'directories', labelKey: 'admin.button.shared_directories',
-     subs: ['operator', 'warehousesDir', 'users', 'depositorsDir',
-            'units', 'orderTypes', 'docTypes', 'languages']},
+     subs: ['operator', 'warehousesDir', 'users', 'depositorsDir', 'languages']},
+    // Все перечисления — одной вкладкой (V95): единицы, типы заказов
+    // и поступлений переехали сюда из «Общих справочников».
+    {id: 'enumValues', labelKey: 'admin.button.enums',
+     subs: ['enumValues']},
     {id: 'accesses', labelKey: 'admin.button.accesses',
      subs: ['access', 'depositor-access', 'staff-access']},
     {id: 'errors', labelKey: 'admin.button.errors',
@@ -56,7 +59,7 @@
     {id: 'reports', labelKey: 'admin.button.report_settings',
      subs: ['reports-config']},
     {id: 'uitexts', labelKey: 'admin.button.interface_texts',
-     subs: ['uitexts']}
+     subs: ['uitexts', 'enums']}
   ];
 
   /**
@@ -72,9 +75,6 @@
     'warehousesDir':    'references.button.warehouses',
     'users':            'references.button.users',
     'depositorsDir':    'references.button.depositors',
-    'units':            'references.button.units',
-    'orderTypes':       'references.button.order_types',
-    'docTypes':         'references.button.expected_document_types',
     'languages':        'references.button.languages',
     'access':           'admin.button.manager_access',
     'depositor-access': 'admin.button.depositor_access',
@@ -82,7 +82,9 @@
     'integration':      'admin.button.integration_errors',
     'excel':            'admin.button.excel_import_errors',
     'reports-config':   'admin.button.report_settings',
-    'uitexts':          'admin.button.interface_texts'
+    'uitexts':          'admin.button.interface_texts',
+    'enums':            'admin.button.enums',
+    'enumValues':       'admin.button.enums'
   };
 
   const state = {group: null, sub: null, chosen: false, openers: {}, last: {}};

@@ -25,7 +25,7 @@
       length: dash(s.length), width: dash(s.width), height: dash(s.height),
       volume: dash(s.volume), weightGross: dash(s.weightGross), weightNet: dash(s.weightNet),
       hazardClass: dash(s.hazardClassName),
-      batchTracking: dash(s.batchTracking), expiryTracking: dash(s.expiryTracking),
+      batchTracking: PORTAL.yesNo(s.batchTracking), expiryTracking: PORTAL.yesNo(s.expiryTracking),
       shelfLifeDays: dash(s.shelfLifeDays), abcClass: dash(s.abcClass),
       defaultOrderPackaging: s.orderUnitName,
       // то, что демо раньше придумывало само
@@ -94,6 +94,7 @@
     try {
       const batches = (await fetchBatches(code)).map(b => ({
         q: dash(b.quality),
+        qualityCode: b.qualityCode || null,
         batch: dash(b.batchNumber),
         series: dash(b.seriesNumber),
         exp: ruDate(b.expiryDate),
@@ -101,7 +102,6 @@
         reserved: n(b.reservedQty),
         blocked: n(b.blockedQty),
         available: n(b.availableQty),
-        blockReason: dash(b.blockReasonName),
         warehouse: b.warehouseName
       }));
 
@@ -133,25 +133,21 @@
     return origFullInfo ? origFullInfo(p) : {};
   };
 
-  /* Качество в базе называется «Годный», в демо проверялось слово «Годен»;
-     причина блокировки приходит как «—», а не пустой строкой. */
+  /* Цвет плашки качества — по коду (V89): 01 «Годный» зелёный, остальное
+     красный. Прежде сравнивалось слово, и после перевода качества на
+     перечисление годная партия на любом языке выходила красной. */
   function patchBatchColumns(){
     if (typeof tableColumns === 'undefined' || !tableColumns.stockBatch) return;
     const set = (id, render) => {
       const c = tableColumns.stockBatch.find(c => c.id === id);
       if (c) c.render = render;
     };
-    set('q', b => typeof badge === 'function'
-      ? badge(b.q === T('common.text.good') || b.q === T('common.text.good2') ? 'ok' : 'err', b.q)
+    set('q', b => (typeof badge === 'function' && b.qualityCode)
+      ? badge(b.qualityCode === '01' ? 'ok' : 'err', b.q)
       : b.q);
-    set('blockReason', b => (!b.blockReason || b.blockReason === '—')
-      ? '—'
-      : (typeof badge === 'function' ? badge('warn', b.blockReason) : b.blockReason));
   }
 
   /* ---------------- Перемещения ---------------- */
-
-  const BADGE = {draft:'draft', forming:'warn', in_transit:'warn', received:'ok', form_error:'err'};
 
   function toTransfer(t){
     return {
@@ -159,7 +155,7 @@
       // См. тот же разбор в docs.js: подставлять в «Номер» номер портала
       // значит показывать человеку чужое число как его собственное.
       no: t.documentNo, erpNo: dash(t.erpNumber), wmsNumber: dash(t.docNumber),
-      status: BADGE[t.statusCode] || 'warn', statusLabel: t.statusName || '',
+      status: PORTAL.statusBadge(t.statusCode), statusLabel: t.statusName || '',
       // Дата создания и дата отгрузки — отметки времени с V62: показываем
       // со временем, а фильтруем по местному дню (см. PORTAL.localDay).
       date: PORTAL.dateTimeText(t.docDate), dateIso: PORTAL.localDay(t.docDate),

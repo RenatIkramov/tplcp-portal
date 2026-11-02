@@ -150,6 +150,67 @@ class PartnerDirectoryTest extends PortalTestBase {
         assertEquals(second, list.getFirst().get("addressId"), "основной идёт первым");
     }
 
+    /* ---------------- Контакт у адреса (V83) ---------------- */
+
+    /**
+     * Контакт заказа: свой у адреса, а если его нет — контакты
+     * грузополучателя. Проверяется путь чтения ({@code addresses}),
+     * которым пользуется карточка заказа, а не ответ записи.
+     */
+    @Test
+    void orderContactComesFromTheAddressOrFallsBackToTheConsignee() {
+        signIn();
+        String id = (String) partners.create(PartnerKind.CONSIGNEE,
+                Map.of("code", PREFIX + "C6", "name", "Контакты",
+                        "contact_name", "Петров П.", "contact_phone", "+7 701 000 00 00"))
+                .get("consigneeId");
+        partners.addAddress(id, Map.of("address", "Алматы, Складская, 6",
+                "contact", "Сидоров С., +7 702 111 11 11"));
+        partners.addAddress(id, Map.of("address", "Шымкент, Байтурсынова, 6"));
+
+        List<Map<String, Object>> list = partners.addresses(id);
+        Map<String, Object> own = byAddress(list, "Алматы, Складская, 6");
+        Map<String, Object> bare = byAddress(list, "Шымкент, Байтурсынова, 6");
+
+        assertEquals("Сидоров С., +7 702 111 11 11", own.get("contact"));
+        assertEquals("Сидоров С., +7 702 111 11 11", own.get("orderContact"),
+                "свой контакт адреса идёт в заказ");
+        assertEquals(null, bare.get("contact"), "у адреса своего контакта нет");
+        assertEquals("Петров П., +7 701 000 00 00", bare.get("orderContact"),
+                "без своего контакта в заказ идут контакты грузополучателя");
+    }
+
+    @Test
+    void addressContactIsSavedClearedAndLimited() {
+        signIn();
+        String id = (String) partners.create(PartnerKind.CONSIGNEE,
+                Map.of("code", PREFIX + "C7", "name", "Правка контакта")).get("consigneeId");
+        String addressId = (String) partners.addAddress(id, Map.of("address", "Алматы, Складская, 7"))
+                .getFirst().get("addressId");
+
+        partners.updateAddress(addressId, Map.of("address", "Алматы, Складская, 7",
+                "contact", "  Иванов И., +7 700 222 22 22  "));
+        assertEquals("Иванов И., +7 700 222 22 22",
+                byAddress(partners.addresses(id), "Алматы, Складская, 7").get("contact"),
+                "пробелы по краям обрезаются");
+
+        partners.updateAddress(addressId, Map.of("address", "Алматы, Складская, 7", "contact", " "));
+        Map<String, Object> cleared = byAddress(partners.addresses(id), "Алматы, Складская, 7");
+        assertEquals(null, cleared.get("contact"), "пустое — значит своего контакта нет");
+        assertEquals(null, cleared.get("orderContact"),
+                "у грузополучателя контактов нет — подставлять нечего");
+
+        expectRejection(400, () -> partners.updateAddress(addressId,
+                Map.of("address", "Алматы, Складская, 7", "contact", "x".repeat(256))));
+    }
+
+    private static Map<String, Object> byAddress(List<Map<String, Object>> list, String address) {
+        return list.stream()
+                .filter(a -> address.equals(a.get("address")))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("нет адреса " + address + " в " + list));
+    }
+
     @Test
     void duplicateAddressRejected() {
         signIn();

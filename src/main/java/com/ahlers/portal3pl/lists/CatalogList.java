@@ -96,4 +96,10 @@ public enum CatalogList implements ListKind {
     public String archiveColumn() {
         return archiveColumn;
     }
+
+    /** Склад из шапки портала (V94) отбирает только запасы. */
+    @Override
+    public java.util.List<String> warehouseColumns() {
+        return this == STOCK ? java.util.List.of("warehouse_id") : java.util.List.of();
+    }
 }

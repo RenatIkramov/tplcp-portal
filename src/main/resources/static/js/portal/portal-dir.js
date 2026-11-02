@@ -401,158 +401,6 @@
       + ' onclick="portalDirCreate(\'' + dirName + '\')">' + esc(T(labelKey)) + '</button>');
   }
 
-  /* ================= Типы заказов и документов ================= */
-
-  // Это короткие перечисления, карточка им не нужна: правка идёт прямо
-  // в строке списка — так быстрее и видно сразу все значения.
-  const ENUMS = {
-    orderTypes: {path: 'order-types', body: 'orderTypesBody', titleKey: 'portal.title.order_type'},
-    docTypes: {path: 'receipt-doc-types', body: 'docTypesBody', titleKey: 'portal.title.document_type'}
-  };
-  const enumState = {rows: {}, form: null};
-  PORTAL.portalEnums = enumState;
-
-  async function reloadEnum(name){
-    const e = ENUMS[name];
-    try {
-      enumState.rows[name] = await api('GET', '/api/admin/' + e.path);
-    } catch (err){
-      enumState.rows[name] = [];
-    }
-    renderEnum(name);
-  }
-
-  window.portalEnumField = function(el){
-    enumState.form.values[el.getAttribute('data-enum')] = el.value === '' ? null : el.value;
-  };
-
-  function renderEnum(name){
-    const body = document.getElementById(ENUMS[name].body);
-    if (!body) return;
-    const head = body.parentNode.querySelector('thead tr');
-    const canEdit = mayEdit();
-    if (head){
-      head.innerHTML = '<th>' + T('references.column.code') + '</th><th>' + T('references.column.name') + '</th><th class="num">' + T('partners.text.order') + '</th>'
-        + '<th>' + T('portal.text.in_use') + '</th>' + (canEdit ? '<th></th>' : '');
-    }
-    const rows = enumState.rows[name] || [];
-    const form = enumState.form && enumState.form.name === name ? enumState.form : null;
-
-    const line = r => {
-      if (form && form.id === r.id){
-        return '<tr>' + inputCell('code', form.values.code) + inputCell('name', form.values.name)
-          + inputCell('sortOrder', form.values.sortOrder, true)
-          + '<td>' + (r.isActive ? T('portal.text.yes') : T('portal.text.no')) + '</td>'
-          + '<td style="white-space:nowrap;">'
-          + '<button class="btn primary" onclick="portalEnumSave()">' + T('portal.text.save') + '</button> '
-          + '<button class="btn ghost" onclick="portalEnumCancel()">' + T('common.button.cancel') + '</button></td></tr>';
-      }
-      return '<tr><td><strong>' + esc(r.code) + '</strong></td><td>' + esc(r.name)
-        + '</td><td class="num">' + dash(r.sortOrder) + '</td>'
-        + '<td>' + (r.isActive ? T('portal.text.yes') : '<span class="count">' + T('portal.text.disabled') + '</span>') + '</td>'
-        + (canEdit ? '<td style="white-space:nowrap;">'
-            + '<button class="btn ghost" onclick="portalEnumEdit(\'' + name + '\',' + r.id + ')">' + T('portal.text.edit2') + '</button> '
-            + '<button class="btn ghost" onclick="portalEnumToggle(\'' + name + '\',' + r.id + ')">'
-            + (r.isActive ? T('portal.text.disable') : T('portal.text.enable')) + '</button> '
-            + '<button class="btn ghost" onclick="portalEnumDelete(\'' + name + '\',' + r.id + ')">' + T('common.button.delete') + '</button></td>' : '')
-        + '</tr>';
-    };
-
-    let html = rows.map(line).join('');
-    if (form && form.id === null){
-      html += '<tr>' + inputCell('code', form.values.code) + inputCell('name', form.values.name)
-        + inputCell('sortOrder', form.values.sortOrder, true) + '<td>' + T('portal.text.yes') + '</td>'
-        + '<td style="white-space:nowrap;">'
-        + '<button class="btn primary" onclick="portalEnumSave()">' + T('portal.text.save') + '</button> '
-        + '<button class="btn ghost" onclick="portalEnumCancel()">' + T('common.button.cancel') + '</button></td></tr>';
-    }
-    body.innerHTML = html || '<tr><td colspan="5" style="color:var(--muted);">' + T('partners.text.directory_is_empty') + '</td></tr>';
-
-    if (canEdit){
-      const panel = document.querySelector('#admin-sub-' + name + ' .panel-head');
-      if (panel && !document.getElementById(name + 'CreateBtn')){
-        let actions = panel.querySelector('.actions');
-        if (!actions){
-          actions = document.createElement('div');
-          actions.className = 'actions';
-          panel.appendChild(actions);
-        }
-        actions.insertAdjacentHTML('afterbegin',
-            '<button class="btn primary" id="' + name + 'CreateBtn"'
-            + ' data-i18n="admin.button.add" onclick="portalEnumAdd(\''
-            + name + '\')">' + esc(T('admin.button.add')) + '</button>');
-      }
-    }
-  }
-
-  function inputCell(col, v, num){
-    return '<td><input class="kv-input" type="' + (num ? 'number' : 'text') + '" value="'
-      + esc(v === null || v === undefined ? '' : v) + '" data-enum="' + col
-      + '" oninput="portalEnumField(this)"/></td>';
-  }
-
-  window.portalEnumAdd = function(name){
-    enumState.form = {name: name, id: null, values: {}};
-    renderEnum(name);
-  };
-
-  window.portalEnumEdit = function(name, id){
-    const r = (enumState.rows[name] || []).find(x => x.id === id);
-    if (!r) return;
-    enumState.form = {name: name, id: id,
-      values: {code: r.code, name: r.name, sortOrder: r.sortOrder}};
-    renderEnum(name);
-  };
-
-  window.portalEnumCancel = function(){
-    const name = enumState.form.name;
-    enumState.form = null;
-    renderEnum(name);
-  };
-
-  window.portalEnumSave = async function(){
-    const form = enumState.form;
-    const e = ENUMS[form.name];
-    const body = {code: form.values.code, name: form.values.name,
-      sortOrder: form.values.sortOrder === null || form.values.sortOrder === undefined
-        ? null : Number(form.values.sortOrder)};
-    try {
-      enumState.rows[form.name] = form.id === null
-        ? await api('POST', '/api/admin/' + e.path, body)
-        : await api('PUT', '/api/admin/' + e.path + '/' + form.id,
-            Object.assign({}, body, {isActive: true}));
-      enumState.form = null;
-      renderEnum(form.name);
-      say(T('portal.text.saved'));
-    } catch (err){
-      say(err.message);
-    }
-  };
-
-  window.portalEnumToggle = async function(name, id){
-    const r = (enumState.rows[name] || []).find(x => x.id === id);
-    try {
-      enumState.rows[name] = await api('PUT', '/api/admin/' + ENUMS[name].path + '/' + id,
-          {code: r.code, name: r.name, sortOrder: r.sortOrder, isActive: !r.isActive});
-      renderEnum(name);
-    } catch (err){
-      say(err.message);
-    }
-  };
-
-  window.portalEnumDelete = async function(name, id){
-    const r = (enumState.rows[name] || []).find(x => x.id === id);
-    if (!window.confirm(T('common.message.confirm_delete_named',
-        { name: r ? r.name : id }))) return;
-    try {
-      enumState.rows[name] = await api('DELETE', '/api/admin/' + ENUMS[name].path + '/' + id);
-      renderEnum(name);
-      say(T('portal.text.deleted'));
-    } catch (err){
-      say(err.message);
-    }
-  };
-
   /* ========= Организации оператора в администрировании =========
      В разметке демо такой подвкладки нет: таблица operator создавалась
      под решение Р2, а экрана у неё не было. Поэтому панель добавляем
@@ -607,11 +455,9 @@
     window.renderWarehousesDir = () => renderDir('warehousesDir');
     window.renderDepositorsDir = () => renderDir('depositorsDir');
     window.renderOperatorsDir = () => renderDir('operatorsDir');
-    window.renderOrderTypes = () => renderEnum('orderTypes');
-    window.renderDocTypes = () => renderEnum('docTypes');
 
-    // onSession, а не onLogin: склады, поклажедатели, организации
-    // оператора и типы документов — справочники ВСЕГО портала,
+    // onSession, а не onLogin: склады, поклажедатели и организации
+    // оператора — справочники ВСЕГО портала,
     // к выбранному клиенту отношения не имеют. На onLogin они не
     // грузились до выбора поклажедателя, и администратор, которому
     // выбор обязателен, видел пустые справочники.
@@ -634,15 +480,11 @@
         PORTAL.adminTabs.onOpen('operator', () => renderDir('operatorsDir'));
         PORTAL.adminTabs.onOpen('warehousesDir', () => renderDir('warehousesDir'));
         PORTAL.adminTabs.onOpen('depositorsDir', () => renderDir('depositorsDir'));
-        PORTAL.adminTabs.onOpen('orderTypes', () => renderEnum('orderTypes'));
-        PORTAL.adminTabs.onOpen('docTypes', () => renderEnum('docTypes'));
       }
 
       reload('warehousesDir').catch(() => {});
       reload('depositorsDir').catch(() => {});
       reload('operatorsDir').catch(() => {});
-      reloadEnum('orderTypes').catch(() => {});
-      reloadEnum('docTypes').catch(() => {});
     });
   }
 

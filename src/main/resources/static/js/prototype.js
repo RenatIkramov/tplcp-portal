@@ -316,15 +316,8 @@ let orders   = DEPOSITOR_DATA[currentDepositorId].orders;
 let reports  = DEPOSITOR_DATA[currentDepositorId].reports;
 let transfers = DEPOSITOR_DATA[currentDepositorId].transfers;
 
-function updateWarehouseFilterUI(depositorId){
-  const allowed = (DEPOSITOR_WAREHOUSES[depositorId] || Object.keys(WAREHOUSES));
-  if(!allowed.includes(currentWarehouseFilter)) currentWarehouseFilter = 'all';
-  const el = document.getElementById('warehouseFilter');
-  if(!el) return;
-  el.textContent = currentWarehouseFilter === 'all' ? T('common.button.all_warehouses') : WAREHOUSES[currentWarehouseFilter].name;
-  el.classList.toggle('switchable', allowed.length > 1);
-}
-
+// Склад в шапке (список, выбор, подпись) — js/portal/warehouse-filter.js (V94):
+// реестр складов прототипа со справочником связан не был.
 function setDepositorData(depositorId){
   currentDepositorId = depositorId;
   const d = DEPOSITOR_DATA[depositorId] || DEPOSITOR_DATA.none;
@@ -357,35 +350,6 @@ function renderBillingInvoices(){
       <td><button class="btn ghost" onclick="event.stopPropagation(); notify('Скачивается: Счёт_${inv.no}.pdf')">${T('common.text.download_pdf')}</button></td>
     </tr>
   `).join('') : `<tr><td colspan="7" style="color:var(--muted);">${T('common.text.no_invoices_for_this_depositor')}</td></tr>`;
-}
-function setWarehouseFilter(wid){
-  currentWarehouseFilter = wid;
-  document.getElementById('warehouseSwitcher').classList.remove('active');
-  if(currentUserRole === 'staff'){
-    setStaffData();
-    return;
-  }
-  updateWarehouseFilterUI(currentDepositorId);
-  ['receipts','orders','stock','sku','transfers'].forEach(k=>{ if(paginationState[k]) paginationState[k].page = 1; });
-  renderReceipts(); renderOrders(); renderStock(); renderSku(); renderTransfers();
-  if(typeof renderSuppliers==='function'){ renderSuppliers(); renderConsignees(); }
-}
-function toggleWarehouseSwitcher(){
-  const el = document.getElementById('warehouseSwitcher');
-  if(currentUserRole === 'staff'){
-    if(currentStaffWarehouses.length <= 1) return;
-    el.innerHTML = `<div class="ks-title">Фильтр по складу</div>
-      <div class="ks-item ${currentWarehouseFilter==='all'?'current':''}" onclick="setWarehouseFilter('all')"><span>${T('common.button.all_warehouses')}</span>${currentWarehouseFilter==='all'?'<span>✓</span>':''}</div>` +
-      currentStaffWarehouses.map(wid=>`<div class="ks-item ${currentWarehouseFilter===wid?'current':''}" onclick="setWarehouseFilter('${wid}')"><span>${WAREHOUSES[wid].name}</span>${currentWarehouseFilter===wid?'<span>✓</span>':''}</div>`).join('');
-    el.classList.toggle('active');
-    return;
-  }
-  const allowed = (DEPOSITOR_WAREHOUSES[currentDepositorId] || Object.keys(WAREHOUSES));
-  if(allowed.length <= 1) return;
-  el.innerHTML = `<div class="ks-title">Фильтр по складу</div>
-    <div class="ks-item ${currentWarehouseFilter==='all'?'current':''}" onclick="setWarehouseFilter('all')"><span>${T('common.button.all_warehouses')}</span>${currentWarehouseFilter==='all'?'<span>✓</span>':''}</div>` +
-    allowed.map(wid=>`<div class="ks-item ${currentWarehouseFilter===wid?'current':''}" onclick="setWarehouseFilter('${wid}')"><span>${WAREHOUSES[wid].name}</span>${currentWarehouseFilter===wid?'<span>✓</span>':''}</div>`).join('');
-  el.classList.toggle('active');
 }
 document.addEventListener('click', (e)=>{
   const wrap = document.getElementById('warehouseFilter')?.closest('.tabs-org-wrap');
@@ -430,7 +394,7 @@ function getProductStockSummary(p){
 }
 function getProductIncomingQty(p){
   if(p.__incomingQty !== undefined) return p.__incomingQty;
-  const pendingReceipts = (receipts || []).filter(r => r.status !== 'draft' && r.status !== 'ok');
+  const pendingReceipts = (receipts || []).filter(r => r.status !== 'draft' && r.status !== 'ok' && r.status !== 'muted');
   const seed = fcHashSeed(p.code + '_incoming');
   let total = 0;
   pendingReceipts.forEach((r, i) => {
@@ -467,6 +431,7 @@ const orderCompositionColumnDefs = [
   {id:'sum', key:'col.orderComposition.sum', label:'Сумма', default:1, num:true, render:l=>(l.price && l.ordered) ? (l.price*l.ordered).toFixed(2) : '—'},
   {id:'currency', key:'col.orderComposition.currency', label:'Валюта', default:1, render:l=>l.currency || '—'},
   {id:'lineComment', key:'col.orderComposition.lineComment', label:'Комментарий', default:1, wrap:true, render:l=>l.lineComment || '—'},
+  {id:'quality', key:'col.orderComposition.quality', label:'Качество', default:1, render:l=>orderLineQualityName(l)},
 ];
 const transferCompositionColumnDefs = [
   {id:'code', key:'col.transferComposition.code', label:'Коммерческий код', default:1, render:l=>l.code},
@@ -508,7 +473,6 @@ const stockBatchColumnDefs = [
   {id:'available', key:'col.stockBatch.available', label:'Доступно',            default:1, num:true, render:b=>b.available},
   {id:'reserved', key:'col.stockBatch.reserved', label:'Резерв',              default:1, num:true, render:b=>b.reserved},
   {id:'q', key:'col.stockBatch.q', label:'Качество',            default:1, render:b=>badge(b.q==='Годен'?'ok':'err', b.q)},
-  {id:'blockReason', key:'col.stockBatch.blockReason', label:'Причина блокировки',  default:1, render:b=>b.blockReason ? badge('warn', b.blockReason) : '—'},
   ...Array.from({length:10}, (_,i)=>({id:'customField'+(i+1), key:'col.stockBatch.customField'+(i+1), label:T('common.label.custom_field')+' '+(i+1), default:0, render:b=>b['customField'+(i+1)] ?? '—'})),
 ];
 const stockColumnDefs = [
@@ -1289,16 +1253,6 @@ function renderWarehousesDir(){
     : `<tr><td colspan="6" style="color:var(--muted);">${T('admin.text.no_data')}</td></tr>`;
 }
 
-function renderOrderTypes(){
-  const body = document.getElementById('orderTypesBody');
-  if(!body) return;
-  body.innerHTML = ORDER_TYPES.map((t,idx)=>`<tr><td>OT-${String(idx+1).padStart(2,'0')}</td><td>${t}</td></tr>`).join('');
-}
-function renderDocTypes(){
-  const body = document.getElementById('docTypesBody');
-  if(!body) return;
-  body.innerHTML = RECEIPT_DOC_TYPES.map((t,idx)=>`<tr><td>DT-${String(idx+1).padStart(2,'0')}</td><td>${t}</td></tr>`).join('');
-}
 const ADDR_BY_CONSIGNEE = {...consigneeAddresses_rogaikopyta, ...consigneeAddresses_boltygaiki, ...consigneeAddresses_polovoygigant};
 /* Справочник адресов доставки грузополучателей — независим от истории заказов.
    У одного грузополучателя может быть несколько точек доставки. */
@@ -1857,12 +1811,6 @@ function deleteReportConfig(id){
 /* ============== Расширенные настройки: конфигурация полей документов ============== */
 const FC_REF_DIRECTORIES = ['—', 'Товары', 'Поставщики', 'Грузополучатели', 'Типы заказов', 'Типы поступлений', 'Поклажедатели', 'Склады'];
 const FC_TRANSPORT_FIELDS = new Set(['trip','carrier','transportType','transportBrand','carNumber','trailerNumber','techPassportNumber','containerNumber','sealNumber','driverName','driverPhone','driverIdNumber','driverInn','deliveryDate']);
-const SPECIAL_HEADER_FIELDS = {
-  receipts: new Set(['no','wmsNumber','erpNo','author','comment','date','status','supplier','docType','warehouse','accompanyingDocNumber','gtd','eta','arrivalDate','receivingEndDate','weight','volume','lineCount','palletCount','cargoPlaces','totalPieces','trip','carrier','transportType','transportBrand','carNumber','trailerNumber','techPassportNumber','containerNumber','sealNumber','driverName','driverPhone','driverIdNumber','driverInn']),
-  orders: new Set(['no','wmsNumber','erpNo','author','comment','date','status','orderType','warehouse','consignee','deliveryAddress','plannedShip','ship','weight','volume','lineCount','palletCount','cargoPlaces','totalPieces','trip','carrier','transportType','transportBrand','carNumber','trailerNumber','techPassportNumber','containerNumber','sealNumber','driverName','driverPhone','driverIdNumber','driverInn','deliveryDate']),
-  transfers: new Set(['no','wmsNumber','erpNo','author','comment','date','status','fromWarehouse','toWarehouse','shipDate','receivedDate','weight','volume','lineCount','palletCount','cargoPlaces','totalPieces','trip','carrier','transportType','transportBrand','carNumber','trailerNumber','techPassportNumber','containerNumber','sealNumber','driverName','driverPhone','driverIdNumber','driverInn']),
-};
-const FC_SKIP_HEADER_FIELDS = new Set(['no','author','status']);
 function fcReceiptSpecialFieldHtml(dbField, r, isDraft){
   const L = (label) => getDepositorFieldLabel('receipts', dbField) || label;
   switch(dbField){
@@ -2220,7 +2168,13 @@ function fcRenderDocTabs(docType, doc, isDraft, specialFn, buttonsId, contentId)
     document.getElementById(contentId).innerHTML = `<div class="kv-columns" style="display:flex; gap:20px 24px; flex-wrap:wrap;">${colsHtml}</div><div style="margin-top:20px; width:100%;">${commentHtml}</div>`;
     return;
   }
-  const saveTransportBtn = (kind === 'transport' && transportEditable)
+  // Отдельная кнопка — только после отправки: в черновике транспорт
+  // сохраняется общей кнопкой вместе с шапкой (V84).
+  const savedSeparately = typeof isTransportSavedSeparately === 'function'
+    ? isTransportSavedSeparately(doc) : transportEditable;
+  const transportState = (kind === 'transport' && typeof fcTransportStateHtml === 'function')
+    ? fcTransportStateHtml(docType, doc) : '';
+  const saveTransportBtn = (kind === 'transport' && transportEditable && savedSeparately)
     ? `<div style="margin-top:18px;"><button class="btn primary" onclick="fcSaveTransportSection('${docType}')">Сохранить транспортную информацию</button></div>`
     : '';
   if(kind === 'transport' && TRANSPORT_TAB_COLUMNS[docType]){
@@ -2229,12 +2183,12 @@ function fcRenderDocTabs(docType, doc, isDraft, specialFn, buttonsId, contentId)
       const html = colFields.map(dbField=>specialFn(dbField, doc, fieldEditable)).filter(Boolean).join('');
       return `<div class="kv-col" style="flex:1; min-width:220px; display:flex; flex-direction:column; gap:16px;">${html}</div>`;
     }).join('');
-    document.getElementById(contentId).innerHTML = `<div class="kv-columns" style="display:flex; gap:20px 24px; flex-wrap:wrap;">${colsHtml}</div>${saveTransportBtn}`;
+    document.getElementById(contentId).innerHTML = `<div class="kv-columns" style="display:flex; gap:20px 24px; flex-wrap:wrap;">${colsHtml}</div>${transportState}${saveTransportBtn}`;
     return;
   }
   const fieldList = kind === 'transport' ? STATIC_TRANSPORT_FIELDS : STATIC_GENERAL_FIELDS[docType];
   const fieldsHtml = fieldList.map(dbField=>specialFn(dbField, doc, fieldEditable)).filter(Boolean).join('');
-  document.getElementById(contentId).innerHTML = `<div class="kv-columns" style="display:flex; gap:20px 24px; flex-wrap:wrap;">${fieldsHtml}</div>${saveTransportBtn}`;
+  document.getElementById(contentId).innerHTML = `<div class="kv-columns" style="display:flex; gap:20px 24px; flex-wrap:wrap;">${fieldsHtml}</div>${kind === 'transport' ? transportState : ''}${saveTransportBtn}`;
 }
 function fcSwitchDocTab(docType, tabName){
   const state = fcActiveDocTab[docType];
@@ -3455,6 +3409,34 @@ function fillOrderLineEditProductInfo(p){
   fcSetupLineEditPackaging('orderLineEdit', p, 'orderLineEditQty', p ? (p.defaultOrderPackaging || null) : null, null);
   fcSetupLineEditPricing('orderLineEdit', p, 'orderLineEditQty', null, null);
 }
+/**
+ * Качество строки заказа (V89) — КОД перечисления enum_quality:
+ * 01 годный, 02 брак, 03 некомплект, 04 контроль качества. Код — то,
+ * что уходит на сервер и в WMS; имя на языке пользователя приходит
+ * с сервера (PORTAL.qualities, draft.js) и рисуется только на экране.
+ * Пустое качество у строки — значит годный.
+ */
+const LINE_QUALITY = {good: '01'};
+function orderLineQuality(line){
+  return (line && line.quality) || LINE_QUALITY.good;
+}
+function orderLineQualityName(line){
+  const code = orderLineQuality(line);
+  const found = (window.PORTAL && PORTAL.qualities || []).find(q => q.code === code);
+  return found ? found.name : code;
+}
+function setOrderLineQuality(code){
+  const box = document.getElementById('orderLineEditQuality');
+  if(box){
+    // Список строится из перечисления при каждом открытии окна:
+    // язык могли переключить, а значения — дополнить.
+    const list = (window.PORTAL && PORTAL.qualities) || [];
+    box.innerHTML = list.map(q => `<option value="${q.code}">${q.name}</option>`).join('');
+    box.value = code || LINE_QUALITY.good;
+    if(!box.value && list.length) box.value = list[0].code;
+  }
+  if(typeof onOrderLineEditQualityChange === 'function') onOrderLineEditQualityChange();
+}
 function openOrderLineEditModal(idx){
   if(!currentOrderRef || currentOrderRef.status !== 'draft') return;
   orderLineEditMode = 'edit';
@@ -3472,6 +3454,7 @@ function openOrderLineEditModal(idx){
   fcSetupLineEditPackaging('orderLineEdit', orderLineEditSelectedProduct, 'orderLineEditQty', line.packagingCode || null, line.packageCount || null);
   fcSetupLineEditPricing('orderLineEdit', orderLineEditSelectedProduct, 'orderLineEditQty', line.price ?? null, line.currency || null);
   document.getElementById('orderLineEditComment').value = line.lineComment || '';
+  setOrderLineQuality(orderLineQuality(line));
 }
 function openOrderLineAddModal(){
   if(!currentOrderRef || currentOrderRef.status !== 'draft') return;
@@ -3487,6 +3470,7 @@ function openOrderLineAddModal(){
   document.getElementById('orderLineEditQty').value = '';
   document.getElementById('orderLineEditQty').classList.remove('kv-input-invalid');
   document.getElementById('orderLineEditComment').value = '';
+  setOrderLineQuality(LINE_QUALITY.good);
 }
 function closeOrderLineEditModal(){
   document.getElementById('orderLineEditOverlay').classList.remove('active');
@@ -3546,6 +3530,8 @@ function saveOrderLineEditModal(){
   const packageCount = packagingCode ? (Number(document.getElementById('orderLineEditPackageCount').value) || 0) : null;
   const price = document.getElementById('orderLineEditPrice').value !== '' ? Number(document.getElementById('orderLineEditPrice').value) : null;
   const currency = document.getElementById('orderLineEditCurrency').textContent !== '—' ? document.getElementById('orderLineEditCurrency').textContent : null;
+  const qualityBox = document.getElementById('orderLineEditQuality');
+  const quality = (qualityBox && qualityBox.value) || LINE_QUALITY.good;
   const finishOrderSave = ()=>{
     if(currentOrderRef) currentOrderRef.lines = currentOrderComposition.map(({checked, ...l})=>l);
     closeOrderLineEditModal();
@@ -3553,7 +3539,11 @@ function saveOrderLineEditModal(){
     notify(orderLineEditMode === 'add' ? 'Строка добавлена' : 'Строка обновлена');
   };
   if(orderLineEditMode === 'add'){
-    const dupIdx = currentOrderComposition.findIndex(l=>l.code === orderLineEditSelectedProduct.code);
+    // Повтор — тот же товар с тем же качеством и тем же комментарием (V85,
+    // V89): строки разного качества — разные строки, и разный комментарий
+    // тоже делает строку своей.
+    const dupIdx = currentOrderComposition.findIndex(l=>l.code === orderLineEditSelectedProduct.code
+      && orderLineQuality(l) === quality && (l.lineComment || '') === lineComment);
     if(dupIdx > -1){
       const existing = currentOrderComposition[dupIdx];
       openDuplicateLineDialog({
@@ -3570,10 +3560,11 @@ function saveOrderLineEditModal(){
       ordered: Number(qtyEl.value),
       orderedWms: 0,
       picked: '', weight: '', status: '', series: '', batch: '',
-      exp: '—', checked: false, lineComment, packagingCode, packageCount, price, currency,
+      exp: '—', checked: false, lineComment, packagingCode, packageCount, price, currency, quality,
     });
   }else{
     const line = currentOrderComposition[orderLineEditIndex];
+    line.quality = quality;
     line.code = orderLineEditSelectedProduct.code;
     line.name = orderLineEditSelectedProduct.name;
     line.unit = orderLineEditSelectedProduct.unit;
@@ -3747,7 +3738,7 @@ function getProductFullInfo(p){
   p.__full = full;
   return full;
 }
-function fcYesNo(v){ return v ? 'Да' : 'Нет'; }
+function fcYesNo(v){ return v ? T('common.value.yes') : T('common.value.no'); }
 function fcKv(label, value){
   return `<div class="kv"><label>${localizeColumnLabel(label)}</label><div>${(value === undefined || value === null || value === '') ? '—' : value}</div></div>`;
 }
@@ -3946,7 +3937,6 @@ const DEV_DB_STRUCTURE = {
       {id:'userRoles', label:'Роли пользователей'},
       {id:'orderTypes', label:T('references.button.order_types')},
       {id:'receiptDocTypes', label:'Типы приходных документов'},
-      {id:'blockReasons', label:'Причины блокировки'},
       {id:'packagingTypes', label:'Типы упаковки'},
       {id:'currencies', label:'Валюты'},
       {id:'locales', label:'Языки'},
@@ -4024,14 +4014,6 @@ function buildFieldTableRows(defs, systemRows){
 }
 function fcSimpleNameField(baseField, ruLabel, enLabel){
   return [{pk:false, dbField:baseField, dataType:'varchar(255)', hidden:false, nameEN:enLabel, nameRU:ruLabel}];
-}
-function fcNameFieldRows(baseField, ruLabel, enLabel){
-  return [
-    {pk:false, dbField:baseField+'_ru', dataType:'varchar(255)', hidden:false, nameEN:enLabel+' (RU)', nameRU:ruLabel+' (RU)'},
-    {pk:false, dbField:baseField+'_en', dataType:'varchar(255)', hidden:false, nameEN:enLabel+' (EN)', nameRU:ruLabel+' (EN)'},
-    {pk:false, dbField:baseField+'_lang1', dataType:'varchar(255)', hidden:false, nameEN:enLabel+' (Lang1)', nameRU:ruLabel+' (Lang1)'},
-    {pk:false, dbField:baseField+'_lang2', dataType:'varchar(255)', hidden:false, nameEN:enLabel+' (Lang2)', nameRU:ruLabel+' (Lang2)'},
-  ];
 }
 function renderDevFieldTable(rows, opts){
   const hideWms = opts && opts.hideWms;
@@ -4292,7 +4274,6 @@ function renderDevSettingsContent(){
       {pk:false, dbField:'series_number', dataType:'varchar(50)', hidden:false, nameEN:'Series Number'},
       {pk:false, dbField:'expiry_date', dataType:'date', hidden:false, nameEN:'Expiry Date'},
       {pk:false, dbField:'quality', dataType:'varchar(20)', hidden:false, nameEN:'Quality'},
-      {pk:false, dbField:'block_reason', dataType:'varchar(50)', hidden:false, nameEN:'Block Reason'},
       {pk:false, dbField:'unit_name', dataType:'varchar(50)', hidden:false, nameEN:'Unit Name'},
       {pk:false, dbField:'quantity', dataType:'numeric(14,3)', hidden:false, nameEN:'Quantity On Hand'},
       ...Array.from({length:10}, (_,i)=>({pk:false, dbField:'custom_field_'+(i+1), dataType:'varchar(255)', hidden:false, nameEN:'Custom Field '+(i+1)})),
@@ -4736,7 +4717,6 @@ function renderDevSettingsContent(){
       {pk:false, dbField:'series_number', dataType:'varchar(50)', hidden:false, nameEN:'Series Number', nameRU:'Серия'},
       {pk:false, dbField:'expiry_date', dataType:'date', hidden:false, nameEN:'Expiry Date', nameRU:'Срок годности'},
       {pk:false, dbField:'quality', dataType:'varchar(20)', hidden:false, nameEN:'Quality', nameRU:'Качество'},
-      {pk:false, fk:'enum_block_reason', dbField:'block_reason_id', dataType:'smallint', hidden:true, nameEN:'Block Reason ID', nameRU:'ID причины блокировки'},
       {pk:false, dbField:'quantity', dataType:'numeric(14,3)', hidden:false, nameEN:'Quantity On Hand', nameRU:'Наличие'},
       {pk:false, dbField:'reserved_qty', dataType:'numeric(14,3)', hidden:false, nameEN:'Reserved Quantity', nameRU:'Резерв'},
       {pk:false, dbField:'blocked_qty', dataType:'numeric(14,3)', hidden:false, nameEN:'Blocked Quantity', nameRU:'Заблокировано'},
@@ -5123,7 +5103,6 @@ function renderDevSettingsContent(){
   const DEV_ENUM_TABLES = {
     orderTypes: {table:'enum_order_type', title:T('references.button.order_types')},
     receiptDocTypes: {table:'enum_receipt_doc_type', title:'Типы приходных документов'},
-    blockReasons: {table:'enum_block_reason', title:'Причины блокировки'},
     packagingTypes: {table:'enum_packaging_type', title:'Типы упаковки'},
     currencies: {table:'enum_currency', title:'Валюты'},
     hazardClasses: {table:'enum_hazard_class', title:'Классы опасности'},
@@ -5232,42 +5211,11 @@ function mockOrderLines(n, isDraft){
     };
   });
 }
-function groupBatchRows(rows){
-  const map = new Map();
-  rows.forEach(b=>{
-    const key = [b.batch, b.series, b.exp, b.q, b.blockReason].join('|');
-    if(map.has(key)){
-      const g = map.get(key);
-      g.stock += b.stock; g.reserved += b.reserved; g.available += b.available; g.blocked += b.blocked;
-    }else{
-      map.set(key, {...b});
-    }
-  });
-  return [...map.values()];
-}
-function mockBatches(p){
-  const ratio = p.stock > 0 ? p.reserved / p.stock : 0;
-  const rows = [
-    {batch:p.batch, series:p.series || "—", exp:p.exp, qty:Math.floor(p.stock*0.5), q:"Годен", blockReason:""},
-    {batch:p.batch.replace(/\/.$/, "/доп"), series:p.series || "—", exp:p.exp, qty:Math.floor(p.stock*0.2), q:"Годен", blockReason:"Временная блокировка"},
-    {batch:p.batch.replace(/\/.$/, "/рез"), series:p.series || "—", exp:p.exp, qty:Math.floor(p.stock*0.1), q:"Годен", blockReason:"Недостача"},
-    {batch:"Возврат 22.07.26", series:p.series || "—", exp:p.exp, qty:p.defect, q:p.defect>0?"Брак":"Годен", blockReason:p.defect>0?"Брак":""},
-  ].filter(b=>b.qty>0);
-  return rows.map(b=>{
-    const reserved = Math.round(b.qty*ratio);
-    const blocked = b.blockReason ? b.qty : 0;
-    const available = (b.q==='Годен' && !b.blockReason) ? Math.max(0, b.qty - reserved) : 0;
-    return {...b, stock:b.qty, reserved, available, blocked};
-  });
-}
-function mockHistory(){
-  return [
-    {date:"29.07.2026", doc:"ЗК-000091", op:"Резервирование", qty:-24},
-    {date:"27.07.2026", doc:"ПР-000116", op:"Приёмка на склад", qty:+58},
-    {date:"25.07.2026", doc:"ЗК-000089", op:"Отгрузка", qty:-12},
-    {date:"20.07.2026", doc:"ПР-000114", op:"Приёмка на склад", qty:+35},
-  ];
-}
+// Партии товара приходят с сервера (sku.js подкладывает их в p.__batches).
+// Прежде здесь их выдумывал демо-генератор — с причинами блокировки,
+// которых в портале больше нет (V92).
+function groupBatchRows(rows){ return rows; }
+function mockBatches(p){ return (p && p.__batches) || []; }
 
 /* ============== Навигация ============== */
 let lastMainView = 'orders';

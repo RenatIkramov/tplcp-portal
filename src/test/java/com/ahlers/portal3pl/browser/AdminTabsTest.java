@@ -5,7 +5,6 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -14,7 +13,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>ЗАЧЕМ. Раздел рос вкладками по одной, а рядом, в «Справочниках»,
  * в одном ряду с товарами и контрагентами клиента, стояли справочники
  * ВСЕГО портала: склады, пользователи, поклажедатели, типы, единицы,
- * языки. Тринадцать подписей в строку порядка не держали.
+ * языки. Тринадцать подписей в строку порядка не держали. С V95
+ * перечисления — своя группа администрирования.
  *
  * <p>ЧТО ПРОВЕРЯЕТСЯ. Что на экране два ряда и что в них попало ровно
  * то, что задумано: группы — в верхнем, вкладки выбранной группы —
@@ -39,6 +39,7 @@ class AdminTabsTest extends BrowserTestBase {
                 "() => document.querySelectorAll('#adminGroupTabs .admin-subtab-btn').length > 0");
 
         assertEquals(List.of(text("admin.button.shared_directories"),
+                        text("admin.button.enums"),
                         text("admin.button.accesses"),
                         text("admin.button.errors"),
                         text("admin.button.report_settings"),
@@ -46,14 +47,12 @@ class AdminTabsTest extends BrowserTestBase {
                 labels("#adminGroupTabs"),
                 "верхний ряд администрирования собран не из тех групп");
 
-        // Справочники портала — все восемь, в заданном порядке.
+        // Справочники портала — все пять, в заданном порядке. Единицы,
+        // типы заказов и поступлений с V95 — в группе «Перечисления».
         assertEquals(List.of(text("admin.title.operator_organization"),
                         text("references.button.warehouses"),
                         text("references.button.users"),
                         text("references.button.depositors"),
-                        text("references.button.units"),
-                        text("references.button.order_types"),
-                        text("references.button.expected_document_types"),
                         text("references.button.languages")),
                 labels("#adminSubTabs"),
                 "в «Общих справочниках» не те вкладки или не в том порядке");
@@ -85,7 +84,12 @@ class AdminTabsTest extends BrowserTestBase {
 
         // Группа из одной вкладки второго ряда не рисует: ряд из одной
         // кнопки, повторяющей название группы, ничего не сообщает.
-        for (String single : List.of("reports", "uitexts")) {
+        // Тексты интерфейса и переводы перечислений — одна группа (V86).
+        openGroup("uitexts");
+        assertEquals(List.of(text("admin.button.interface_texts"), text("admin.button.enums")),
+                labels("#adminSubTabs"), "в группе текстов не те вкладки");
+
+        for (String single : List.of("reports", "enumValues")) {
             openGroup(single);
             assertEquals("none", page.evaluate(
                             "() => getComputedStyle(document.getElementById('adminSubTabs')).display"),
@@ -131,42 +135,11 @@ class AdminTabsTest extends BrowserTestBase {
                 "в «Справочниках» остались не только справочники клиента: " + refs);
 
         for (String moved : List.of("warehousesDir", "users", "depositorsDir",
-                "orderTypes", "docTypes", "units", "languages", "operator")) {
+                "enumValues", "languages", "operator")) {
             assertTrue((Boolean) page.evaluate("id => !!document.getElementById('admin-sub-' + id)",
                             moved),
                     "справочник " + moved + " не доехал до администрирования");
         }
-        assertNoJsErrors();
-    }
-
-    /**
-     * «Типы ожидаемых документов» стали «Типами поступлений».
-     *
-     * <p>Подпись вкладки и заголовок экрана заведены разными ключами,
-     * и разъехаться им нельзя: это одна и та же вкладка. Старого
-     * названия не должно остаться и в разметке — текст из каталога
-     * приходит только на узлы с ключом, а подпись, вписанную в вёрстку
-     * один раз, переводить потом некому.
-     */
-    @Test
-    void receiptTypesAreRenamed() {
-        // Язык учётной записи задаётся явно: подписи сверяются
-        // с русскими текстами каталога.
-        localeOf(portalAdmin(), "ru");
-        signInUi(ADMIN, ADMIN_PASSWORD);
-        page.evaluate("() => { showView('admin'); showAdminSub('docTypes'); }");
-        page.waitForSelector("#admin-sub-docTypes.active");
-
-        String name = text("references.button.expected_document_types");
-        assertTrue(labels("#adminSubTabs").contains(name),
-                "вкладки «" + name + "» нет во втором ряду: " + labels("#adminSubTabs"));
-
-        String head = ((String) page.evaluate(
-                "() => document.querySelector('#admin-sub-docTypes h1').textContent")).trim();
-        assertEquals(text("references.title.expected_document_types"), head,
-                "заголовок экрана отстал от подписи вкладки");
-        assertFalse(visibleText().contains("ожидаемых документов"),
-                "на экране осталось старое название");
         assertNoJsErrors();
     }
 

@@ -16,7 +16,7 @@
   PORTAL.pageTotal = {};
 
   const dash = v => (v === null || v === undefined || v === '') ? '—' : v;
-  const yesNo = v => v === true ? T('sku.text.yes') : (v === false ? T('sku.text.no') : '—');
+  const yesNo = v => PORTAL.yesNo(v);
   const ruDate = iso => {
     if (!iso) return '—';
     const d = String(iso).slice(0, 10).split('-');
@@ -55,7 +55,6 @@
     length: 'length', width: 'width', height: 'height', volume: 'volume',
     weightGross: 'weightGross', weightNet: 'weightNet',
     manufacturer: 'manufacturer', countryOrigin: 'countryOrigin', brand: 'brand',
-    batchTracking: 'batchTracking', expiryTracking: 'expiryTracking',
     statusProduct: 'statusName', itemFullName: 'itemFullName',
     hazardClass: 'hazardClassName', hazardGroup: 'hazardGroupName',
     maxStorageTemp: 'maxStorageTemp', minStorageTemp: 'minStorageTemp',
@@ -67,8 +66,10 @@
     currency: 'currencyCode', cost: 'cost', comment: 'comment',
     createdBy: 'createdBy', updatedBy: 'updatedBy', customAttr: 'customAttr1'
   };
+  // batchTracking и expiryTracking — признаки с V91 (прежде текст «Да»/«Нет»)
   const SKU_BOOL = ['hasPackaging', 'isFragile', 'isSerialTracked', 'isKit',
-                    'isMarkingRequired', 'isExcise', 'isControlled', 'isWmsActive'];
+                    'isMarkingRequired', 'isExcise', 'isControlled', 'isWmsActive',
+                    'batchTracking', 'expiryTracking'];
 
   function patchSkuColumns(){
     if (typeof tableColumns === 'undefined' || !tableColumns.sku) return;
@@ -176,7 +177,8 @@
             : T('common.text.no_rates_defined_for_this_deposito')) + '</td></tr>';
   }
 
-  const INVOICE_BADGE = {invoice_paid: 'ok', invoice_awaiting: 'warn', invoice_overdue: 'err'};
+  // Статус счёта (V87): 01 ожидает оплаты, 02 оплачен, 03 просрочен
+  const INVOICE_BADGE = {'01': 'warn', '02': 'ok', '03': 'err'};
 
   function renderInvoicesFromApi(){
     const body = document.getElementById('billingInvoicesBody');

@@ -188,7 +188,7 @@
     const names = (sess.depositors || []).map(d => d.orgName).join(', ');
     switch (sess.roleCode){
       case 'manager':   return T('auth.text.manager_mode_depositors',
-                                 {names: names || T('portal.text.no')});
+                                 {names: names || T('common.text.none')});
       case 'admin':     return T('auth.text.administrator_mode_users_and_acces');
       case 'developer': return T('auth.text.developer_mode_document_and_field');
       case 'staff':     return T('auth.text.warehouse_staff_mode_only_granted');

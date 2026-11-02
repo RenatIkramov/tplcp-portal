@@ -240,9 +240,9 @@ class DocumentPagingTest extends PortalTestBase {
     void filterAndPageWorkTogether() {
         PortalUser user = signedInUser();
         Map<String, Object> drafts = documents.list(user, DocumentType.RECEIPTS,
-                Map.of("filter.status", "received", "pageSize", "1"));
+                Map.of("filter.status", "60", "pageSize", "1"));
         assertEquals(1, listRows(drafts).size(), "страница отдала не одну строку");
-        assertEquals("received", listRows(drafts).getFirst().get("statusCode"),
+        assertEquals("60", listRows(drafts).getFirst().get("statusCode"),
                 "на отобранной странице документ другого статуса");
         assertTrue(listTotal(drafts) <= listTotal(documents.list(user, DocumentType.RECEIPTS, Map.of())),
                 "отбор со страницей расширил список");

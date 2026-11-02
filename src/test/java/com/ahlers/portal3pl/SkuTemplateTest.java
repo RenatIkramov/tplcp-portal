@@ -209,6 +209,50 @@ class SkuTemplateTest extends PortalTestBase {
         }
     }
 
+    /** Список «да/нет» в ячейке шаблона. */
+    private static List<List<String>> booleanLists(XSSFSheet sheet) {
+        return sheet.getDataValidations().stream()
+                .map(v -> v.getValidationConstraint().getExplicitListValues())
+                .filter(java.util.Objects::nonNull)
+                .map(List::of)
+                .distinct()
+                .toList();
+    }
+
+    /**
+     * «Да/нет» в шаблоне — на языке того, кто его скачал (V91): список
+     * в ячейке, текст ошибки и подсказка. Учёт партий и сроков — такие же
+     * признаки, как остальные, и получают тот же список.
+     */
+    @Test
+    void yesNoCellsSpeakTheUserLanguage() throws Exception {
+        PortalUser user = client();
+        try (XSSFWorkbook wb = open(template.build(user).content())) {
+            XSSFSheet sheet = wb.getSheet("Номенклатура");
+            assertEquals(List.of(List.of("да", "нет")), booleanLists(sheet));
+            int column = headers(sheet).indexOf(singleValue(
+                    "SELECT value FROM dbo.ui_text t JOIN dbo.dictionary_locale l USING (locale_id)"
+                            + " WHERE t.text_key = 'col.sku.batchTracking' AND l.code = 'ru'"));
+            assertTrue(column >= 0, "учёт партий есть в шаблоне");
+            assertTrue(sheet.getDataValidations().stream().anyMatch(v ->
+                            v.getValidationConstraint().getExplicitListValues() != null
+                                    && java.util.Arrays.stream(v.getRegions().getCellRangeAddresses())
+                                    .anyMatch(r -> r.getFirstColumn() == column)),
+                    "учёт партий — ячейка «да/нет», а не свободный текст");
+        }
+
+        localeOf(user, "en");
+        signIn();
+        try (XSSFWorkbook wb = open(template.build(user).content())) {
+            XSSFSheet sheet = wb.getSheet("Номенклатура");
+            assertEquals(List.of(List.of("yes", "no")), booleanLists(sheet));
+            assertTrue(sheet.getDataValidations().stream()
+                            .filter(v -> v.getValidationConstraint().getExplicitListValues() != null)
+                            .allMatch(v -> "Yes or no".equals(v.getErrorBoxTitle())),
+                    "текст ошибки — по-английски");
+        }
+    }
+
     @Test
     void referenceValuesLiveOnAHiddenSheet() throws Exception {
         PortalUser user = client();

@@ -3,6 +3,7 @@ package com.ahlers.portal3pl.excel;
 import com.ahlers.portal3pl.auth.PortalUser;
 import com.ahlers.portal3pl.catalog.SkuWriteService;
 import com.ahlers.portal3pl.columns.ColumnService;
+import com.ahlers.portal3pl.common.ActorText;
 import com.ahlers.portal3pl.common.Fail;
 import com.ahlers.portal3pl.config.CurrentUser;
 import com.ahlers.portal3pl.config.DepositorScope;
@@ -57,15 +58,17 @@ public class SkuTemplateService {
     private final ColumnService columns;
     private final SkuWriteService sku;
     private final CurrentUser current;
+    private final ActorText texts;
 
     public SkuTemplateService(JdbcClient jdbc, DepositorScope depositorScope,
                               ColumnService columns, SkuWriteService sku,
-                              CurrentUser current) {
+                              CurrentUser current, ActorText texts) {
         this.jdbc = jdbc;
         this.depositorScope = depositorScope;
         this.columns = columns;
         this.sku = sku;
         this.current = current;
+        this.texts = texts;
     }
 
     /** Готовый файл и имя, под которым его отдать. */
@@ -95,7 +98,8 @@ public class SkuTemplateService {
 
         try {
             byte[] bytes = ExcelTemplateWriter.write(SHEET, fields, labels, dictionaryValues(),
-                    Map.of(), str(depositor.get("code")), MAX_ROWS);
+                    Map.of(), ExcelTemplateWriter.BooleanText.of(texts),
+                    str(depositor.get("code")), MAX_ROWS);
             return new Template(ExcelTemplateWriter.fileName("Шаблон_Номенклатура",
                     str(depositor.get("org_name"))), bytes);
         } catch (IOException e) {

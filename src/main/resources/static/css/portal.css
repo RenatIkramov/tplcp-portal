@@ -236,6 +236,8 @@
   .badge.err .dot{background:var(--err-fg);}
   .badge.draft{background:var(--draft-bg);color:var(--draft-fg);}
   .badge.draft .dot{background:var(--draft-fg);}
+  .badge.muted{background:var(--draft-bg);color:var(--draft-fg);}
+  .badge.muted .dot{background:var(--draft-fg);}
 
   /* ===== Detail view ===== */
   .back-btn{
@@ -430,3 +432,40 @@
   .demo-user .info{flex:1;min-width:0;}
   .demo-user .info .n{font-size:13px;font-weight:600;color:var(--ink);}
   .demo-user .info .r{font-size:11.5px;color:var(--muted);}
+
+  /* ===== Администрирование → Перечисления (V95) =====
+     Слева список перечислений, справа значения выбранного; окно
+     значения — по центру и по высоте содержимого: полей немного,
+     и окно во всю высоту экрана оставляло бы под ними пустой лист. */
+  .enum-layout{display:grid;grid-template-columns:260px minmax(0,1fr);gap:16px;align-items:start;}
+  .enum-list{padding:6px;display:flex;flex-direction:column;gap:2px;}
+  .enum-item{
+    display:flex;align-items:center;gap:8px;flex-wrap:wrap;width:100%;text-align:left;
+    padding:8px 10px;border:none;border-radius:6px;background:transparent;cursor:pointer;
+    font:inherit;font-size:13.5px;color:var(--ink);
+  }
+  .enum-item:hover{background:var(--blue-light);}
+  .enum-item.current{background:var(--blue-light);color:var(--blue);font-weight:700;}
+  .enum-item .enum-item-name{flex:1 1 auto;}
+  .enum-item .badge{font-weight:400;}
+  .enum-row{cursor:pointer;}
+  .enum-row:hover td{background:var(--blue-light);}
+  .col-panel.enum-panel{
+    width:560px;max-width:calc(100vw - 32px);height:auto;max-height:92vh;overflow-y:auto;
+    border-radius:10px;box-shadow:0 8px 32px rgba(0,0,0,.24);
+  }
+  .enum-panel .hint{margin-bottom:6px;}
+  .enum-panel .enum-note{padding:8px 10px;background:var(--bg);border-radius:6px;margin-top:8px;}
+  .enum-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:0 12px;}
+  .enum-field-hint{font-size:12px;color:var(--muted);margin-top:4px;}
+  .enum-check{display:flex;align-items:center;gap:8px;margin-top:12px;font-size:13.5px;}
+  .enum-translations{margin-top:16px;padding-top:12px;border-top:1px solid var(--line);}
+  .enum-subtitle{font-weight:700;font-size:14px;margin-bottom:4px;}
+  .enum-translation{display:grid;grid-template-columns:110px 1fr auto;gap:8px;align-items:center;margin-top:8px;}
+  .enum-translation label{font-size:13px;color:var(--muted);}
+  .enum-translation .enum-symbol{width:90px;}
+  .enum-panel .btn:disabled{opacity:.45;cursor:not-allowed;}
+  .enum-error{margin-top:12px;padding:8px 10px;border-radius:6px;background:#fdecea;color:#c0392b;font-size:13px;}
+  .enum-confirm{display:flex;align-items:center;gap:8px;margin-top:12px;padding:8px 10px;border-radius:6px;background:var(--warn-bg);}
+  .enum-confirm span{flex:1;}
+  @media (max-width:900px){ .enum-layout{grid-template-columns:1fr;} }

@@ -1,6 +1,7 @@
 package com.ahlers.portal3pl.documents;
 
 import com.ahlers.portal3pl.common.ActorText;
+import com.ahlers.portal3pl.common.EnumCodes;
 import com.ahlers.portal3pl.common.Fail;
 import com.ahlers.portal3pl.common.MsgRef;
 import com.ahlers.portal3pl.config.CurrentUser;
@@ -25,16 +26,18 @@ public class DraftService {
     private final DocumentRepository documents;
     private final WmsGateway wms;
     private final ActorText texts;
+    private final LineQuality quality;
 
     public DraftService(DepositorScope depositorScope, CurrentUser currentUser,
                         DraftRepository drafts, DocumentRepository documents, WmsGateway wms,
-                        ActorText texts) {
+                        ActorText texts, LineQuality quality) {
         this.depositorScope = depositorScope;
         this.currentUser = currentUser;
         this.drafts = drafts;
         this.documents = documents;
         this.wms = wms;
         this.texts = texts;
+        this.quality = quality;
     }
 
     @Transactional
@@ -43,7 +46,7 @@ public class DraftService {
         String userId = currentUser.requireUserId();
         String docId = drafts.createDraft(type, depositorScope.currentDepositorId(), userId);
         if (header != null && !header.isEmpty()) {
-            drafts.updateHeader(type, docId, header, type.editableHeaderColumns(), userId, true);
+            drafts.updateHeader(type, docId, header, draftColumns(type), userId, true);
         }
         return card(type, docId);
     }
@@ -53,14 +56,32 @@ public class DraftService {
         depositorScope.apply();
         String userId = currentUser.requireUserId();
         requireDraft(type, docId);
-        drafts.updateHeader(type, docId, header, type.editableHeaderColumns(), userId, true);
+        drafts.updateHeader(type, docId, header, draftColumns(type), userId, true);
         return card(type, docId);
     }
 
     /**
-     * Транспортный раздел живёт по своим правилам (Р5): в черновике не правится,
-     * потому что WMS ещё не знает о документе; разрешённые статусы задаются
-     * флагом на статусе, а не зашиты в код.
+     * Что можно записать в шапку черновика.
+     *
+     * <p>С V84 в черновике заполняется и транспорт — тем же сохранением,
+     * что шапка: WMS о документе ещё не знает, хранит его портал. Право
+     * «может редактировать транспорт» действует и здесь: без него
+     * транспортные поля просто не принимаются — экран их такому
+     * пользователю и не открывает.
+     */
+    private java.util.Set<String> draftColumns(DocumentType type) {
+        java.util.Set<String> columns = new java.util.LinkedHashSet<>(type.editableHeaderColumns());
+        if (currentUser.mayEditTransport()) {
+            columns.addAll(DocumentType.transportColumns());
+        }
+        return columns;
+    }
+
+    /**
+     * Транспорт после отправки документа (Р5): разрешённые статусы задаются
+     * флагом на статусе, а не зашиты в код. В черновике транспорт пишется
+     * вместе с шапкой ({@link #draftColumns}) и уходит в WMS при
+     * подтверждении.
      */
     @Transactional
     public Map<String, Object> updateTransport(DocumentType type, String docId, Map<String, Object> transport) {
@@ -77,9 +98,47 @@ public class DraftService {
         }
 
         drafts.updateHeader(type, docId, transport, DocumentType.transportColumns(), userId, false);
-        // Транспорт в WMS — отдельные сущности, отправляются отдельным запросом (Р5)
-        wms.sendTransport(type, docId);
+        // Транспорт в WMS — отдельные сущности, отправляются отдельным запросом (Р5).
+        // Неудача не откатывает сохранённое: данные портала остаются,
+        // а состояние «не передан» видно на вкладке и повторяется кнопкой.
+        deliverTransport(type, docId);
         return card(type, docId);
+    }
+
+    /** Повторить отправку транспорта, который не дошёл до WMS. */
+    @Transactional
+    public Map<String, Object> resendTransport(DocumentType type, String docId) {
+        depositorScope.apply();
+        currentUser.requireUserId();
+        if (!currentUser.mayEditTransport()) {
+            throw Fail.forbidden("error.transport.not_allowed");
+        }
+        Map<String, Object> state = state(type, docId);
+        if (!EnumCodes.Transport.NOT_SENT.equals(state.get("transportState"))) {
+            throw Fail.conflict("error.transport.nothing_to_resend");
+        }
+        deliverTransport(type, docId);
+        return card(type, docId);
+    }
+
+    /**
+     * Передать транспорт в WMS и записать, чем кончилось.
+     *
+     * <p>Документ при неудаче остаётся отправленным: откатывать заказ
+     * в черновик из-за водителя нельзя (Р5). Как именно транспорт
+     * доберётся до WMS — вторым запросом или вместе с документом через
+     * шину, — решает {@link WmsGateway}; вопрос записан в «Решение Р5»
+     * как вопрос к контракту.
+     */
+    private void deliverTransport(DocumentType type, String docId) {
+        String depositorId = depositorScope.currentDepositorId();
+        try {
+            wms.sendTransport(type, docId);
+            drafts.setTransportState(type, docId, EnumCodes.Transport.SENT, null);
+        } catch (RuntimeException e) {
+            drafts.setTransportState(type, docId, EnumCodes.Transport.NOT_SENT, e.getMessage());
+            drafts.logSync(type, depositorId, EnumCodes.SyncStatus.FAILED, "transport: " + e.getMessage());
+        }
     }
 
     /**
@@ -115,7 +174,7 @@ public class DraftService {
         requirePositiveQty(type, line);
 
         int lineNumber = drafts.nextLineNumber(type, docId);
-        drafts.addLine(type, docId, lineNumber, line);
+        drafts.addLine(type, docId, lineNumber, quality.normalized(type, line));
         drafts.refreshLineCount(type, docId);
         return card(type, docId);
     }
@@ -129,7 +188,9 @@ public class DraftService {
         if (line.containsKey(type.plannedQtyColumn())) {
             requirePositiveQty(type, line);
         }
-        if (drafts.updateLine(type, docId, lineNumber, line) == 0) {
+        Map<String, Object> values = line.containsKey("quality")
+                ? quality.normalized(type, line) : line;
+        if (drafts.updateLine(type, docId, lineNumber, values) == 0) {
             throw Fail.notFound("error.line.not_found");
         }
         return card(type, docId);
@@ -150,13 +211,15 @@ public class DraftService {
         currentUser.requireUserId();
         requireDraft(type, docId);
 
+        List<Map<String, Object>> checked = new ArrayList<>();
         for (Map<String, Object> line : lines) {
             requirePositiveQty(type, line);
+            checked.add(quality.normalized(type, line));
         }
 
         drafts.deleteAllLines(type, docId);
         int lineNumber = 1;
-        for (Map<String, Object> line : lines) {
+        for (Map<String, Object> line : checked) {
             drafts.addLine(type, docId, lineNumber++, line);
         }
         drafts.refreshLineCount(type, docId);
@@ -192,13 +255,19 @@ public class DraftService {
         String depositorId = depositorScope.currentDepositorId();
         try {
             wms.sendDocument(type, docId);
-            drafts.setStatus(type, docId, "sent_to_wms", true);
-            drafts.logSync(type, depositorId, "success", null);
+            drafts.setStatus(type, docId, DocumentStatus.SENT_TO_WMS, true);
+            drafts.logSync(type, depositorId, EnumCodes.SyncStatus.SUCCESS, null);
         } catch (RuntimeException e) {
             // Откатывать в черновик нельзя: иначе «не отправлял» неотличимо
             // от «отправлял, не прошло» (Р5).
-            drafts.setStatus(type, docId, "send_failed", false);
-            drafts.logSync(type, depositorId, "failed", e.getMessage());
+            drafts.setStatus(type, docId, DocumentStatus.SENDING_FAILED, false);
+            drafts.logSync(type, depositorId, EnumCodes.SyncStatus.FAILED, e.getMessage());
+            return card(type, docId);
+        }
+        // Транспорт, заполненный в черновике, уходит вслед за документом (V84).
+        // Пустой не отправляется: WMS незачем заводить пустую сущность.
+        if (drafts.hasTransport(type, docId)) {
+            deliverTransport(type, docId);
         }
         return card(type, docId);
     }
@@ -282,7 +351,7 @@ public class DraftService {
     /** Редактировать можно только собственный черновик портала (Р5). */
     private void requireDraft(DocumentType type, String docId) {
         Map<String, Object> state = state(type, docId);
-        boolean draft = "draft".equals(state.get("statusCode")) && "portal".equals(state.get("origin"));
+        boolean draft = DocumentStatus.DRAFT.equals(state.get("statusCode")) && EnumCodes.Origin.PORTAL.equals(state.get("origin"));
         if (!draft) {
             throw Fail.conflict("error.document.sent_to_wms");
         }

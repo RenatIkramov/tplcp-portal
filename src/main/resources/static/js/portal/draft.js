@@ -68,6 +68,9 @@
     // приведения типа, то есть черновик заказа не сохранялся вовсе.
     refs.orderTypes = (types.orderTypes || []).map(x => ({value:x.id, text:x.name}));
     refs.docTypes   = (types.receiptDocTypes || []).map(x => ({value:x.id, text:x.name}));
+    // Качество строки заказа (V89): код и имя на языке пользователя.
+    // Прототип строит из него список в окне строки (setOrderLineQuality).
+    PORTAL.qualities = (types.qualities || []).map(x => ({code: x.code, name: x.name}));
 
     // Окно ввода строки ищет товар в массиве products — наполняем его
     // настоящей номенклатурой, чтобы поиск работал по данным базы.
@@ -211,14 +214,80 @@
   window.portalOrderConsigneeChanged = function(){
     const consigneeId = (document.getElementById('of_consignee') || {}).value || '';
     paintAddresses('');
+    // Контакт прежней организации уходит вместе с её адресом — даже
+    // набранный руками: чужой контакт в заказе хуже пустого поля.
+    setContact('');
+    autoContact = '';
     if (!consigneeId) return;
     loadAddresses(consigneeId)
       .then(() => {
         const main = defaultAddress(consigneeId);
         paintAddresses(main ? main.addressId : '');
+        applyContact(main ? main.addressId : '');
       })
       .catch(() => {});
   };
+
+  /* ---------------- контакт по месту доставки (V83) ---------------- */
+
+  /**
+   * Контакт заказа подставляется по выбранному адресу.
+   *
+   * <p>Что подставить, решает база (`delivery_contact`): свой контакт
+   * адреса, а если его нет — контакты грузополучателя. Экран получает
+   * готовое значение в `orderContact` списка адресов и правила не
+   * повторяет.
+   *
+   * <p>Поле остаётся редактируемым, и набранное руками подстановка не
+   * трогает: она заменяет только пустое поле или то, что сама же и
+   * подставила (`autoContact`). Иначе смена адреса стирала бы контакт,
+   * который человек только что уточнил.
+   */
+  let autoContact = '';
+
+  function contactOfAddress(addressId){
+    const consigneeId = (document.getElementById('of_consignee') || {}).value || '';
+    const a = (addresses[consigneeId] || []).find(x => String(x.addressId) === String(addressId));
+    return a && a.orderContact ? String(a.orderContact) : '';
+  }
+
+  function currentContact(){
+    const el = document.getElementById('of_consigneeContact');
+    if (el) return (el.value || '').trim();
+    const doc = docOf('orders');
+    return doc && doc.consigneeContact ? String(doc.consigneeContact).trim() : '';
+  }
+
+  /** Пишет и в поле, и в документ в памяти: вкладка с полем может быть не открыта. */
+  function setContact(value){
+    const el = document.getElementById('of_consigneeContact');
+    if (el) el.value = value;
+    const doc = docOf('orders');
+    if (doc) doc.consigneeContact = value;
+  }
+
+  function applyContact(addressId){
+    const now = currentContact();
+    if (now !== '' && now !== autoContact) return;     // правил человек — не трогаем
+    const next = addressId ? contactOfAddress(addressId) : '';
+    setContact(next);
+    autoContact = next;
+  }
+
+  window.portalOrderAddressChanged = function(){
+    const field = document.getElementById('of_deliveryAddress');
+    applyContact(field ? field.value : '');
+  };
+
+  /**
+   * Открыли сохранённый черновик: если в нём стоит ровно то, что
+   * подставилось бы по его адресу, считаем это подстановкой — тогда
+   * смена адреса обновит контакт. Иначе это правка человека.
+   */
+  function rememberContact(addressId){
+    const now = currentContact();
+    autoContact = now !== '' && now === contactOfAddress(addressId) ? now : '';
+  }
 
   /* ---------------- поля шапки: что куда сохраняется ---------------- */
 
@@ -251,6 +320,20 @@
     for (let i = 1; i <= 10; i++){
       FIELDS[type][EXTRA_PREFIX[type] + '_customField' + i] = 'custom_field_' + i;
     }
+  });
+
+  // Транспортный раздел — с V84 тоже поля черновика: заполняется до
+  // подтверждения и сохраняется общей кнопкой вместе с шапкой. «Рейс»
+  // в списке шапки уже есть. Пользователю без права на транспорт сервер
+  // эти поля не примет, а экран их ему и не откроет.
+  const TRANSPORT_FIELDS = ['carrier', 'transportType', 'transportBrand', 'carNumber',
+                            'trailerNumber', 'techPassportNumber', 'containerNumber',
+                            'sealNumber', 'driverName', 'driverPhone', 'driverIdNumber',
+                            'driverInn'];
+  Object.keys(FIELDS).forEach(type => {
+    TRANSPORT_FIELDS.forEach(f => {
+      FIELDS[type][EXTRA_PREFIX[type] + '_' + f] = f.replace(/[A-Z]/g, c => '_' + c.toLowerCase());
+    });
   });
 
   /**
@@ -425,7 +508,7 @@
     if (typeof original !== 'function') return;
     window.fcSwitchDocTab = function(docType, tabName){
       const ref = refOf(docType);
-      if (ref && ref.statusCode === 'draft'){
+      if (ref && ref.statusCode === PORTAL.STATUS.DRAFT){
         keepUnsaved(docType);
       }
       return original.apply(this, arguments);
@@ -440,7 +523,13 @@
       const skuId = l.skuId || (refs.skuByCode[l.code] && refs.skuByCode[l.code].skuId);
       const line = {sku_id: skuId, line_comment: l.lineComment || null};
       if (type === 'receipts') line.expected_qty = Number(l.expected);
-      else if (type === 'orders') { line.ordered_qty = Number(l.ordered); if (l.weight) line.weight_kg = Number(l.weight); }
+      else if (type === 'orders') {
+        line.ordered_qty = Number(l.ordered);
+        if (l.weight) line.weight_kg = Number(l.weight);
+        // Качество строки (V89) — код перечисления; сервер переведёт его
+        // в quality_id, а пустое примет как «Годный».
+        if (typeof orderLineQuality === 'function') line.quality = orderLineQuality(l);
+      }
       // У перемещения одно количество и нет цены: товар не меняет
       // владельца, меняется только место хранения.
       else { line.qty = Number(l.qty); return line; }
@@ -476,14 +565,11 @@
   /** Карточка из API → объект документа в терминах демо. */
   function toDocument(type, card){
     const h = card.header;
-    const BADGE = {draft:'draft', awaiting:'warn', in_progress:'warn', received:'ok', discrepancy:'err',
-                   sent_to_wms:'warn', send_failed:'err',
-                   reserved:'warn', picking:'warn', shipped:'ok', delayed:'err'};
     const totalCount = {
       docId: h.docId, no: h.documentNo,
       // пустой номер ERP оставляем пустым: заголовок карточки подставит номер портала
       erpNo: h.erpNumber || '', wmsNumber: dash(h.docNumber),
-      status: BADGE[h.statusCode] || 'warn', statusLabel: h.statusName || '', statusCode: h.statusCode,
+      status: PORTAL.statusBadge(h.statusCode), statusLabel: h.statusName || '', statusCode: h.statusCode,
       // Дата создания — отметка времени с V62. Отрезать первые десять
       // знаков от ISO нельзя: там мгновение по UTC.
       date: PORTAL.dateTimeText(h.docDate),
@@ -497,6 +583,9 @@
       sealNumber: h.sealNumber || '', driverName: h.driverName || '', driverPhone: h.driverPhone || '',
       driverIdNumber: h.driverIdNumber || '', driverInn: h.driverInn || '',
       allowsTransportEdit: h.allowsTransportEdit === true,
+      transportState: h.transportState || null,
+      transportSentAt: h.transportSentAt || null,
+      transportError: h.transportError || '',
       hasUnknownSku: h.hasUnknownSku === true,
       problems: card.problems || [],
       warehouse: h.warehouseId, warehouseName: h.warehouseName
@@ -550,6 +639,8 @@
       // и добавленная строка показывалась нулём.
       qty: l.qty, qtyWms: l.qtyWms ?? l.qty,
       price: l.price, currency: l.currencyCode, lineComment: l.lineComment === '—' ? '' : (l.lineComment || ''),
+      // качество строки заказа — код (V89); у старых строк его нет — значит годный
+      quality: l.qualityCode || undefined,
       lineNumber: l.lineNumber
     }));
     totalCount.items = totalCount.lines.length;
@@ -568,7 +659,10 @@
     // и сохранение затёрло бы сохранённый адрес.
     if (type === 'orders' && doc.consignee){
       loadAddresses(doc.consignee)
-        .then(() => paintAddresses(doc.deliveryAddress || ''))
+        .then(() => {
+          paintAddresses(doc.deliveryAddress || '');
+          rememberContact(doc.deliveryAddress || '');
+        })
         .catch(() => {});
     }
     return doc;
@@ -710,7 +804,8 @@
       // в настоящем портале был пуст: выбрать было нечего.
       deliveryAddress: {id:'of_deliveryAddress', key:'col.orders.deliveryAddress',
                         value:'deliveryAddress', name:'deliveryAddressName',
-                        options:doc => addressOptions(doc.consignee)},
+                        options:doc => addressOptions(doc.consignee),
+                        onchange:'portalOrderAddressChanged()'},
       orderType: {id:'of_orderType', key:'col.orders.orderType', value:'orderType', name:'orderTypeName',
                   options:() => refs.orderTypes}
     });
@@ -736,7 +831,7 @@
    */
   async function save(type, quiet){
     const ref = refOf(type);
-    if (!ref || ref.statusCode !== 'draft') return null;
+    if (!ref || ref.statusCode !== PORTAL.STATUS.DRAFT) return null;
     let docId = ref.docId;
     if (!docId){
       const card = await api('POST', '/api/' + type, collectHeader(type));
@@ -774,7 +869,7 @@
   function emptyDocument(type){
     const doc = {
       docId: null, no: '', erpNo: '', wmsNumber: '—',
-      status: 'draft', statusCode: 'draft', statusLabel: T('receipts.option.draft'),
+      status: 'draft', statusCode: PORTAL.STATUS.DRAFT, statusLabel: T('receipts.option.draft'),
       date: PORTAL.dateTimeText(new Date().toISOString()),
       author: (window.currentUser && currentUser.full_name) || '',
       comment: '', trip: '', lineCount: 0, totalPieces: 0,
@@ -783,7 +878,11 @@
       techPassportNumber: '', containerNumber: '', sealNumber: '',
       driverName: '', driverPhone: '', driverIdNumber: '', driverInn: '',
       allowsTransportEdit: false, hasUnknownSku: false, problems: [],
-      warehouse: '', warehouseName: '—',
+      transportState: null, transportSentAt: null, transportError: '',
+      // Склад из шапки портала (V94) — сразу в черновик: человек уже
+      // сказал, с каким складом работает
+      warehouse: PORTAL.warehouse || '',
+      warehouseName: (PORTAL.warehouse && PORTAL.warehouseName(PORTAL.warehouse)) || '—',
       lines: [], items: 0
     };
     for (let i = 1; i <= 10; i++){
@@ -797,7 +896,7 @@
                           plannedShip: '—', ship: '—', deliveryDate: '—',
                           deliveryAddress: '', deliveryAddressName: '—', consigneeContact: ''});
     } else {
-      Object.assign(doc, {fromWarehouse: '', fromWarehouseName: '—',
+      Object.assign(doc, {fromWarehouse: doc.warehouse, fromWarehouseName: doc.warehouseName,
                           toWarehouse: '', toWarehouseName: '—', shipDate: '—'});
     }
     return doc;
@@ -807,7 +906,11 @@
   function hasData(type){
     if ((compositionOf(type) || []).length) return true;
     const header = collectHeader(type);
-    return Object.values(header).some(v => v !== null && v !== '');
+    // Склад, подставленный из шапки (V94), — не набранное человеком:
+    // закрыть пустой черновик можно, не отвечая «потерять изменения?»
+    const preset = PORTAL.warehouse || null;
+    return Object.entries(header).some(([column, v]) => v !== null && v !== ''
+        && !((column === 'warehouse_id' || column === 'from_warehouse_id') && v === preset));
   }
 
   /**
@@ -847,7 +950,7 @@
       show(type, doc);
       clearReasons(type);
       if (typeof notify === 'function'){
-        notify(doc.statusCode === 'send_failed'
+        notify(doc.statusCode === PORTAL.STATUS.SENDING_FAILED
             ? T('sku.text.sending_to_wms_failed_the_document')
             : T('common.message.document_sent_to_wms', {no: doc.no}));
       }
@@ -908,7 +1011,7 @@
       // Несохранённый документ строкой состава в базу не проваливается:
       // пока человек не нажал «Сохранить», его там нет. Строки живут
       // в памяти карточки и уйдут вместе с остальным.
-      if (ref && ref.docId && ref.statusCode === 'draft'){
+      if (ref && ref.docId && ref.statusCode === PORTAL.STATUS.DRAFT){
         save(type, true).catch(tell);
       }
       return result;
@@ -945,22 +1048,80 @@
   /* ---------------- транспортный раздел (решение Р5) ---------------- */
 
   /**
-   * В черновике транспорт не редактируется: WMS ещё не знает о документе
-   * и связывать транспортные сущности не с чем. Разрешённые статусы задаются
-   * флагом на статусе в базе, а право пользователя — его настройками.
+   * Можно ли править транспорт.
+   *
+   * <p>С V84 — в черновике (портал хранит его до подтверждения и отправит
+   * вместе с документом) и после отправки — в статусах с флагом
+   * `allows_transport_edit`. В обоих случаях нужно личное право
+   * пользователя.
    */
+  function isDraftDoc(doc){
+    return !!doc && doc.statusCode === PORTAL.STATUS.DRAFT;
+  }
+
   window.isTransportEditable = function(doc){
-    return !!(doc && doc.allowsTransportEdit && me.canEditTransport);
+    return !!(doc && me.canEditTransport && (isDraftDoc(doc) || doc.allowsTransportEdit));
   };
 
-  /** Транспорт уходит в WMS отдельным запросом, поэтому и кнопка отдельная. */
+  /**
+   * Нужна ли отдельная кнопка «Сохранить транспортную информацию».
+   * В черновике — нет: поля уходят общей кнопкой «Сохранить», а две
+   * кнопки, делающие одно и то же, только путают.
+   */
+  window.isTransportSavedSeparately = function(doc){
+    return !!(doc && !isDraftDoc(doc) && doc.allowsTransportEdit && me.canEditTransport);
+  };
+
+  /**
+   * Строка под транспортным разделом: когда он уйдёт или чем кончилась
+   * передача. «Не передан» — с причиной и кнопкой повтора (V84).
+   */
+  window.fcTransportStateHtml = function(docType, doc){
+    if (!doc) return '';
+    const box = (color, html) => '<div style="margin-top:16px;font-size:13px;color:' + color + ';">'
+        + html + '</div>';
+    if (isDraftDoc(doc)){
+      return window.isTransportEditable(doc)
+        ? box('var(--muted)', PORTAL.t('common.hint.transport_goes_with_document')) : '';
+    }
+    const html = s => String(s === null || s === undefined ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    if (doc.transportState === PORTAL.TRANSPORT.SENT){
+      return box('var(--muted)', html(T('common.text.transport_sent',
+          {time: PORTAL.dateTimeText(doc.transportSentAt)})));
+    }
+    if (doc.transportState === PORTAL.TRANSPORT.NOT_SENT){
+      const again = me.canEditTransport
+        ? ' <button class="btn ghost" style="margin-left:8px;" onclick="portalResendTransport(\'' + docType + '\')">'
+          + html(T('common.button.resend_transport')) + '</button>'
+        : '';
+      return box('#991b1b', html(T('common.text.transport_not_sent', {error: doc.transportError || '—'})) + again);
+    }
+    return '';
+  };
+
+  window.portalResendTransport = async function(type){
+    const ref = refOf(type);
+    if (!ref || !ref.docId) return;
+    try {
+      await api('POST', '/api/' + type + '/' + ref.docId + '/transport/resend');
+      const doc = await openFromApi(type, ref.docId);
+      if (typeof notify === 'function'){
+        notify(doc && doc.transportState === PORTAL.TRANSPORT.SENT
+          ? T('sku.text.transport_details_sent_to_wms')
+          : T('common.text.transport_not_sent', {error: (doc && doc.transportError) || '—'}));
+      }
+    } catch (e){ tell(e); }
+  };
+
+  /** После отправки транспорт уходит в WMS отдельным запросом — поэтому и кнопка отдельная. */
   async function saveTransport(type){
-    const ref = type === 'receipts' ? currentReceiptRef : currentOrderRef;
+    const ref = refOf(type);
     if (!ref) return;
     const fields = ['trip','carrier','transportType','transportBrand','carNumber','trailerNumber',
                   'techPassportNumber','containerNumber','sealNumber',
                   'driverName','driverPhone','driverIdNumber','driverInn'];
-    const prefix = type === 'receipts' ? 'rf_' : 'of_';
+    const prefix = EXTRA_PREFIX[type] + '_';
     const store = {};
     fields.forEach(f => {
       const el = document.getElementById(prefix + f);
@@ -970,8 +1131,13 @@
     });
     try {
       await api('PUT', '/api/' + type + '/' + ref.docId + '/transport', store);
-      await openFromApi(type, ref.docId);
-      if (typeof notify === 'function') notify(T('sku.text.transport_details_sent_to_wms'));
+      const doc = await openFromApi(type, ref.docId);
+      // Сохранено в портале всегда; дошло ли до WMS — по состоянию передачи
+      if (typeof notify === 'function'){
+        notify(doc && doc.transportState === PORTAL.TRANSPORT.NOT_SENT
+          ? T('common.text.transport_not_sent', {error: doc.transportError || '—'})
+          : T('sku.text.transport_details_sent_to_wms'));
+      }
     } catch (e){ tell(e); }
   }
   window.portalSaveTransport = saveTransport;
@@ -1127,6 +1293,30 @@
    * склад выбран, остатки по нему прочитаны, позиции в них нет. А вот
    * когда склад ещё не выбран, числа неизвестны — и тогда «—».
    */
+  /**
+   * Качество в строке заказа (V89): «Остаток» и «Доступно» в окне
+   * показываются по выбранному качеству — по quality_qty из запасов
+   * (V89, v_stock_available). Для остальных окон качества нет, числа
+   * общие.
+   */
+  function lineQuality(prefix){
+    if (prefix !== 'orderLineEdit') return null;
+    const box = document.getElementById('orderLineEditQuality');
+    return (box && box.value) || '01';
+  }
+
+  /** Остаток и доступное одного качества из строки запасов. */
+  function qualityStock(row, code){
+    let parsed;
+    try { parsed = row && row.qualityQty ? JSON.parse(row.qualityQty) : {}; } catch (e){ parsed = {}; }
+    const q = parsed[code] || {};
+    return {quantity: Number(q.quantity) || 0, available: Number(q.available) || 0};
+  }
+
+  window.onOrderLineEditQualityChange = function(){
+    paintStock('orderLineEdit');
+  };
+
   function paintStock(prefix){
     const fields = ['StockTotal', 'StockAvail', 'StockIncoming']
       .map(name => document.getElementById(prefix + name));
@@ -1145,7 +1335,11 @@
       return;
     }
     const unit = product.unit || '';
-    const values = row ? [row.quantity, row.availableQty, row.incomingQty] : [0, 0, 0];
+    const code = lineQuality(prefix);
+    const byQuality = row && code ? qualityStock(row, code) : null;
+    const values = !row ? [0, 0, 0]
+        : byQuality ? [byQuality.quantity, byQuality.available, row.incomingQty]
+        : [row.quantity, row.availableQty, row.incomingQty];
     fields.forEach((el, i) => {
       if (el) el.textContent = (values[i] === undefined ? 0 : values[i]) + ' ' + unit;
     });
@@ -1176,10 +1370,14 @@
       const count = field ? Number(field.value) : null;
       const byCode = stockByWarehouse[warehouseForModal(prefix)];
       const row = product && byCode ? byCode[product.code] : null;
+      // читаем до вызова: прототип закрывает окно, и выбора качества уже не будет
+      const code = lineQuality(prefix);
+      const available = !row ? null
+          : code ? qualityStock(row, code).available : Number(row.availableQty);
       const result = original.apply(this, arguments);
-      if (row && count && count > Number(row.availableQty) && typeof notify === 'function'){
+      if (row && count && count > available && typeof notify === 'function'){
         notify(T(textKey, {count: count + ' ' + (product.unit || ''),
-                           available: row.availableQty + ' ' + (product.unit || '')}));
+                           available: available + ' ' + (product.unit || '')}));
       }
       return result;
     };
@@ -1303,8 +1501,7 @@
     const type = prefix === 'lineEdit' ? 'receipts' : 'orders';
     const line = lineIndex === null || lineIndex === undefined
         ? null : (compositionOf(type) || [])[lineIndex];
-    const price = line && line.price !== null && line.price !== undefined ? line.price : '';
-    field.value = price;
+    field.value = line && line.price !== null && line.price !== undefined ? line.price : '';
     const sum = document.getElementById(prefix + 'Sum');
     if (sum) sum.textContent = '—';
   }

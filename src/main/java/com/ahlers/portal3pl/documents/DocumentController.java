@@ -111,6 +111,16 @@ public class DocumentController {
         return drafts.updateTransport(DocumentType.ofPath(docType), docId, transport);
     }
 
+    /**
+     * Повторить отправку транспорта, который не дошёл до WMS (V84).
+     * Автоповтор — вместе с интеграцией (этап 8).
+     */
+    @PostMapping("/{docId}/transport/resend")
+    public Map<String, Object> resendTransport(@PathVariable String docType,
+                                               @PathVariable String docId) {
+        return drafts.resendTransport(DocumentType.ofPath(docType), docId);
+    }
+
     @DeleteMapping("/{docId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@PathVariable String docType, @PathVariable String docId) {

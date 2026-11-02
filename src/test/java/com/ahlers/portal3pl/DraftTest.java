@@ -1,5 +1,6 @@
 package com.ahlers.portal3pl;
 
+import com.ahlers.portal3pl.auth.PortalUser;
 import com.ahlers.portal3pl.common.MsgRef;
 import com.ahlers.portal3pl.documents.DocumentService;
 import com.ahlers.portal3pl.documents.DocumentType;
@@ -34,6 +35,7 @@ class DraftTest extends PortalTestBase {
     DocumentService documents;
 
     private final List<String> created = new ArrayList<>();
+    private final List<String> createdOrders = new ArrayList<>();
 
     @AfterEach
     void removeCreated() {
@@ -41,7 +43,12 @@ class DraftTest extends PortalTestBase {
             inContext("DELETE FROM dbo.receipt_details WHERE doc_id = '" + docId + "'::uuid");
             inContext("DELETE FROM dbo.receipts WHERE doc_id = '" + docId + "'::uuid");
         }
+        for (String docId : createdOrders) {
+            inContext("DELETE FROM dbo.order_details WHERE doc_id = '" + docId + "'::uuid");
+            inContext("DELETE FROM dbo.orders WHERE doc_id = '" + docId + "'::uuid");
+        }
         created.clear();
+        createdOrders.clear();
     }
 
     private Map<String, Object> draft(Map<String, Object> header) {
@@ -72,8 +79,8 @@ class DraftTest extends PortalTestBase {
         Map<String, Object> h = header(card);
 
         assertTrue(h.get("documentNo").toString().startsWith("R"), "портал присваивает свой номер");
-        assertEquals("draft", h.get("statusCode"));
-        assertEquals("portal", h.get("origin"), "владелец черновика — портал");
+        assertEquals("01", h.get("statusCode"));
+        assertEquals("01", h.get("origin"), "владелец черновика — портал");
         assertEquals(0, rows(card).size());
         assertFalse(problems(card).isEmpty(), "пустой черновик отправить нельзя");
     }
@@ -140,7 +147,7 @@ class DraftTest extends PortalTestBase {
                 "все условия выполнены");
 
         Map<String, Object> card = drafts.confirm(DocumentType.RECEIPTS, docId);
-        assertEquals("sent_to_wms", header(card).get("statusCode"));
+        assertEquals("02", header(card).get("statusCode"));
 
         // после отправки документ из портала не редактируется (Р5)
         expectRejection(409, () -> drafts.updateHeader(DocumentType.RECEIPTS, docId,
@@ -316,13 +323,146 @@ class DraftTest extends PortalTestBase {
                 "строки удалённого черновика остались в базе");
     }
 
+    /* ---------------- Качество строки заказа (V85, V89) ---------------- */
+
+    private String orderDraft() {
+        Map<String, Object> card = drafts.create(DocumentType.ORDERS, Map.of());
+        String docId = header(card).get("docId").toString();
+        createdOrders.add(docId);
+        return docId;
+    }
+
+    /**
+     * Качество строки — код перечисления (V89). Пусто — «Годный», и он
+     * пишется явно; чужой код — отказ. Строки разного качества одного
+     * товара — разные строки.
+     */
     @Test
-    void transportNotEditableInDraft() {
+    void orderLineQualityIsACodeAndGoodByDefault() {
+        signIn();
+        String skuId = singleValue("SELECT sku_id::text FROM dbo.sku WHERE code = 'RK-ROG-01'");
+        String docId = orderDraft();
+
+        drafts.replaceLines(DocumentType.ORDERS, docId, List.of(
+                Map.of("sku_id", skuId, "ordered_qty", 3),
+                Map.of("sku_id", skuId, "ordered_qty", 2, "quality", "02"),
+                Map.of("sku_id", skuId, "ordered_qty", 1, "quality", "04")));
+        List<Map<String, Object>> lines = rows(drafts.card(DocumentType.ORDERS, docId));
+        assertEquals(3, lines.size(), "строки разного качества одного товара — разные строки");
+        assertEquals(List.of("01", "02", "04"),
+                lines.stream().map(l -> l.get("qualityCode")).toList(),
+                "без выбора качество пишется явно — «Годный»");
+        assertEquals("1,2,4", singleValue("SELECT string_agg(quality_id::text, ',' ORDER BY line_number)"
+                + " FROM dbo.order_details WHERE doc_id = '" + docId + "'::uuid AND batch_number IS NULL"));
+
+        // Код, а не слово: «Брак» словом больше не принимается
+        expectRejection(400, () -> drafts.addLine(DocumentType.ORDERS, docId,
+                Map.of("sku_id", skuId, "ordered_qty", 1, "quality", "Брак")));
+        expectRejection(400, () -> drafts.addLine(DocumentType.ORDERS, docId,
+                Map.of("sku_id", skuId, "ordered_qty", 1, "quality", "99")));
+
+        // Правка строки меняет качество
+        drafts.updateLine(DocumentType.ORDERS, docId, 1, Map.of("quality", "03"));
+        assertEquals("03", rows(drafts.card(DocumentType.ORDERS, docId)).get(0).get("qualityCode"));
+    }
+
+    /** Имя качества — на языке пользователя, код — один на всех. */
+    @Test
+    void orderLineQualityNameFollowsTheUserLanguage() {
+        signIn();
+        String skuId = singleValue("SELECT sku_id::text FROM dbo.sku WHERE code = 'RK-ROG-01'");
+        String docId = orderDraft();
+        drafts.replaceLines(DocumentType.ORDERS, docId, List.of(
+                Map.of("sku_id", skuId, "ordered_qty", 2, "quality", "02")));
+        assertEquals("Defective", rows(drafts.card(DocumentType.ORDERS, docId)).get(0).get("quality"));
+        PortalUser user = authService.authenticate(USER, USER_PASSWORD);
+        localeOf(user, "ru");
+        try {
+            signIn();
+            assertEquals("Брак", rows(drafts.card(DocumentType.ORDERS, docId)).get(0).get("quality"));
+        } finally {
+            new org.springframework.transaction.support.TransactionTemplate(txManager)
+                    .executeWithoutResult(tx -> jdbc.sql("UPDATE dbo.app_user SET locale_id = NULL"
+                            + " WHERE login = :login").param("login", USER).update());
+        }
+    }
+
+    /**
+     * Отдельная отправка транспорта — только после подтверждения: WMS
+     * о черновике не знает (Р5). В черновике транспорт пишется вместе
+     * с шапкой — см. {@link #transportIsSavedWithTheDraftHeader}.
+     */
+    @Test
+    void transportNotSentSeparatelyFromDraft() {
         signIn();
         String docId = header(draft(Map.of())).get("docId").toString();
-        // WMS о черновике не знает — связывать транспорт не с чем (Р5)
         expectRejection(409, () -> drafts.updateTransport(DocumentType.RECEIPTS, docId,
                 Map.of("carrier", "ТОО «КазТранс»", "car_number", "999 ZZZ 02")));
+    }
+
+    /** С V84 транспорт заполняется в черновике и сохраняется вместе с шапкой. */
+    @Test
+    void transportIsSavedWithTheDraftHeader() {
+        signIn();
+        String docId = header(draft(Map.of("carrier", "ТОО «КазТранс»"))).get("docId").toString();
+        Map<String, Object> card = drafts.updateHeader(DocumentType.RECEIPTS, docId,
+                Map.of("car_number", "999 ZZZ 02", "driver_name", "Ахметов А."));
+        assertEquals("ТОО «КазТранс»", header(card).get("carrier"), "транспорт при создании");
+        assertEquals("999 ZZZ 02", header(card).get("carNumber"));
+        assertEquals("Ахметов А.", header(card).get("driverName"));
+        assertEquals(null, header(card).get("transportState"), "из черновика в WMS ничего не уходит");
+    }
+
+    /** Без права на транспорт его поля в черновике не принимаются. */
+    @Test
+    void transportInDraftNeedsTheRight() {
+        signIn();
+        String docId = header(draft(Map.of())).get("docId").toString();
+        inContext("UPDATE dbo.user_settings SET can_edit_transport = false"
+                + " WHERE user_id = (SELECT user_id FROM dbo.app_user WHERE login = '" + USER + "')");
+        try {
+            signIn();
+            Map<String, Object> card = drafts.updateHeader(DocumentType.RECEIPTS, docId,
+                    Map.of("car_number", "999 ZZZ 02", "comment", "шапка пишется"));
+            assertEquals(null, header(card).get("carNumber"), "транспорт без права записался");
+            assertEquals("шапка пишется", header(card).get("comment"), "остальная шапка пишется");
+        } finally {
+            inContext("UPDATE dbo.user_settings SET can_edit_transport = true"
+                    + " WHERE user_id = (SELECT user_id FROM dbo.app_user WHERE login = '" + USER + "')");
+        }
+    }
+
+    /** Подтверждение: транспорт из черновика уходит вслед за документом. */
+    @Test
+    void transportFromDraftGoesWithConfirmation() {
+        signIn();
+        String withTransport = readyDraft(Map.of("car_number", "777 TRN 02"));
+        String without = readyDraft(Map.of());
+
+        Map<String, Object> sent = header(drafts.confirm(DocumentType.RECEIPTS, withTransport));
+        assertEquals("02", sent.get("statusCode"));
+        assertEquals("01", sent.get("transportState"));
+        assertNotNull(sent.get("transportSentAt"));
+
+        Map<String, Object> bare = header(drafts.confirm(DocumentType.RECEIPTS, without));
+        assertEquals("02", bare.get("statusCode"));
+        assertEquals(null, bare.get("transportState"), "пустой транспорт не отправляется");
+
+        expectRejection(409, () -> drafts.resendTransport(DocumentType.RECEIPTS, withTransport));
+    }
+
+    /** Черновик, который можно подтвердить, — с дополнительными полями шапки. */
+    private String readyDraft(Map<String, Object> more) {
+        String skuId = singleValue("SELECT sku_id::text FROM dbo.sku WHERE code = 'RK-ROG-01'");
+        String supplierId = singleValue(
+                "SELECT supplier_id::text FROM dbo.supplier WHERE code = 'SUP-001' LIMIT 1");
+        Map<String, Object> head = new java.util.LinkedHashMap<>(more);
+        head.put("warehouse_id", "WH-ALA");
+        head.put("eta_date", "2026-11-05");
+        head.put("supplier_id", supplierId);
+        String docId = header(draft(head)).get("docId").toString();
+        drafts.addLine(DocumentType.RECEIPTS, docId, Map.of("sku_id", skuId, "expected_qty", 5));
+        return docId;
     }
 
     @Test

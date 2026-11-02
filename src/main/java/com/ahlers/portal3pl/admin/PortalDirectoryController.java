@@ -31,8 +31,8 @@ import java.util.Map;
  *   GET|PUT|DELETE /api/admin/operator-directory/{id}      карточка, правка, удаление
  *   POST           /api/admin/operator-directory/{id}/archive
  *
- *   GET|POST       /api/admin/{order-types|receipt-doc-types}      список, создание
- *   PUT|DELETE     /api/admin/{order-types|receipt-doc-types}/{id} правка, удаление
+ * Перечисления (типы заказов и поступлений, единицы измерения и др.)
+ * с V95 ведёт {@link com.ahlers.portal3pl.i18n.EnumValueController}.
  * </pre>
  *
  * <p>Списки справочников лежат на путях с суффиксом -directory: адреса
@@ -45,8 +45,6 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/admin")
 public class PortalDirectoryController {
-
-    private static final String ENUMS = "{kind:order-types|receipt-doc-types}";
 
     private final PortalDirectoryService directory;
     private final SessionUser session;
@@ -168,36 +166,6 @@ public class PortalDirectoryController {
     public Map<String, Object> deleteOperator(@PathVariable String id, HttpServletRequest request) {
         directory.deleteOperator(actor(request), id);
         return Map.of("deleted", true);
-    }
-
-    /* ---- типы заказов и приходных документов ---- */
-
-    @GetMapping("/" + ENUMS)
-    public List<Map<String, Object>> enumRows(@PathVariable String kind, HttpServletRequest request) {
-        return directory.enumRows(actor(request), PortalDirectoryService.EnumKind.ofPath(kind));
-    }
-
-    @PostMapping("/" + ENUMS)
-    public List<Map<String, Object>> createEnumRow(@PathVariable String kind,
-                                                   @RequestBody PortalDirectoryService.EnumRow body,
-                                                   HttpServletRequest request) {
-        return directory.saveEnumRow(actor(request),
-                PortalDirectoryService.EnumKind.ofPath(kind), null, body);
-    }
-
-    @PutMapping("/" + ENUMS + "/{id}")
-    public List<Map<String, Object>> updateEnumRow(@PathVariable String kind, @PathVariable int id,
-                                                   @RequestBody PortalDirectoryService.EnumRow body,
-                                                   HttpServletRequest request) {
-        return directory.saveEnumRow(actor(request),
-                PortalDirectoryService.EnumKind.ofPath(kind), id, body);
-    }
-
-    @DeleteMapping("/" + ENUMS + "/{id}")
-    public List<Map<String, Object>> deleteEnumRow(@PathVariable String kind, @PathVariable int id,
-                                                   HttpServletRequest request) {
-        return directory.deleteEnumRow(actor(request),
-                PortalDirectoryService.EnumKind.ofPath(kind), id);
     }
 
     /** {"active": true|false}; отсутствие тела означает «в архив». */

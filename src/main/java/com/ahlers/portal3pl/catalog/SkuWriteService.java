@@ -324,11 +324,20 @@ public class SkuWriteService {
         depositorScope.apply();
         Map<String, List<Map<String, Object>>> out = new LinkedHashMap<>();
         for (Map<String, Object> row : jdbc.sql("""
-                        SELECT kind, id, name FROM dbo.v_sku_dictionaries
+                        SELECT kind, id, name,
+                               array_to_string(aliases, chr(31)) AS aliases
+                          FROM dbo.v_sku_dictionaries
                         ORDER BY kind, sort_order NULLS LAST, name
                         """).query().listOfRows()) {
-            out.computeIfAbsent(String.valueOf(row.get("kind")), k -> new ArrayList<>())
-                    .add(Map.of("id", row.get("id"), "name", row.get("name")));
+            // aliases — все написания значения на всех языках (V86): по ним
+            // загрузка Excel узнаёт «pcs» и «шт» как одну единицу
+            Map<String, Object> item = new java.util.LinkedHashMap<>();
+            item.put("id", row.get("id"));
+            item.put("name", row.get("name"));
+            Object aliases = row.get("aliases");
+            item.put("aliases", aliases == null ? List.of()
+                    : List.of(String.valueOf(aliases).split(String.valueOf((char) 31))));
+            out.computeIfAbsent(String.valueOf(row.get("kind")), k -> new ArrayList<>()).add(item);
         }
         // Группа и тип товара перестали быть справочниками (V38) — это
         // свободный текст. Но выпадающий список на экране остаётся

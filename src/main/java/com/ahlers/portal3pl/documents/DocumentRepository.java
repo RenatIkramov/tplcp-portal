@@ -41,11 +41,11 @@ public class DocumentRepository {
      */
     public List<Map<String, Object>> enumValues(String table) {
         String sql = """
-                SELECT id, code, name
+                SELECT id, code, dbo.enum_name('%s', id::text, name) AS name
                 FROM dbo.%s
                 WHERE COALESCE(is_active, true)
-                ORDER BY COALESCE(sort_order, id), name
-                """.formatted(table);
+                ORDER BY COALESCE(sort_order, id), 3
+                """.formatted(table, table);
         return SqlRows.toCamelCase(jdbc.sql(sql).query().listOfRows());
     }
 

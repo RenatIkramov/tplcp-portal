@@ -31,7 +31,8 @@ public class ListRepository {
     }
 
     public List<Map<String, Object>> page(ListKind kind, List<ListFilters.Condition> filters,
-                                          ListPaging.Page page, boolean withArchived) {
+                                          ListPaging.Page page, boolean withArchived,
+                                          String warehouse) {
         StringBuilder where = new StringBuilder();
         Map<String, Object> values = new LinkedHashMap<>();
 
@@ -40,6 +41,16 @@ public class ListRepository {
             n++;
             where.append("WHERE COALESCE(").append(kind.archiveColumn())
                     .append(", true)\n");
+        }
+        // Склад из шапки портала (V94). Колонки — из ListKind, не из адреса;
+        // значение — параметром. Списка без колонки склада он не касается.
+        if (warehouse != null && !kind.warehouseColumns().isEmpty()) {
+            n++;
+            where.append(n == 1 ? "WHERE (" : "  AND (")
+                    .append(String.join(" OR ", kind.warehouseColumns().stream()
+                            .map(c -> c + "::text = :__warehouse::text").toList()))
+                    .append(")\n");
+            values.put("__warehouse", warehouse);
         }
         for (ListFilters.Condition f : filters) {
             String name = "f" + n++;

@@ -122,9 +122,11 @@
     const rows = state.addresses;
     const table = rows.length
       ? '<div class="table-card" style="margin-top:4px;"><table><thead><tr>'
-        + '<th>' + T('partners.text.delivery_address') + '</th><th class="num">' + T('partners.text.order') + '</th><th>' + T('partners.text.default') + '</th>'
+        + '<th>' + T('partners.text.delivery_address') + '</th>'
+        + '<th>' + T('partners.column.address_contact') + '</th>'
+        + '<th class="num">' + T('partners.text.order') + '</th><th>' + T('partners.text.default') + '</th>'
         + (canEdit ? '<th></th>' : '') + '</tr></thead><tbody>'
-        + rows.map(a => '<tr><td>' + esc(a.address) + '</td><td class="num">'
+        + rows.map(a => '<tr><td>' + esc(a.address) + '</td><td>' + contactCell(a) + '</td><td class="num">'
             + dash(a.sortOrder) + '</td><td>'
             + (a.isDefault ? '★ ' + T('partners.text.default')
                 : (canEdit ? '<button class="btn ghost" onclick="portalAddressDefault(\'' + a.addressId
@@ -147,6 +149,11 @@
         + '<div class="kv"><label>' + T('partners.text.delivery_address2') + '</label><div><input class="kv-input" type="text"'
           + ' style="min-width:420px;" value="' + esc(f.address || '') + '" data-addr="address"'
           + ' oninput="portalAddressField(this)"/></div></div>'
+        + '<div class="kv"><label>' + T('partners.column.address_contact') + '</label><div><input class="kv-input" type="text"'
+          + ' style="min-width:420px;" maxlength="255" value="' + esc(f.contact || '') + '" data-addr="contact"'
+          + ' oninput="portalAddressField(this)"/>'
+          + '<div style="max-width:420px;margin-top:4px;font-size:11.5px;line-height:1.3;color:var(--muted);">'
+          + PORTAL.t('partners.hint.address_contact') + '</div></div></div>'
         + '<div class="kv"><label>' + T('partners.text.order') + '</label><div><input class="kv-input" type="number"'
           + ' value="' + esc(f.sortOrder === null || f.sortOrder === undefined ? '' : f.sortOrder)
           + '" data-addr="sortOrder" oninput="portalAddressField(this)"/></div></div>'
@@ -158,6 +165,20 @@
         + '<button class="btn" onclick="portalAddressAdd()">' + T('partners.text.add_address') + '</button></div>';
     }
     return table + form;
+  }
+
+  /**
+   * Контакт адреса в таблице (V83). Свой — как есть. Своего нет, но в заказ
+   * подставятся контакты грузополучателя — показываем их приглушённо: так
+   * видно, что окажется в заказе, и что у самого адреса поле пустое.
+   */
+  function contactCell(a){
+    if (a.contact) return esc(a.contact);
+    if (a.orderContact){
+      return '<span style="color:var(--muted);" title="' + esc(T('partners.hint.address_contact')) + '">'
+        + esc(a.orderContact) + '</span>';
+    }
+    return '—';
   }
 
   window.portalAddressField = function(el){
@@ -327,7 +348,8 @@
   window.portalAddressEdit = function(id){
     const a = state.addresses.find(x => x.addressId === id);
     if (!a) return;
-    state.addressForm = {addressId: id, values: {address: a.address, sortOrder: a.sortOrder}};
+    state.addressForm = {addressId: id,
+                         values: {address: a.address, sortOrder: a.sortOrder, contact: a.contact}};
     render();
   };
 

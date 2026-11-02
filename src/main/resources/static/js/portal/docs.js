@@ -15,14 +15,6 @@
 
   const num = v => v === null || v === undefined ? 0 : Number(v);
 
-  /** Код статуса из базы → класс бейджа демо (draft / warn / ok / err). */
-  const BADGE = {
-    draft: 'draft',
-    awaiting: 'warn', in_progress: 'warn', received: 'ok', discrepancy: 'err',
-    reserved: 'warn', picking: 'warn', shipped: 'ok', delayed: 'err',
-    forming: 'warn', in_transit: 'warn', form_error: 'err'
-  };
-
   /** 2026-09-01 → 01.09.2026 (формат, в котором даты показывает демо). */
   function ruDate(iso){
     if (!iso) return '—';
@@ -48,7 +40,7 @@
       erpNo: dash(r.erpNumber),
       erpNumber: dash(r.erpNumber),   // по нему работает поиск по номеру
       wmsNumber: dash(r.docNumber),
-      status: BADGE[r.statusCode] || 'warn',
+      status: PORTAL.statusBadge(r.statusCode),
       statusLabel: r.statusName || '',
       statusCode: r.statusCode,
       // Дата создания — отметка времени с V62, поэтому показываем её

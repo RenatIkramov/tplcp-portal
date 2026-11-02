@@ -641,10 +641,15 @@ class SkuImportTest extends PortalTestBase {
                 "в замечании названия единиц, а не идентификаторы: " + issues);
     }
 
-    /** Идентификатор единицы измерения по обозначению. */
+    /**
+     * Идентификатор единицы по обозначению на любом языке: базовое
+     * обозначение английское (V86), «шт» — русский перевод.
+     */
     private int unitId(String symbol) {
         return Integer.parseInt(singleValue(
-                "SELECT id::text FROM dbo.enum_uom WHERE symbol = '" + symbol + "'"));
+                "SELECT u.id::text FROM dbo.enum_uom u WHERE u.symbol = '" + symbol + "'"
+                + " OR EXISTS (SELECT 1 FROM dbo.enum_text t WHERE t.enum_key = 'enum_uom'"
+                + " AND t.value_id = u.id::text AND t.symbol = '" + symbol + "')"));
     }
 
     /** Применение: создание или обновление, как это делает экран. */
@@ -813,7 +818,7 @@ class SkuImportTest extends PortalTestBase {
         assertTrue(count("SELECT count(*)::text FROM dbo.excel_import_issue"
                 + " WHERE import_id = '" + importId + "'::uuid") > 0,
                 "замечания остались для журнала");
-        assertEquals("cancelled", singleValue("SELECT status FROM dbo.excel_import"
+        assertEquals("03", singleValue("SELECT status FROM dbo.excel_import"
                 + " WHERE import_id = '" + importId + "'::uuid"));
     }
 

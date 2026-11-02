@@ -16,7 +16,7 @@ import java.util.Map;
 
 /**
  * Ответы об ошибках в одном формате:
- * {"status": 409, "key": "error.unit.in_use", "params": {...},
+ * {"status": 409, "key": "error.enum.in_use", "params": {...},
  *  "message": "человеческий текст на языке вошедшего"}.
  * <p>
  * Зачем это нужно. Spring по умолчанию не включает текст ошибки в тело

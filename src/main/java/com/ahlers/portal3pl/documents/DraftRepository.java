@@ -1,5 +1,6 @@
 package com.ahlers.portal3pl.documents;
 
+import com.ahlers.portal3pl.common.EnumCodes;
 import com.ahlers.portal3pl.common.SqlCast;
 import com.ahlers.portal3pl.common.SqlRows;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -40,15 +41,15 @@ public class DraftRepository {
                                     origin, author_id, created_by, created_at)
                 VALUES (dbo.next_document_no(:type),
                         :depositorId::uuid,
-                        (SELECT id FROM dbo.enum_status
-                          WHERE object_type_id = :objectType AND code = 'draft'),
-                        now(), 'portal', :userId::uuid, :userId::uuid, now())
+                        (SELECT id FROM dbo.enum_status WHERE code = :draft),
+                        now(), :origin, :userId::uuid, :userId::uuid, now())
                 RETURNING doc_id::text
                 """.formatted(type.headerTable());
         return jdbc.sql(sql)
                 .param("type", type.path())
                 .param("depositorId", depositorId)
-                .param("objectType", type.objectTypeId())
+                .param("draft", DocumentStatus.DRAFT)
+                .param("origin", EnumCodes.Origin.PORTAL)
                 .param("userId", userId)
                 .query(String.class)
                 .single();
@@ -68,9 +69,8 @@ public class DraftRepository {
 
         String draftCondition = draftOnly
                 ? """
-                  AND origin = 'portal'
-                  AND status_id = (SELECT id FROM dbo.enum_status
-                                    WHERE object_type_id = :objectType AND code = 'draft')
+                  AND origin = :__origin
+                  AND status_id = (SELECT id FROM dbo.enum_status WHERE code = :__draft)
                   """
                 : "";
 
@@ -82,8 +82,11 @@ public class DraftRepository {
 
         var spec = jdbc.sql(sql)
                 .param("__docId", docId)
-                .param("__userId", userId)
-                .param("objectType", type.objectTypeId());
+                .param("__userId", userId);
+        if (draftOnly) {
+            spec = spec.param("__draft", DocumentStatus.DRAFT)
+                    .param("__origin", EnumCodes.Origin.PORTAL);
+        }
         for (var e : clean.entrySet()) {
             spec = spec.param(e.getKey(), e.getValue());
         }
@@ -93,13 +96,13 @@ public class DraftRepository {
     public int deleteDraft(DocumentType type, String docId) {
         String sql = """
                 DELETE FROM dbo.%s
-                WHERE doc_id = :docId::uuid AND origin = 'portal'
-                  AND status_id = (SELECT id FROM dbo.enum_status
-                                    WHERE object_type_id = :objectType AND code = 'draft')
+                WHERE doc_id = :docId::uuid AND origin = :origin
+                  AND status_id = (SELECT id FROM dbo.enum_status WHERE code = :draft)
                 """.formatted(type.headerTable());
         return jdbc.sql(sql)
                 .param("docId", docId)
-                .param("objectType", type.objectTypeId())
+                .param("draft", DocumentStatus.DRAFT)
+                .param("origin", EnumCodes.Origin.PORTAL)
                 .update();
     }
 
@@ -169,20 +172,51 @@ public class DraftRepository {
         return spec.update();
     }
 
-    /** Переводит документ в статус по коду. */
+    /** Переводит документ в статус по коду ({@link DocumentStatus}). */
     public void setStatus(DocumentType type, String docId, String statusCode, boolean markConfirmed) {
         String sql = """
                 UPDATE dbo.%s
-                   SET status_id = (SELECT id FROM dbo.enum_status
-                                     WHERE object_type_id = :objectType AND code = :statusCode),
+                   SET status_id = (SELECT id FROM dbo.enum_status WHERE code = :statusCode),
                        confirmed_at = CASE WHEN :markConfirmed THEN now() ELSE confirmed_at END,
                        updated_at = now()
                  WHERE doc_id = :docId::uuid
                 """.formatted(type.headerTable());
         jdbc.sql(sql)
-                .param("objectType", type.objectTypeId())
                 .param("statusCode", statusCode)
                 .param("markConfirmed", markConfirmed)
+                .param("docId", docId)
+                .update();
+    }
+
+    /**
+     * Заполнен ли транспорт хоть одним полем. «Рейс» не в счёт: он живёт
+     * и в шапке, и сам по себе транспортной сущности WMS не делает.
+     */
+    public boolean hasTransport(DocumentType type, String docId) {
+        String columns = DocumentType.transportColumns().stream()
+                .filter(c -> !"trip".equals(c))
+                .sorted()
+                .map(c -> "NULLIF(btrim(" + c + "::text), '')")
+                .collect(Collectors.joining(", "));
+        String sql = "SELECT num_nonnulls(%s) > 0 FROM dbo.%s WHERE doc_id = :docId::uuid"
+                .formatted(columns, type.headerTable());
+        return Boolean.TRUE.equals(jdbc.sql(sql).param("docId", docId)
+                .query(Boolean.class).optional().orElse(false));
+    }
+
+    /** Чем кончилась передача транспорта в WMS (V84): код {@link EnumCodes.Transport}. */
+    public void setTransportState(DocumentType type, String docId, String state, String error) {
+        String sql = """
+                UPDATE dbo.%s
+                   SET transport_state = :state,
+                       transport_sent_at = CASE WHEN :state = :sent THEN now() ELSE transport_sent_at END,
+                       transport_error = CASE WHEN :state = :sent THEN NULL ELSE :error END
+                 WHERE doc_id = :docId::uuid
+                """.formatted(type.headerTable());
+        jdbc.sql(sql)
+                .param("state", state)
+                .param("sent", EnumCodes.Transport.SENT)
+                .param("error", error == null ? "без пояснения" : error)
                 .param("docId", docId)
                 .update();
     }
@@ -203,6 +237,7 @@ public class DraftRepository {
                 SELECT h.doc_id::text, h.origin, h.document_no,
                        st.code AS status_code,
                        COALESCE(st.allows_transport_edit, false) AS allows_transport_edit,
+                       h.transport_state,
                        (SELECT COUNT(DISTINCT line_number) FROM dbo.%s d WHERE d.doc_id = h.doc_id) AS line_count,
                        (SELECT COUNT(*) FROM dbo.%s d
                           JOIN dbo.sku s ON s.sku_id = d.sku_id
@@ -290,13 +325,14 @@ public class DraftRepository {
                 INSERT INTO dbo.sync_run (entity, depositor_id, direction, trigger_source,
                                           started_at, finished_at, status, rows_received,
                                           rows_applied, error_message)
-                VALUES (:entity, :depositorId::uuid, 'portal_to_wms', 'manual',
+                VALUES (:entity, :depositorId::uuid, :direction, 'manual',
                         now(), now(), :status, 1, :applied, :error)
                 """)
                 .param("entity", type.path())
                 .param("depositorId", depositorId)
                 .param("status", status)
-                .param("applied", "success".equals(status) ? 1 : 0)
+                .param("direction", EnumCodes.SyncDirection.PORTAL_TO_WMS)
+                .param("applied", EnumCodes.SyncStatus.SUCCESS.equals(status) ? 1 : 0)
                 .param("error", error)
                 .update();
     }

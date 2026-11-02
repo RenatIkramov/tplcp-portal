@@ -54,9 +54,7 @@ class ServerMessagesTest extends PortalTestBase {
      */
     private static final Map<String, List<String>> BUILT_FROM_PARTS = Map.of(
             "error.supplier", List.of("not_found", "code_taken", "in_use", "create_field_required"),
-            "error.consignee", List.of("not_found", "code_taken", "in_use", "create_field_required"),
-            "error.order_type", List.of("not_found", "code_taken", "in_use"),
-            "error.receipt_doc_type", List.of("not_found", "code_taken", "in_use"));
+            "error.consignee", List.of("not_found", "code_taken", "in_use", "create_field_required"));
 
     @Test
     void rejectionsCarryKeyNotText() {

@@ -62,6 +62,23 @@ class SkuDirectoryTest extends PortalTestBase {
         assertEquals(List.of(), card.get("packagings"));
     }
 
+    /**
+     * Учёт партий и сроков — логические признаки (V91): карточка
+     * присылает истину и ложь, в базе лежат они же, а не слово на языке
+     * того, кто сохранял.
+     */
+    @Test
+    void trackingFlagsAreBooleans() {
+        signIn();
+        Map<String, Object> card = sku.createSku(Map.of(
+                "code", PREFIX + "TRK", "name", "Учёт партий", "uom_id", 1,
+                "batch_tracking", true, "expiry_tracking", false));
+        assertEquals(Boolean.TRUE, card.get("batchTracking"));
+        assertEquals(Boolean.FALSE, card.get("expiryTracking"));
+        assertEquals("true|false", singleValue("SELECT batch_tracking::text || '|' || expiry_tracking::text"
+                + " FROM dbo.sku WHERE code = '" + PREFIX + "TRK'"));
+    }
+
     @Test
     void itemWithoutNameRejected() {
         signIn();

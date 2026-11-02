@@ -57,19 +57,11 @@ public class SkuImportColumns {
         public String columnId() {
             return field == null ? null : field.catalogId();
         }
-
-        public String dbColumn() {
-            return field == null ? null : field.column();
-        }
     }
 
     /** Результат опознания шапки файла. */
     public record Layout(List<Column> columns, List<String> unrecognized,
                          Map<String, Column> byDbColumn) {
-
-        public Column of(String dbColumn) {
-            return byDbColumn.get(dbColumn);
-        }
 
         public boolean has(String dbColumn) {
             return byDbColumn.containsKey(dbColumn);
