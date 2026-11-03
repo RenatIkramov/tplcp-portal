@@ -71,6 +71,8 @@
     // Качество строки заказа (V89): код и имя на языке пользователя.
     // Прототип строит из него список в окне строки (setOrderLineQuality).
     PORTAL.qualities = (types.qualities || []).map(x => ({code: x.code, name: x.name}));
+    // Тип транспорта (V97): в документе хранится код
+    refs.transportTypes = (types.transportTypes || []).map(x => ({value: x.code, text: x.name}));
 
     // Окно ввода строки ищет товар в массиве products — наполняем его
     // настоящей номенклатурой, чтобы поиск работал по данным базы.
@@ -297,17 +299,17 @@
       rf_erpNo:'erp_number', rf_warehouse:'warehouse_id', rf_supplier:'supplier_id',
       rf_docType:'doc_type_id', rf_eta:'eta_date',
       rf_accompanyingDocNumber:'accompanying_doc_number', rf_invoiceNumber:'invoice_number',
-      rf_gtd:'gtd', rf_comment:'comment', rf_trip:'trip'
+      rf_gtd:'gtd', rf_comment:'comment'
     },
     orders: {
       of_erpNo:'erp_number', of_warehouse:'warehouse_id', of_consignee:'consignee_id',
       of_deliveryAddress:'delivery_point_id', of_consigneeContact:'consignee_contact',
       of_orderType:'order_type_id', of_plannedShip:'planned_ship_date',
-      of_deliveryDate:'delivery_date', of_comment:'comment', of_trip:'trip'
+      of_comment:'comment'
     },
     transfers: {
       tf_erpNo:'erp_number', tf_fromWarehouse:'from_warehouse_id',
-      tf_toWarehouse:'to_warehouse_id', tf_comment:'comment', tf_trip:'trip'
+      tf_toWarehouse:'to_warehouse_id', tf_comment:'comment'
     }
   };
 
@@ -350,8 +352,11 @@
    * карточка перерисовывается при каждом переключении вкладки, и правка
    * «после» отваливалась бы каждый раз.
    */
+  // Рейс и дата доставки — тоже WMS (решение заказчика от 02.11.2026, V97):
+  // сервер их больше не принимает ни в черновике, ни после отправки.
   const READ_ONLY = {
-    common: ['date', 'lineCount', 'totalPieces', 'palletCount', 'cargoPlaces', 'weight', 'volume'],
+    common: ['date', 'lineCount', 'totalPieces', 'palletCount', 'cargoPlaces', 'weight', 'volume',
+             'trip', 'deliveryDate'],
     transfers: ['shipDate']
   };
 
@@ -522,7 +527,11 @@
       // строки, созданные окном демо, несут код товара, а не идентификатор
       const skuId = l.skuId || (refs.skuByCode[l.code] && refs.skuByCode[l.code].skuId);
       const line = {sku_id: skuId, line_comment: l.lineComment || null};
-      if (type === 'receipts') line.expected_qty = Number(l.expected);
+      if (type === 'receipts') {
+        line.expected_qty = Number(l.expected);
+        // качество строки поступления (V100) — код, как в заказе
+        if (typeof orderLineQuality === 'function') line.quality = orderLineQuality(l);
+      }
       else if (type === 'orders') {
         line.ordered_qty = Number(l.ordered);
         if (l.weight) line.weight_kg = Number(l.weight);
@@ -532,7 +541,12 @@
       }
       // У перемещения одно количество и нет цены: товар не меняет
       // владельца, меняется только место хранения.
-      else { line.qty = Number(l.qty); return line; }
+      else {
+        line.qty = Number(l.qty);
+        // качество строки перемещения (V101): что перемещать — годный, брак…
+        if (typeof orderLineQuality === 'function') line.quality = orderLineQuality(l);
+        return line;
+      }
       if (l.price !== null && l.price !== undefined && l.price !== '') {
         line.price = Number(l.price);
         // Валюта берётся из карточки товара. Раньше здесь стояла единица —
@@ -577,7 +591,9 @@
       trip: h.trip || '', lineCount: h.lineCount || 0, totalPieces: h.totalPieces || 0,
       weight: h.weightKg || '', volume: h.volumeM3 || '',
       palletCount: h.palletCount || '', cargoPlaces: h.cargoPlaces || '',
-      carrier: h.carrier || '', transportType: h.transportType || '', transportBrand: h.transportBrand || '',
+      // тип транспорта — код перечисления (V97), имя — на языке пользователя
+      carrier: h.carrier || '', transportType: h.transportType || '',
+      transportTypeName: dash(h.transportTypeName), transportBrand: h.transportBrand || '',
       carNumber: h.carNumber || '', trailerNumber: h.trailerNumber || '',
       techPassportNumber: h.techPassportNumber || '', containerNumber: h.containerNumber || '',
       sealNumber: h.sealNumber || '', driverName: h.driverName || '', driverPhone: h.driverPhone || '',
@@ -629,17 +645,20 @@
     totalCount.lines = (card.lines || []).map(l => ({
       skuId: l.skuId, code: l.skuCode, name: l.skuName, unit: l.unitName || '',
       skuInWms: l.skuInWms !== false,
-      expected: l.expectedQty, expectedWms: l.expectedQtyWms ?? l.expectedQty,
+      // Количества WMS заполняет WMS: у черновика их нет, и подставлять
+      // сюда своё количество значило бы выдать обещание за ответ склада
+      // (замечание заказчика от 02.11.2026).
+      expected: l.expectedQty, expectedWms: l.expectedQtyWms ?? '—',
       // у черновика фактических количеств ещё нет — показываем прочерк, а не пустоту
       accepted: l.acceptedQty ?? '—', defect: l.defectQty ?? '—',
-      ordered: l.orderedQty, orderedWms: l.orderedQtyWms ?? l.orderedQty,
+      ordered: l.orderedQty, orderedWms: l.orderedQtyWms ?? '—',
       picked: l.pickedQty ?? '—', weight: l.weightKg ?? '—',
       // у перемещения своё имя количества: не «ожидается» и не «заказано»,
       // а просто «кол-во». Без него состав возвращался с экрана пустым,
       // и добавленная строка показывалась нулём.
-      qty: l.qty, qtyWms: l.qtyWms ?? l.qty,
+      qty: l.qty, qtyWms: l.qtyWms ?? '—',
       price: l.price, currency: l.currencyCode, lineComment: l.lineComment === '—' ? '' : (l.lineComment || ''),
-      // качество строки заказа — код (V89); у старых строк его нет — значит годный
+      // качество строки — код (заказ V89, поступление V100, перемещение V101); нет — значит годный
       quality: l.qualityCode || undefined,
       lineNumber: l.lineNumber
     }));
@@ -763,13 +782,22 @@
       };
     };
 
+    // Тип транспорта — перечисление (V97): выбирается списком, хранится код.
+    // Список и после отправки, если статус разрешает править транспорт.
+    function transportTypeRule(prefix, table){
+      return {id: prefix + '_transportType', key: 'col.' + table + '.transportType',
+              value: 'transportType', name: 'transportTypeName',
+              options: () => refs.transportTypes || []};
+    }
+
     wrap('fcReceiptSpecialFieldHtml', 'receipts', {
       warehouse: {id:'rf_warehouse', key:'sku.label.warehouse', value:'warehouse', name:'warehouseName',
                   options:() => refs.warehouses},
       supplier:  {id:'rf_supplier', key:'col.receipts.supplier', value:'supplier', name:'supplierName',
                   options:() => refs.suppliers},
       docType:   {id:'rf_docType', key:'col.receipts.docType', value:'docType', name:'docTypeName',
-                  options:() => refs.docTypes}
+                  options:() => refs.docTypes},
+      transportType: transportTypeRule('rf', 'receipts')
     });
     // У перемещения два склада, и получателем не предлагаем тот,
     // который уже выбран отправителем: сервер такой документ всё равно
@@ -791,7 +819,8 @@
                       options:doc => otherWarehouses('tf_toWarehouse', doc.fromWarehouse)},
       toWarehouse:   {id:'tf_toWarehouse', key:'col.transfers.toWarehouse',
                       value:'toWarehouse', name:'toWarehouseName',
-                      options:doc => otherWarehouses('tf_fromWarehouse', doc.toWarehouse)}
+                      options:doc => otherWarehouses('tf_fromWarehouse', doc.toWarehouse)},
+      transportType: transportTypeRule('tf', 'transfers')
     });
     wrap('fcOrderSpecialFieldHtml', 'orders', {
       warehouse: {id:'of_warehouse', key:'sku.label.warehouse', value:'warehouse', name:'warehouseName',
@@ -807,7 +836,8 @@
                         options:doc => addressOptions(doc.consignee),
                         onchange:'portalOrderAddressChanged()'},
       orderType: {id:'of_orderType', key:'col.orders.orderType', value:'orderType', name:'orderTypeName',
-                  options:() => refs.orderTypes}
+                  options:() => refs.orderTypes},
+      transportType: transportTypeRule('of', 'orders')
     });
   }
 
@@ -880,9 +910,10 @@
       allowsTransportEdit: false, hasUnknownSku: false, problems: [],
       transportState: null, transportSentAt: null, transportError: '',
       // Склад из шапки портала (V94) — сразу в черновик: человек уже
-      // сказал, с каким складом работает
-      warehouse: PORTAL.warehouse || '',
-      warehouseName: (PORTAL.warehouse && PORTAL.warehouseName(PORTAL.warehouse)) || '—',
+      // сказал, с каким складом работает. Склад у поклажедателя один —
+      // он и подставляется (03.11.2026): выбирать из одного незачем.
+      warehouse: presetWarehouse() || '',
+      warehouseName: (presetWarehouse() && PORTAL.warehouseName(presetWarehouse())) || '—',
       lines: [], items: 0
     };
     for (let i = 1; i <= 10; i++){
@@ -902,13 +933,20 @@
     return doc;
   }
 
+  /** Склад, который новый черновик получает сам: из шапки портала или единственный. */
+  function presetWarehouse(){
+    if (PORTAL.warehouse) return PORTAL.warehouse;
+    const all = PORTAL.warehouses || [];
+    return all.length === 1 ? all[0].id : '';
+  }
+
   /** Есть ли что терять: заполнено ли хоть одно поле или добавлена строка. */
   function hasData(type){
     if ((compositionOf(type) || []).length) return true;
     const header = collectHeader(type);
     // Склад, подставленный из шапки (V94), — не набранное человеком:
     // закрыть пустой черновик можно, не отвечая «потерять изменения?»
-    const preset = PORTAL.warehouse || null;
+    const preset = presetWarehouse() || null;
     return Object.entries(header).some(([column, v]) => v !== null && v !== ''
         && !((column === 'warehouse_id' || column === 'from_warehouse_id') && v === preset));
   }
@@ -1118,7 +1156,7 @@
   async function saveTransport(type){
     const ref = refOf(type);
     if (!ref) return;
-    const fields = ['trip','carrier','transportType','transportBrand','carNumber','trailerNumber',
+    const fields = ['carrier','transportType','transportBrand','carNumber','trailerNumber',
                   'techPassportNumber','containerNumber','sealNumber',
                   'driverName','driverPhone','driverIdNumber','driverInn'];
     const prefix = EXTRA_PREFIX[type] + '_';

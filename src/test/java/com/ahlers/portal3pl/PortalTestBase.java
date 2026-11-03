@@ -154,6 +154,21 @@ public abstract class PortalTestBase {
                         .single());
     }
 
+    /**
+     * Шапка черновика с номером ERP: без него черновик не сохраняется,
+     * а номер не должен повторяться (V98). Свой номер — у каждого вызова.
+     */
+    protected static Map<String, Object> withErp(Map<String, Object> header) {
+        Map<String, Object> out = new java.util.LinkedHashMap<>(header);
+        out.putIfAbsent("erp_number", uniqueErp());
+        return out;
+    }
+
+    /** Номер ERP, который заведомо ещё не занят. */
+    protected static String uniqueErp() {
+        return "QA-" + java.util.UUID.randomUUID().toString().substring(0, 12);
+    }
+
     protected void signIn() {
         signInAs(USER, DEPOSITOR);
     }
@@ -234,5 +249,65 @@ public abstract class PortalTestBase {
                     .param("id", depositorId(USER, DEPOSITOR)).query(String.class).single();
             jdbc.sql(sql).update();
         });
+    }
+
+    /**
+     * Запомнить настройки колонок поклажедателя по таблице и вернуть
+     * функцию, которая их восстановит — ровно как были, а не «как
+     * у портала». Тест, который закрывает поля, иначе стирал бы то, что
+     * человек настроил в «Доступах» для живой проверки.
+     */
+    protected Runnable keepDepositorColumns(String tableKey) {
+        List<Map<String, Object>> saved = new TransactionTemplate(txManager).execute(tx -> {
+            jdbc.sql("SELECT set_config('app.depositor_id', :id, true)")
+                    .param("id", depositorId(USER, DEPOSITOR)).query(String.class).single();
+            return jdbc.sql("SELECT column_id, is_available, is_default, sort_order"
+                            + " FROM dbo.depositor_table_column WHERE table_key = :t")
+                    .param("t", tableKey).query().listOfRows();
+        });
+        return () -> new TransactionTemplate(txManager).executeWithoutResult(tx -> {
+            jdbc.sql("SELECT set_config('app.depositor_id', :id, true)")
+                    .param("id", depositorId(USER, DEPOSITOR)).query(String.class).single();
+            jdbc.sql("DELETE FROM dbo.depositor_table_column WHERE table_key = :t")
+                    .param("t", tableKey).update();
+            for (Map<String, Object> r : saved) {
+                jdbc.sql("INSERT INTO dbo.depositor_table_column"
+                                + " (depositor_id, table_key, column_id, is_available, is_default, sort_order)"
+                                + " VALUES (dbo.current_depositor_id(), :t, :c, :a, :d, :o)")
+                        .param("t", tableKey)
+                        .param("c", r.get("column_id"))
+                        .param("a", r.get("is_available"))
+                        .param("d", r.get("is_default"))
+                        .param("o", r.get("sort_order"))
+                        .update();
+            }
+        });
+    }
+
+    /**
+     * Запрос под контекстом поклажедателя «Рога и Копыта» — так, как его
+     * видит экран. Без контекста {@code table_columns} отдаёт и колонки,
+     * закрытые поклажедателю, и подписи без его переименований, — и
+     * проверки ругались на правильный экран, стоило настроить
+     * «Доступы» для живой проверки (03.11.2026).
+     */
+    protected <T> T inDepositorContext(java.util.function.Supplier<T> query) {
+        return new TransactionTemplate(txManager).execute(tx -> {
+            jdbc.sql("SELECT set_config('app.depositor_id', :id, true)")
+                    .param("id", depositorId(USER, DEPOSITOR)).query(String.class).single();
+            return query.get();
+        });
+    }
+
+    /** Подпись колонки так, как её видит клиент: с переименованием поклажедателя. */
+    protected String columnLabel(String table, String columnId) {
+        return inDepositorContext(() -> jdbc
+                .sql("SELECT label FROM dbo.table_columns(:user::uuid, 'ru'::text, :table::text)"
+                        + " WHERE column_id = :column::text")
+                .param("user", userId(USER))
+                .param("table", table)
+                .param("column", columnId)
+                .query(String.class)
+                .single());
     }
 }

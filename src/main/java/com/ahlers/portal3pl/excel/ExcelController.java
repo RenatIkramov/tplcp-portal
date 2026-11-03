@@ -1,6 +1,7 @@
 package com.ahlers.portal3pl.excel;
 
 import com.ahlers.portal3pl.auth.PortalUser;
+import com.ahlers.portal3pl.documents.DocumentType;
 import com.ahlers.portal3pl.auth.SessionUser;
 import com.ahlers.portal3pl.common.Fail;
 import com.ahlers.portal3pl.config.CurrentUser;
@@ -24,7 +25,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
 /**
- * Excel: шаблоны и загрузка из файла — товары и упаковки.
+ * Excel: шаблоны и загрузка из файла — товары, упаковки и заказ.
  * <pre>
  *   GET    /api/sku/excel-template        шаблон для загрузки товаров
  *   POST   /api/sku/excel-import          разобрать и проверить файл
@@ -39,6 +40,13 @@ import java.util.Map;
  *   DELETE /api/packaging/excel-import/{id}
  *   POST   /api/packaging/excel-import/{id}/create
  *   POST   /api/packaging/excel-import/{id}/update
+ *
+ *   GET    /api/orders/excel-template     шаблон заказа (V96)
+ *   POST   /api/orders/excel-import       заказ из файла → черновик или ошибки
+ *   GET    /api/receipts/excel-template   шаблон поступления (V100)
+ *   POST   /api/receipts/excel-import     поступление из файла → черновик или ошибки
+ *   GET    /api/transfers/excel-template  шаблон перемещения (V101)
+ *   POST   /api/transfers/excel-import    перемещение из файла → черновик или ошибки
  * </pre>
  *
  * <p>Адреса упаковок не делят пути с адресами товаров, хотя служба под
@@ -62,19 +70,76 @@ public class ExcelController {
     private final SkuImportService imports;
     private final PackagingTemplateService packagingTemplate;
     private final PackagingImportService packagingImports;
+    private final DocumentTemplateService documentTemplate;
+    private final DocumentImportService documentImports;
     private final SessionUser session;
     private final CurrentUser current;
 
     public ExcelController(SkuTemplateService template, SkuImportService imports,
                            PackagingTemplateService packagingTemplate,
                            PackagingImportService packagingImports,
+                           DocumentTemplateService documentTemplate,
+                           DocumentImportService documentImports,
                            SessionUser session, CurrentUser current) {
         this.template = template;
         this.imports = imports;
         this.packagingTemplate = packagingTemplate;
         this.packagingImports = packagingImports;
+        this.documentTemplate = documentTemplate;
+        this.documentImports = documentImports;
         this.session = session;
         this.current = current;
+    }
+
+    /** Шаблон заказа (V96): право «может создавать заказы» проверяет служба. */
+    @GetMapping("/api/orders/excel-template")
+    public ResponseEntity<Resource> orderTemplate(HttpServletRequest request) {
+        return download(documentTemplate.build(session.requireUser(request), DocumentType.ORDERS));
+    }
+
+    /**
+     * Заказ из файла: ошибок нет — создан черновик ({@code ok, docId,
+     * documentNo}), есть — их список ({@code ok: false, issues}).
+     * Ответ 200 в обоих случаях: ошибки в файле — результат разбора,
+     * а не сбой запроса.
+     */
+    @PostMapping("/api/orders/excel-import")
+    public Map<String, Object> orderImport(@RequestParam("file") MultipartFile file,
+                                           HttpServletRequest request) {
+        return documentImport(DocumentType.ORDERS, file, request);
+    }
+
+    /** Шаблон поступления (V100): право «может создавать поступления» проверяет служба. */
+    @GetMapping("/api/receipts/excel-template")
+    public ResponseEntity<Resource> receiptTemplate(HttpServletRequest request) {
+        return download(documentTemplate.build(session.requireUser(request), DocumentType.RECEIPTS));
+    }
+
+    /** Поступление из файла — ответ тот же, что у заказа. */
+    @PostMapping("/api/receipts/excel-import")
+    public Map<String, Object> receiptImport(@RequestParam("file") MultipartFile file,
+                                             HttpServletRequest request) {
+        return documentImport(DocumentType.RECEIPTS, file, request);
+    }
+
+    /** Шаблон перемещения (V101): право «может создавать перемещения» проверяет служба. */
+    @GetMapping("/api/transfers/excel-template")
+    public ResponseEntity<Resource> transferTemplate(HttpServletRequest request) {
+        return download(documentTemplate.build(session.requireUser(request), DocumentType.TRANSFERS));
+    }
+
+    /** Перемещение из файла — ответ тот же, что у заказа. */
+    @PostMapping("/api/transfers/excel-import")
+    public Map<String, Object> transferImport(@RequestParam("file") MultipartFile file,
+                                              HttpServletRequest request) {
+        return documentImport(DocumentType.TRANSFERS, file, request);
+    }
+
+    private Map<String, Object> documentImport(DocumentType type, MultipartFile file,
+                                               HttpServletRequest request) {
+        PortalUser user = session.requireUser(request);
+        return documentImports.importFile(user, type, file == null ? null : file.getOriginalFilename(),
+                bytesOf(file));
     }
 
     @GetMapping("/api/sku/excel-template")

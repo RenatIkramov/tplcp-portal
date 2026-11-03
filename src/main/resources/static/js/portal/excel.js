@@ -75,6 +75,15 @@
     downloadTemplate(btn, '/api/sku/excel-template', 'common.text.sku_template_file_name');
   window.portalDownloadPackagingTemplate = btn =>
     downloadTemplate(btn, '/api/packaging/excel-template', 'common.text.packaging_template_file_name');
+  // Заказ из Excel (V96): тот же отклик на нажатие, что у справочников
+  window.portalDownloadOrderTemplate = btn =>
+    downloadTemplate(btn, '/api/orders/excel-template', 'orders.text.order_template_file_name');
+  // Поступление из Excel (V100)
+  window.portalDownloadReceiptTemplate = btn =>
+    downloadTemplate(btn, '/api/receipts/excel-template', 'receipts.text.receipt_template_file_name');
+  // Перемещение из Excel (V101)
+  window.portalDownloadTransferTemplate = btn =>
+    downloadTemplate(btn, '/api/transfers/excel-template', 'transfers.text.transfer_template_file_name');
 
   /**
    * Кнопки «Скачать шаблон Excel» в товарах и упаковках.

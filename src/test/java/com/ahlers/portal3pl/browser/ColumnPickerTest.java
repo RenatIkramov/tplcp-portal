@@ -45,13 +45,19 @@ class ColumnPickerTest extends BrowserTestBase {
         // отличается от подписи справочника. Подпись — то, что человек
         // читает; тождество колонки — её идентификатор, и сверять надо
         // его, иначе проверка ругается на работающий экран.
-        List<String> expected = jdbc.sql("""
+        //
+        // Справочник спрашивается под контекстом поклажедателя — как его
+        // спрашивает экран. Без контекста table_columns отдаёт и колонки,
+        // закрытые поклажедателю в «Доступах», и проверка ругалась на
+        // правильный экран, стоило закрыть клиенту хоть одно поле
+        // (замечание от 03.11.2026).
+        List<String> expected = inDepositorContext(() -> jdbc.sql("""
                         SELECT column_id FROM dbo.table_columns(
                                  :user::uuid, 'ru'::text, 'receipts'::text)
                         """)
                 .param("user", userId(USER))
                 .query(String.class)
-                .list();
+                .list());
         assertTrue(expected.size() > 30,
                 "в справочнике колонок поступлений подозрительно мало строк: " + expected.size());
 
@@ -66,8 +72,11 @@ class ColumnPickerTest extends BrowserTestBase {
                         + missing);
 
         // Названы отдельно: именно на них поломка и выходила наружу.
+        // Проверяются, если открыты поклажедателю: закрытой в окне и не место.
         for (String id : List.of("trip", "customField1")) {
-            assertTrue(offered.contains(id), "в окне нет колонки " + id);
+            if (expected.contains(id)) {
+                assertTrue(offered.contains(id), "в окне нет колонки " + id);
+            }
         }
 
         // И подпись у каждой строки человеческая, а не сырой ключ:
@@ -123,7 +132,7 @@ class ColumnPickerTest extends BrowserTestBase {
         page.waitForTimeout(300);
 
         List<String> head = headers("receiptsHead");
-        int column = head.indexOf(label("receipts", "trip"));
+        int column = head.indexOf(columnLabel("receipts", "trip"));
         assertTrue(column >= 0, "колонка «Рейс» не появилась в заголовке: " + head);
 
         boolean found = Boolean.TRUE.equals(page.evaluate("""
@@ -160,14 +169,14 @@ class ColumnPickerTest extends BrowserTestBase {
         page.waitForFunction(
                 "() => document.querySelectorAll('#packagingHead th').length > 0");
 
-        List<String> expected = jdbc.sql("""
+        List<String> expected = inDepositorContext(() -> jdbc.sql("""
                         SELECT label FROM dbo.table_columns(
                                  :user::uuid, 'ru'::text, 'packaging'::text)
                          WHERE is_visible ORDER BY sort_order
                         """)
                 .param("user", userId(USER))
                 .query(String.class)
-                .list();
+                .list());
         assertTrue(expected.size() >= 13,
                 "в справочнике колонок упаковок мало строк: " + expected.size());
 
@@ -198,7 +207,7 @@ class ColumnPickerTest extends BrowserTestBase {
                     """);
             page.waitForFunction("want => !Array.from(document.querySelectorAll('#packagingHead th'))"
                     + ".some(th => th.textContent.trim().startsWith(want))",
-                    label("packaging", "barcode"));
+                    columnLabel("packaging", "barcode"));
 
             // Строки обязаны потерять ту же клетку: иначе данные
             // разъедутся с заголовком на одну колонку.
@@ -243,16 +252,6 @@ class ColumnPickerTest extends BrowserTestBase {
                         .map(e => e.textContent.trim())
                 """);
         return out;
-    }
-
-    private String label(String table, String columnId) {
-        return jdbc.sql("SELECT label FROM dbo.table_columns(:user::uuid, 'ru'::text, :table::text)"
-                        + " WHERE column_id = :column::text")
-                .param("user", userId(USER))
-                .param("table", table)
-                .param("column", columnId)
-                .query(String.class)
-                .single();
     }
 
     private PortalUser signedInUser() {

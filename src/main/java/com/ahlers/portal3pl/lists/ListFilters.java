@@ -228,6 +228,14 @@ public class ListFilters {
                             """)
                     .param("objectType", objectTypeId)
                     .query().listOfRows());
+            // тип транспорта (V97): в документе лежит код, по коду и отбор
+            case "enum_transport_type" -> SqlRows.toCamelCase(jdbc.sql("""
+                            SELECT code AS value,
+                                   dbo.enum_name('enum_transport_type', id::text, name) AS label
+                              FROM dbo.enum_transport_type
+                             WHERE is_active ORDER BY sort_order, 2
+                            """)
+                    .query().listOfRows());
             case "enum_order_type", "enum_receipt_doc_type" -> SqlRows.toCamelCase(jdbc
                     // имя — на языке пользователя (V86): варианты фильтра
                     // должны совпадать с тем, что написано в списке

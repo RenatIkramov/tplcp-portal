@@ -2,6 +2,7 @@ package com.ahlers.portal3pl.browser;
 
 import com.ahlers.portal3pl.auth.PortalUser;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -75,25 +76,35 @@ class DraftHeaderTest extends BrowserTestBase {
         signInUiAsClient();
         createDraft();
 
+        // Доп. поля, которые поклажедатель закрыл в «Доступах», в карточке
+        // не рисуются (03.11.2026). Проверка берёт открытые — до трёх, —
+        // а не поля 1–3: в рабочей базе часть полей бывает закрыта.
+        waitForColumns("orders");
+        boolean anyOpen = (Boolean) page.evaluate("() => fcExtraInfoFields('orders').length > 0");
+        Assumptions.assumeTrue(anyOpen, "у поклажедателя закрыты все доп. поля заказа — сохранять нечего");
         openExtraTab();
-        page.evaluate("""
-                () => {
-                  for (let i = 1; i <= 3; i++){
-                    const el = document.getElementById('of_customField' + i);
-                    if (el) el.value = 'доп ' + i;
-                  }
-                }
+        @SuppressWarnings("unchecked")
+        List<String> ids = (List<String>) page.evaluate("""
+                () => Array.from(document.querySelectorAll('[id^="of_customField"]'))
+                           .slice(0, 3).map(el => el.id)
                 """);
+        page.evaluate("""
+                ids => ids.forEach((id, n) => { document.getElementById(id).value = 'доп ' + (n + 1); })
+                """, ids);
         save();
         openExtraTab();
 
         Object stored = page.evaluate("""
-                () => [1, 2, 3].map(i => {
-                  const el = document.getElementById('of_customField' + i);
+                ids => ids.map(id => {
+                  const el = document.getElementById(id);
                   return el ? String(el.value || '') : '(поля нет)';
                 })
-                """);
-        assertEquals(List.of("доп 1", "доп 2", "доп 3"), stored,
+                """, ids);
+        List<String> expected = new java.util.ArrayList<>();
+        for (int n = 1; n <= ids.size(); n++) {
+            expected.add("доп " + n);
+        }
+        assertEquals(expected, stored,
                 "дополнительная информация не сохранилась: " + stored);
         assertNoJsErrors();
     }
@@ -141,7 +152,7 @@ class DraftHeaderTest extends BrowserTestBase {
 
     private void openExtraTab() {
         page.evaluate("() => fcSwitchDocTab('orders', 'Дополнительная информация')");
-        page.waitForSelector("#of_customField1");
+        page.waitForSelector("[id^=\"of_customField\"]");
     }
 
     private void checkHeaderOf(String docType) {
@@ -215,6 +226,9 @@ class DraftHeaderTest extends BrowserTestBase {
     private void createDraft() {
         page.evaluate("() => " + action(0) + "()");
         page.waitForFunction("() => !!" + action(3));
+        // Номер ERP обязателен и уникален (V98): ставится сразу, пока
+        // поле на экране, — потом тест может уйти на другую вкладку.
+        fillErp(type);
     }
 
     /**
@@ -232,6 +246,9 @@ class DraftHeaderTest extends BrowserTestBase {
                   Object.keys(fields).forEach(id => {
                     const el = document.getElementById(id);
                     if (!el || el.disabled || el.readOnly) return;
+                    // номер ERP уже уникальный (createDraft), «проверка шапки»
+                    // совпала бы с соседним тестом
+                    if (id.endsWith('_erpNo')) return;
                     if (el.tagName === 'SELECT'){
                       const real = Array.from(el.options).filter(o => o.value !== '');
                       if (!real.length) return;

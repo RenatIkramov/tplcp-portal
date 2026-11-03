@@ -127,9 +127,12 @@ public enum DocumentType implements ListKind {
         //   volume_m3     — это измеренные склада́ми факты, они приходят
         //                   из WMS. Портал их показывает, но не задаёт:
         //                   иначе в документе соседствовали бы «сколько
-        //                   обещали» и «сколько приняли» под одним именем.
+        //                   обещали» и «сколько приняли» под одним именем;
+        //   trip,
+        //   delivery_date — рейс и дата доставки тоже данные WMS
+        //                   (решение заказчика от 02.11.2026, V97).
         java.util.Set<String> common = new java.util.LinkedHashSet<>(java.util.List.of(
-                "erp_number", "comment", "trip",
+                "erp_number", "comment",
                 "custom_field_1", "custom_field_2", "custom_field_3", "custom_field_4",
                 "custom_field_5", "custom_field_6", "custom_field_7", "custom_field_8",
                 "custom_field_9", "custom_field_10"));
@@ -139,7 +142,7 @@ public enum DocumentType implements ListKind {
                     "accompanying_doc_number", "invoice_number", "gtd"));
             case ORDERS -> common.addAll(java.util.List.of(
                     "warehouse_id", "consignee_id", "delivery_point_id", "consignee_contact",
-                    "order_type_id", "planned_ship_date", "delivery_date"));
+                    "order_type_id", "planned_ship_date"));
             // Дату отгрузки перемещения портал не задаёт: её ставит склад,
             // когда действительно отгружает. Поэтому её нет и среди
             // обязательных для подтверждения — требовать то, чего нельзя
@@ -150,12 +153,17 @@ public enum DocumentType implements ListKind {
         return common;
     }
 
-    /** Транспортный блок — общий для всех типов, правится по своим правилам (Р5). */
+    /**
+     * Транспортный блок — общий для всех типов, правится по своим правилам (Р5).
+     *
+     * <p>Рейса здесь нет с V97: его заводит WMS. {@code transport_type} —
+     * код перечисления «Типы транспорта» (V97).
+     */
     public static java.util.Set<String> transportColumns() {
         return java.util.Set.of(
                 "carrier", "transport_type", "transport_brand", "car_number",
                 "trailer_number", "tech_passport_number", "container_number", "seal_number",
-                "driver_name", "driver_phone", "driver_id_number", "driver_inn", "trip");
+                "driver_name", "driver_phone", "driver_id_number", "driver_inn");
     }
 
     /** Поля строки состава, доступные для ввода. */
@@ -166,12 +174,13 @@ public enum DocumentType implements ListKind {
                 "custom_field_5", "custom_field_6", "custom_field_7", "custom_field_8",
                 "custom_field_9", "custom_field_10"));
         switch (this) {
-            case RECEIPTS -> common.addAll(java.util.List.of("expected_qty", "price", "currency_id"));
-            // quality_id — качество строки (V89); экран присылает код,
-            // в quality_id его переводит LineQuality
+            // quality_id — качество строки (заказ — V89, поступление — V100, перемещение — V101);
+            // экран присылает код, в quality_id его переводит LineQuality
+            case RECEIPTS -> common.addAll(java.util.List.of("expected_qty", "price", "currency_id",
+                    "quality_id"));
             case ORDERS -> common.addAll(java.util.List.of("ordered_qty", "weight_kg", "price", "currency_id",
                     "quality_id"));
-            case TRANSFERS -> common.add("qty");
+            case TRANSFERS -> common.addAll(java.util.List.of("qty", "quality_id"));
         }
         return common;
     }
@@ -197,15 +206,18 @@ public enum DocumentType implements ListKind {
      */
     public java.util.Map<String, String> requiredForConfirm() {
         return switch (this) {
+            // Поставщик поступления необязателен (решение заказчика от 03.11.2026)
             case RECEIPTS -> new java.util.LinkedHashMap<>(java.util.Map.of(
+                    "erp_number", "erpNo",
                     "warehouse_id", "warehouse",
-                    "supplier_id", "supplier",
                     "eta_date", "eta"));
             case ORDERS -> new java.util.LinkedHashMap<>(java.util.Map.of(
+                    "erp_number", "erpNo",
                     "warehouse_id", "warehouse",
                     "consignee_id", "consignee",
                     "planned_ship_date", "plannedShip"));
             case TRANSFERS -> new java.util.LinkedHashMap<>(java.util.Map.of(
+                    "erp_number", "erpNo",
                     "from_warehouse_id", "fromWarehouse",
                     "to_warehouse_id", "toWarehouse"));
         };

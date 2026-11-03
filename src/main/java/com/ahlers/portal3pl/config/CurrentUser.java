@@ -86,6 +86,59 @@ public class CurrentUser {
         }
     }
 
+    /**
+     * Разрешено ли пользователю создавать заказы (§6.3, «может создавать
+     * заказы»). Нужна загрузке заказа из Excel: она создаёт черновик,
+     * и кнопка, скрытая на экране, не должна оставаться открытой адресом.
+     */
+    public void requireMayCreateOrders() {
+        requireSetting("can_create_orders", "error.order.create_disabled");
+    }
+
+    /** То же для поступлений — загрузке поступления из Excel (V100). */
+    public void requireMayCreateReceipts() {
+        requireSetting("can_create_receipts", "error.receipt.create_disabled");
+    }
+
+    /** То же для перемещений — загрузке перемещения из Excel (V101). */
+    public void requireMayCreateTransfers() {
+        requireSetting("can_create_transfers", "error.transfer.create_disabled");
+    }
+
+    /**
+     * Право из {@code user_settings}; нет строки настроек — право есть.
+     * Имя колонки — из кода выше, не снаружи.
+     */
+    private void requireSetting(String column, String refusalKey) {
+        String login = DepositorContext.userLogin();
+        if (login == null || login.isBlank()) {
+            throw Fail.unauthorized("error.auth.sign_in_required");
+        }
+        boolean allowed = jdbc.sql("""
+                        SELECT COALESCE(s.%s, true)
+                        FROM dbo.app_user u
+                        LEFT JOIN dbo.user_settings s ON s.user_id = u.user_id
+                        WHERE u.login = :login AND u.is_active
+                        """.formatted(column))
+                .param("login", login)
+                .query(Boolean.class)
+                .optional()
+                .orElse(false);
+        if (!allowed) {
+            throw Fail.forbidden(refusalKey);
+        }
+    }
+
+    /** Включены ли цена и сумма в строках заказа у текущего поклажедателя (V61). */
+    public boolean priceInOrders() {
+        return Boolean.TRUE.equals(depositorSettings().get("priceInOrders"));
+    }
+
+    /** То же в строках поступления (V61). */
+    public boolean priceInReceipts() {
+        return Boolean.TRUE.equals(depositorSettings().get("priceInReceipts"));
+    }
+
     /** Персональные настройки видимости разделов (§6.3) — экран их спрашивает. */
     public java.util.Map<String, Object> settings() {
         String login = DepositorContext.userLogin();

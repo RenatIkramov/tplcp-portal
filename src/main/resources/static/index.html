@@ -138,8 +138,8 @@
 <h1><span data-i18n="common.button.receipts">Поступления</span> <span class="count" id="receiptsCount"></span></h1>
 <div class="actions">
 <button class="btn primary" id="createReceiptBtn" data-i18n="receipts.button.create_new" onclick="createNewReceiptDraft()">+ Создать новый</button>
-<button class="btn" data-i18n="receipts.button.import_from_excel" onclick="notify('Диалог загрузки файла Excel с поступлением')">Загрузить из Excel</button>
-<button class="btn ghost" data-i18n="receipts.button.download_excel_template" onclick="notify('Скачивается: Шаблон_Поступление.xlsx')">Скачать шаблон Excel</button>
+<button class="btn" id="receiptImportBtn" type="button" data-i18n="receipts.button.import_from_excel">Загрузить из Excel</button>
+<button class="btn ghost" id="receiptTemplateBtn" type="button" data-i18n="receipts.button.download_excel_template">Скачать шаблон Excel</button>
 </div>
 <div class="head-tools">
 <button class="btn ghost" data-i18n="common.button.filters" onclick="openFilterPicker('receipts')">⚙ Фильтры</button>
@@ -169,8 +169,8 @@
 <h1><span data-i18n="transfers.title.transfers">Перемещения</span> <span class="count" id="transfersCount"></span></h1>
 <div class="actions">
 <button data-i18n="transfers.button.create_new" class="btn primary" id="createTransferBtn" onclick="createNewTransferDraft()">+ Создать новое</button>
-<button data-i18n="transfers.button.import_from_excel" class="btn" onclick="notify('Диалог загрузки файла Excel с перемещением')">Загрузить из Excel</button>
-<button data-i18n="transfers.button.download_excel_template" class="btn ghost" onclick="notify('Скачивается: Шаблон_Перемещение.xlsx')">Скачать шаблон Excel</button>
+<button data-i18n="transfers.button.import_from_excel" class="btn" id="transferImportBtn" type="button">Загрузить из Excel</button>
+<button data-i18n="transfers.button.download_excel_template" class="btn ghost" id="transferTemplateBtn" type="button">Скачать шаблон Excel</button>
 </div>
 <div class="head-tools">
 <button class="btn ghost" data-i18n="common.button.filters" onclick="openFilterPicker('transfers')">⚙ Фильтры</button>
@@ -286,8 +286,8 @@
 <h1><span data-i18n="common.title.shipment_orders">Заказы на отгрузку</span> <span class="count" id="ordersCount"></span></h1>
 <div class="actions">
 <button class="btn primary" id="createOrderBtn" data-i18n="receipts.button.create_new" onclick="createNewOrderDraft()">+ Создать новый</button>
-<button class="btn" data-i18n="receipts.button.import_from_excel" onclick="notify('Диалог загрузки файла Excel с заказом')">Загрузить из Excel</button>
-<button class="btn ghost" data-i18n="receipts.button.download_excel_template" onclick="notify('Скачивается: Шаблон_Заказ_на_отгрузку.xlsx')">Скачать шаблон Excel</button>
+<button class="btn" id="orderImportBtn" type="button" data-i18n="receipts.button.import_from_excel">Загрузить из Excel</button>
+<button class="btn ghost" id="orderTemplateBtn" type="button" data-i18n="receipts.button.download_excel_template">Скачать шаблон Excel</button>
 </div>
 <div class="head-tools">
 <button class="btn ghost" data-i18n="common.button.filters" onclick="openFilterPicker('orders')">⚙ Фильтры</button>
@@ -1035,6 +1035,7 @@
       <input type="number" min="0" step="1" class="kv-input kv-input-editable" id="lineEditPackageCount" oninput="onLineEditPackageCountChange()">
     </div>
     <div class="kv"><label for="lineEditExpected" data-i18n="common.label.expected_quantity" id="lineEditExpectedLabel">Ожидаемое количество</label><input type="number" min="0" step="1" class="kv-input kv-input-editable" id="lineEditExpected" oninput="validateNumericInput(this); onLineEditPriceChange();"></div>
+    <div class="kv"><label for="lineEditQuality" data-i18n="receipts.label.quality">Качество</label><select class="kv-input kv-input-editable" id="lineEditQuality"></select></div>
     <div class="kv"><label for="lineEditPrice">Цена, <span id="lineEditCurrency">—</span></label><input type="number" min="0" step="0.01" class="kv-input kv-input-editable" id="lineEditPrice" oninput="onLineEditPriceChange()"></div>
     <div class="kv"><label data-i18n="common.label.amount">Сумма</label><div class="kv-input" id="lineEditSum" style="background:var(--bg); border-color:transparent;">—</div></div>
     <div id="lineEditExtraFields" style="display:flex; flex-direction:column; gap:16px;"></div>
@@ -1139,6 +1140,7 @@
       <input type="number" min="0" step="1" class="kv-input kv-input-editable" id="transferLineEditPackageCount" oninput="onTransferLineEditPackageCountChange()">
     </div>
     <div class="kv"><label for="transferLineEditQty" data-i18n="common.label.quantity" id="transferLineEditQtyLabel">Количество</label><input type="number" min="0" step="1" class="kv-input kv-input-editable" id="transferLineEditQty" oninput="validateNumericInput(this)"></div>
+    <div class="kv"><label for="transferLineEditQuality" data-i18n="transfers.label.quality">Качество</label><select class="kv-input kv-input-editable" id="transferLineEditQuality"></select></div>
     <div id="transferLineEditExtraFields" style="display:flex; flex-direction:column; gap:16px;"></div>
   </div>
 </div>
@@ -1411,6 +1413,7 @@
      справочнике.
 ========================================================================= -->
 <script src="js/portal/import-log.js"></script>
+<script src="js/portal/doc-import.js"></script>
 
 
 <!-- ===== Настройки поклажедателя: разделы, склады и поля товаров =====

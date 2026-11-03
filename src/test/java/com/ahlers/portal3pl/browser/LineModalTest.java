@@ -273,6 +273,7 @@ class LineModalTest extends BrowserTestBase {
         // выдаёт база при сохранении.
         page.evaluate("() => createNewReceiptDraft()");
         page.waitForFunction("() => !!currentReceiptRef");
+        fillErp("receipts");
         page.evaluate("() => saveReceiptDraft()");
         page.waitForFunction("() => !!(currentReceiptRef && currentReceiptRef.docId)");
         docId = (String) page.evaluate("() => currentReceiptRef.docId");

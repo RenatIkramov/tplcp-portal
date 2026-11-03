@@ -91,6 +91,7 @@ class TransferDraftTest extends BrowserTestBase {
     private void createDraft() {
         page.evaluate("() => createNewTransferDraft()");
         page.waitForFunction("() => !!currentTransferRef");
+        fillErp("transfers");
         page.evaluate("() => saveTransferDraft()");
         page.waitForFunction("() => !!(currentTransferRef && currentTransferRef.docId)");
         draftCreated = true;

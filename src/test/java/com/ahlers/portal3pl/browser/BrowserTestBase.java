@@ -177,6 +177,10 @@ public abstract class BrowserTestBase extends PortalTestBase {
             context = null;
             page = null;
         }
+        // Язык, выставленный проверкой, не должен достаться следующей:
+        // без этого итог проверок зависел от порядка их запуска — тест
+        // сервера ждал английский, а получал русский от браузерного.
+        inContext("UPDATE dbo.app_user SET locale_id = NULL WHERE login IN ('" + USER + "', '" + ADMIN + "')");
     }
 
     /**
@@ -312,6 +316,22 @@ public abstract class BrowserTestBase extends PortalTestBase {
      * часть отрисовки не состоялась, — а дальше проверка может найти
      * нужный текст просто потому, что экран остался прежним.
      */
+    /**
+     * Номер ERP в карточке нового черновика: без него черновик
+     * не сохраняется, и номер не должен повторяться (V98).
+     *
+     * @param type receipts, orders или transfers
+     */
+    protected void fillErp(String type) {
+        String prefix = switch (type) {
+            case "receipts" -> "rf";
+            case "orders" -> "of";
+            default -> "tf";
+        };
+        page.evaluate("([id, v]) => { const el = document.getElementById(id); if (el) el.value = v; }",
+                java.util.List.of(prefix + "_erpNo", uniqueErp()));
+    }
+
     protected void assertNoJsErrors() {
         assertTrue(jsErrors.isEmpty(), "страница написала в консоль ошибки:\n"
                 + String.join("\n", jsErrors));

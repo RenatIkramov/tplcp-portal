@@ -44,9 +44,14 @@ public class DraftService {
     public Map<String, Object> create(DocumentType type, Map<String, Object> header) {
         depositorScope.apply();
         String userId = currentUser.requireUserId();
+        Map<String, Object> values = header == null ? new java.util.HashMap<>() : new java.util.HashMap<>(header);
+        requireErpNumber(type, null, values, true);
+        singleWarehouse(type, values);
         String docId = drafts.createDraft(type, depositorScope.currentDepositorId(), userId);
-        if (header != null && !header.isEmpty()) {
-            drafts.updateHeader(type, docId, header, draftColumns(type), userId, true);
+        try {
+            drafts.updateHeader(type, docId, values, draftColumns(type), userId, true);
+        } catch (org.springframework.dao.DuplicateKeyException e) {
+            throw Fail.conflict("error.document.erp_taken", "erp", values.get("erp_number"), "no", "—");
         }
         return card(type, docId);
     }
@@ -56,8 +61,66 @@ public class DraftService {
         depositorScope.apply();
         String userId = currentUser.requireUserId();
         requireDraft(type, docId);
-        drafts.updateHeader(type, docId, header, draftColumns(type), userId, true);
+        requireErpNumber(type, docId, header, false);
+        try {
+            drafts.updateHeader(type, docId, header, draftColumns(type), userId, true);
+        } catch (org.springframework.dao.DuplicateKeyException e) {
+            throw Fail.conflict("error.document.erp_taken", "erp", header.get("erp_number"), "no", "—");
+        }
         return card(type, docId);
+    }
+
+    /**
+     * Номер документа в ERP клиента — обязательный и уникальный
+     * в пределах поклажедателя и типа документа (решение заказчика
+     * от 03.11.2026, V98). Без него тот же файл Excel, загруженный
+     * дважды, давал два одинаковых заказа.
+     *
+     * <p>Уникальность держит индекс базы; проверка здесь — чтобы человек
+     * получил номер документа, с которым совпал, а не ошибку базы.
+     *
+     * @param creating при создании номер обязан быть; при правке —
+     *                 только если шапка его присылает (пустым его не стереть)
+     */
+    private void requireErpNumber(DocumentType type, String docId, Map<String, Object> header,
+                                  boolean creating) {
+        if (header == null) {
+            return;
+        }
+        boolean present = header.containsKey("erp_number");
+        if (!creating && !present) {
+            return;
+        }
+        Object raw = header.get("erp_number");
+        String erp = raw == null ? "" : String.valueOf(raw).trim();
+        if (erp.isEmpty()) {
+            throw Fail.badRequest("error.document.erp_required");
+        }
+        String taken = drafts.documentWithErpNumber(type, depositorScope.currentDepositorId(), erp, docId);
+        if (taken != null) {
+            throw Fail.conflict("error.document.erp_taken", "erp", erp, "no", taken);
+        }
+    }
+
+    /**
+     * Склад у поклажедателя один — он и подставляется, если человек
+     * склад не выбрал (03.11.2026). Выбирать из одного значения незачем,
+     * а пустой склад остановил бы документ на «Подтвердить».
+     * У перемещения складов два, и с одним складом оно не имеет смысла —
+     * его это правило не касается.
+     */
+    private void singleWarehouse(DocumentType type, Map<String, Object> header) {
+        if (type == DocumentType.TRANSFERS) {
+            return;
+        }
+        Object w = header.get("warehouse_id");
+        if (w != null && !String.valueOf(w).isBlank()) {
+            return;
+        }
+        String only = drafts.onlyWarehouse();
+        if (only != null) {
+            header.put("warehouse_id", only);
+        }
     }
 
     /**
@@ -74,6 +137,9 @@ public class DraftService {
         if (currentUser.mayEditTransport()) {
             columns.addAll(DocumentType.transportColumns());
         }
+        // Доп. поля, закрытые поклажедателю, не принимаются: на экране их
+        // нет, а запрос в обход экрана не должен их записать (03.11.2026).
+        columns.removeAll(drafts.closedCustomFields(type));
         return columns;
     }
 
@@ -174,7 +240,7 @@ public class DraftService {
         requirePositiveQty(type, line);
 
         int lineNumber = drafts.nextLineNumber(type, docId);
-        drafts.addLine(type, docId, lineNumber, quality.normalized(type, line));
+        drafts.addLine(type, docId, lineNumber, quality.normalized(line));
         drafts.refreshLineCount(type, docId);
         return card(type, docId);
     }
@@ -189,7 +255,7 @@ public class DraftService {
             requirePositiveQty(type, line);
         }
         Map<String, Object> values = line.containsKey("quality")
-                ? quality.normalized(type, line) : line;
+                ? quality.normalized(line) : line;
         if (drafts.updateLine(type, docId, lineNumber, values) == 0) {
             throw Fail.notFound("error.line.not_found");
         }
@@ -214,7 +280,7 @@ public class DraftService {
         List<Map<String, Object>> checked = new ArrayList<>();
         for (Map<String, Object> line : lines) {
             requirePositiveQty(type, line);
-            checked.add(quality.normalized(type, line));
+            checked.add(quality.normalized(line));
         }
 
         drafts.deleteAllLines(type, docId);

@@ -42,8 +42,8 @@ class DocumentListNumbersTest extends BrowserTestBase {
         page.waitForFunction("() => document.querySelectorAll('#ordersBody tr').length > 0");
 
         List<String> head = headers("ordersHead");
-        int number = head.indexOf(label("orders", "erpNo"));
-        int portalId = head.indexOf(label("orders", "no"));
+        int number = head.indexOf(columnLabel("orders", "erpNo"));
+        int portalId = head.indexOf(columnLabel("orders", "no"));
         assertTrue(number >= 0, "в списке нет колонки «Номер»: " + head);
         assertTrue(portalId >= 0,
                 "в списке нет колонки «ID документа» — строку нельзя назвать по номеру: " + head);
@@ -124,17 +124,6 @@ class DocumentListNumbersTest extends BrowserTestBase {
         return String.join(", ", values.stream()
                 .map(v -> "'" + v.replace("'", "''") + "'")
                 .toList());
-    }
-
-    /** Подпись колонки так, как её видит этот пользователь. */
-    private String label(String table, String columnId) {
-        return jdbc.sql("SELECT label FROM dbo.table_columns(:user::uuid, 'ru'::text, :table::text)"
-                        + " WHERE column_id = :column::text")
-                .param("user", userId(USER))
-                .param("table", table)
-                .param("column", columnId)
-                .query(String.class)
-                .single();
     }
 
     private PortalUser signedInUser() {

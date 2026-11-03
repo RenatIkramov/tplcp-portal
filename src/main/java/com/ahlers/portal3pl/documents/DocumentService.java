@@ -62,7 +62,9 @@ public class DocumentService {
                 "orderTypes", repository.enumValues("enum_order_type"),
                 "receiptDocTypes", repository.enumValues("enum_receipt_doc_type"),
                 // качество строки заказа (V89): экран выбирает его списком
-                "qualities", repository.enumValues("enum_quality"));
+                "qualities", repository.enumValues("enum_quality"),
+                // тип транспорта (V97): в документе хранится код
+                "transportTypes", repository.enumValues("enum_transport_type"));
     }
 
     /** Карточка документа: шапка + состав + детализация в одном ответе. */

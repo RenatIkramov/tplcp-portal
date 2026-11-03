@@ -42,19 +42,36 @@ class ServerMessagesTest extends PortalTestBase {
 
     private static final Path MAIN = Path.of("src", "main", "java");
 
-    /** Ключи сообщений: встречаются в коде строкой целиком. */
-    private static final Pattern KEY = Pattern.compile("\"((?:error|info)\\.[a-z0-9_.]+)\"");
+    /**
+     * Ключи сообщений: встречаются в коде строкой целиком. Строка, которая
+     * кончается точкой, — не ключ, а корень семьи ключей
+     * ({@code "error.doc_import."}); её ключи перечислены ниже.
+     */
+    private static final Pattern KEY = Pattern.compile("\"((?:error|info)\\.[a-z0-9_.]*[a-z0-9_])\"");
 
     /**
      * Ключи, которые код собирает из частей: у справочника свой корень,
      * а повод один и тот же ({@code kind.error("not_found")}). Целиком
      * такой ключ в коде не встречается, поэтому перечисляем их здесь.
      *
+     * <p>Так же устроены причины отказа загрузки документа из Excel (V100):
+     * общие — у корня {@code error.doc_import}, свои у заказа, поступления и перемещения.
+     *
      * @see com.ahlers.portal3pl.catalog.PartnerKind#error(String)
+     * @see com.ahlers.portal3pl.excel.DocumentExcel.Spec#error(String)
      */
+    private static final List<String> OWN_IMPORT_ERRORS =
+            List.of("archived_item", "erp_taken", "field_not_available", "no_goods", "no_goods_table");
     private static final Map<String, List<String>> BUILT_FROM_PARTS = Map.of(
             "error.supplier", List.of("not_found", "code_taken", "in_use", "create_field_required"),
-            "error.consignee", List.of("not_found", "code_taken", "in_use", "create_field_required"));
+            "error.consignee", List.of("not_found", "code_taken", "in_use", "create_field_required"),
+            "error.doc_import", List.of("bad_date", "bad_price", "bad_quantity", "code_required",
+                    "erp_required", "not_in_list", "price_differs", "too_long", "transport_not_allowed",
+                    "unknown_item"),
+            "error.order_import", OWN_IMPORT_ERRORS,
+            "error.receipt_import", OWN_IMPORT_ERRORS,
+            "error.transfer_import", java.util.stream.Stream.concat(OWN_IMPORT_ERRORS.stream(),
+                    java.util.stream.Stream.of("same_warehouse")).toList());
 
     @Test
     void rejectionsCarryKeyNotText() {

@@ -42,7 +42,9 @@
         weight: n(l.weightKg)
       });
     }
-    return Object.assign(base, { qty: n(l.qty), qtyWms: n(l.qtyWms) });
+    return Object.assign(base, { qty: n(l.qty),
+      // количество WMS пусто, пока его не прислала WMS: не ноль
+      qtyWms: l.qtyWms === null || l.qtyWms === undefined ? null : n(l.qtyWms) });
   }
 
   /** Запись партии для экрана «Детализация». */

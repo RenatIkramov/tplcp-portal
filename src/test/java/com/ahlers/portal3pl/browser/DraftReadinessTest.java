@@ -36,6 +36,9 @@ class DraftReadinessTest extends BrowserTestBase {
         page.evaluate("() => createNewReceiptDraft()");
         page.waitForFunction("() => !!currentReceiptRef");
         draftCreated = true;
+        // Без номера ERP черновик не сохраняется вовсе (V98) — и до
+        // проверки готовности дело бы не дошло.
+        fillErp("receipts");
 
         page.evaluate("() => confirmReceiptDraft()");
         page.waitForSelector("#receiptDetailBanner .hint");
@@ -44,7 +47,7 @@ class DraftReadinessTest extends BrowserTestBase {
                 "() => document.getElementById('receiptDetailBanner').innerText");
         assertTrue(refusal.contains(text("error.ready.no_lines")),
                 "в отказе нет причины «нет ни одной строки»: " + refusal);
-        assertTrue(refusal.contains(label("receipts", "warehouse")),
+        assertTrue(refusal.contains(columnLabel("receipts", "warehouse")),
                 "в отказе нет подписи незаполненного поля «склад»: " + refusal);
         assertFalse(refusal.contains("_id") || refusal.contains("_date"),
                 "в отказе показаны имена колонок базы вместо подписей: " + refusal);
@@ -62,17 +65,6 @@ class DraftReadinessTest extends BrowserTestBase {
                 System.out.println("не удалось удалить черновик проверки: " + e.getMessage());
             }
         }
-    }
-
-    /** Подпись колонки так, как её видит этот пользователь. */
-    private String label(String table, String columnId) {
-        return jdbc.sql("SELECT label FROM dbo.table_columns(:user::uuid, 'ru'::text, :table::text)"
-                        + " WHERE column_id = :column::text")
-                .param("user", userId(USER))
-                .param("table", table)
-                .param("column", columnId)
-                .query(String.class)
-                .single();
     }
 
     private String text(String key) {

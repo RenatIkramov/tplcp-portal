@@ -114,8 +114,24 @@
           + ' · ' + esc(T_('sku.message.created_items')) + ': ' + sum('createdRows')
           + ' · ' + esc(T_('sku.message.updated_items')) + ': ' + sum('updatedRows')
           + '</div>'
+          + documents()
         : '';
     }
+  }
+
+  /**
+   * Заказы, созданные из файлов (V96). Удачная загрузка заказа замечаний
+   * не оставляет, и без этой строки журнал не отвечал бы, из какого
+   * файла взялся черновик.
+   */
+  function documents(){
+    const made = state.imports.filter(i => i.docNumber).slice(0, 20);
+    if (!made.length) return '';
+    return '<div class="hint" style="margin:-4px 0 10px;">'
+      + esc(T_('admin.text.import_documents')) + ': '
+      + made.map(i => esc(i.docNumber) + ' <span class="count">' + esc(when(i.startedAt))
+          + ' · ' + esc(dash(i.login)) + ' · ' + esc(dash(i.fileName)) + '</span>').join('; ')
+      + '</div>';
   }
 
   /* ================= Установка ================= */

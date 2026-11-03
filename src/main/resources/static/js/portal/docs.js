@@ -58,7 +58,7 @@
       cargoPlaces: num(r.cargoPlaces),
       totalPieces: num(r.totalPieces),
       carrier: dash(r.carrier),
-      transportType: dash(r.transportType),
+      transportType: dash(r.transportTypeName),
       transportBrand: dash(r.transportBrand),
       carNumber: dash(r.carNumber),
       trailerNumber: dash(r.trailerNumber),

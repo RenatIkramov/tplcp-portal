@@ -2,12 +2,14 @@ package com.ahlers.portal3pl;
 
 import com.ahlers.portal3pl.auth.PortalUser;
 import com.ahlers.portal3pl.common.MsgRef;
+import com.ahlers.portal3pl.columns.ColumnService;
 import com.ahlers.portal3pl.documents.DocumentService;
 import com.ahlers.portal3pl.documents.DocumentType;
 import com.ahlers.portal3pl.documents.DraftService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -18,6 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -33,6 +36,9 @@ class DraftTest extends PortalTestBase {
 
     @Autowired
     DocumentService documents;
+
+    @Autowired
+    ColumnService columnService;
 
     private final List<String> created = new ArrayList<>();
     private final List<String> createdOrders = new ArrayList<>();
@@ -52,7 +58,7 @@ class DraftTest extends PortalTestBase {
     }
 
     private Map<String, Object> draft(Map<String, Object> header) {
-        Map<String, Object> card = drafts.create(DocumentType.RECEIPTS, header);
+        Map<String, Object> card = drafts.create(DocumentType.RECEIPTS, withErp(header));
         created.add(header(card).get("docId").toString());
         return card;
     }
@@ -85,6 +91,91 @@ class DraftTest extends PortalTestBase {
         assertFalse(problems(card).isEmpty(), "пустой черновик отправить нельзя");
     }
 
+    /* ---------------- Номер ERP (V98) ---------------- */
+
+    /** Без номера ERP черновик не сохраняется — ни новый, ни правкой. */
+    @Test
+    void erpNumberIsRequired() {
+        signIn();
+        expectRejection(400, () -> drafts.create(DocumentType.RECEIPTS, Map.of()));
+        expectRejection(400, () -> drafts.create(DocumentType.RECEIPTS, Map.of("erp_number", "  ")));
+        String docId = header(draft(Map.of())).get("docId").toString();
+        expectRejection(400, () -> drafts.updateHeader(DocumentType.RECEIPTS, docId,
+                Map.of("erp_number", "")));
+        // Шапка без номера — правка других полей, номер не стирается
+        Map<String, Object> card = drafts.updateHeader(DocumentType.RECEIPTS, docId,
+                Map.of("comment", "без номера в запросе"));
+        assertNotNull(header(card).get("erpNumber"));
+    }
+
+    /** Номер ERP не повторяется у поклажедателя в пределах типа документа. */
+    @Test
+    void erpNumberIsUniquePerDepositorAndType() {
+        signIn();
+        String erp = uniqueErp();
+        String first = header(draft(Map.of("erp_number", erp))).get("docId").toString();
+        // Регистр и пробелы по краям не различаются
+        expectRejection(409, () -> draft(Map.of("erp_number", " " + erp.toLowerCase() + " ")));
+        String second = header(draft(Map.of())).get("docId").toString();
+        expectRejection(409, () -> drafts.updateHeader(DocumentType.RECEIPTS, second,
+                Map.of("erp_number", erp)));
+        // Свой же номер при сохранении — не повтор
+        drafts.updateHeader(DocumentType.RECEIPTS, first, Map.of("erp_number", erp));
+        // У заказа тот же номер можно: нумерация типов в ERP своя
+        String order = header(drafts.create(DocumentType.ORDERS, Map.of("erp_number", erp)))
+                .get("docId").toString();
+        createdOrders.add(order);
+    }
+
+    /** Склад у поклажедателя один — новый черновик получает его сам. */
+    @Test
+    void theOnlyWarehouseIsFilledIn() {
+        String depositor = depositorId(USER, DEPOSITOR);
+        List<String> others = new ArrayList<>(new TransactionTemplate(txManager).execute(tx -> jdbc.sql(
+                        "SELECT warehouse_id FROM dbo.depositor_warehouse WHERE depositor_id = :d::uuid"
+                                + " AND warehouse_id <> 'WH-ALA'")
+                .param("d", depositor).query(String.class).list()));
+        assertFalse(others.isEmpty(), "для проверки у поклажедателя должно быть несколько складов");
+        inContext("DELETE FROM dbo.depositor_warehouse WHERE depositor_id = '" + depositor
+                + "'::uuid AND warehouse_id <> 'WH-ALA'");
+        try {
+            signIn();
+            Map<String, Object> card = draft(Map.of());
+            assertEquals("WH-ALA", header(card).get("warehouseId"));
+        } finally {
+            for (String w : others) {
+                inContext("INSERT INTO dbo.depositor_warehouse (depositor_id, warehouse_id) VALUES ('"
+                        + depositor + "'::uuid, '" + w + "') ON CONFLICT DO NOTHING");
+            }
+        }
+        signIn();
+        assertNull(header(draft(Map.of())).get("warehouseId"), "складов несколько — человек выбирает сам");
+    }
+
+    /**
+     * Доп. поле, закрытое поклажедателю, черновик не записывает, даже
+     * если запрос его прислал; открытое — записывает (03.11.2026).
+     */
+    @Test
+    void closedCustomFieldIsNotSaved() {
+        var admin = portalAdmin();
+        String dep = depositorId(USER, DEPOSITOR);
+        Runnable restore = keepDepositorColumns("receipts");
+        columnService.saveDepositorColumn(admin, dep, "receipts", "customField1", true, false);
+        columnService.saveDepositorColumn(admin, dep, "receipts", "customField2", false, false);
+        try {
+            signIn();
+            Map<String, Object> card = draft(Map.of("custom_field_1", "открыто", "custom_field_2", "закрыто"));
+            String docId = header(card).get("docId").toString();
+            assertEquals("открыто", singleValue("SELECT custom_field_1 FROM dbo.receipts WHERE doc_id = '"
+                    + docId + "'::uuid"));
+            assertEquals("(пусто)", singleValue("SELECT COALESCE(custom_field_2, '(пусто)') FROM dbo.receipts"
+                    + " WHERE doc_id = '" + docId + "'::uuid"), "закрытое доп. поле записалось");
+        } finally {
+            restore.run();
+        }
+    }
+
     @Test
     void headerAndLinesEditable() {
         signIn();
@@ -93,9 +184,9 @@ class DraftTest extends PortalTestBase {
         Map<String, Object> card = drafts.updateHeader(DocumentType.RECEIPTS, docId, Map.of(
                 "warehouse_id", "WH-ALA",
                 "eta_date", "2026-11-01",
-                "erp_number", "ERP-TEST-77",
+                "erp_number", "ERP-TEST-77-" + docId.substring(0, 8),
                 "comment", "тестовый черновик"));
-        assertEquals("ERP-TEST-77", header(card).get("erpNumber"));
+        assertEquals("ERP-TEST-77-" + docId.substring(0, 8), header(card).get("erpNumber"));
         assertEquals("Склад Алматы", header(card).get("warehouseName"));
 
         String skuId = singleValue("SELECT sku_id::text FROM dbo.sku WHERE code = 'RK-ROG-01'");
@@ -326,7 +417,7 @@ class DraftTest extends PortalTestBase {
     /* ---------------- Качество строки заказа (V85, V89) ---------------- */
 
     private String orderDraft() {
-        Map<String, Object> card = drafts.create(DocumentType.ORDERS, Map.of());
+        Map<String, Object> card = drafts.create(DocumentType.ORDERS, withErp(Map.of()));
         String docId = header(card).get("docId").toString();
         createdOrders.add(docId);
         return docId;

@@ -418,6 +418,8 @@ const receiptCompositionColumnDefs = [
   {id:'sum', key:'col.receiptComposition.sum', label:'Сумма', default:1, num:true, render:l=>(l.price && l.expected) ? (l.price*l.expected).toFixed(2) : '—'},
   {id:'currency', key:'col.receiptComposition.currency', label:'Валюта', default:1, render:l=>l.currency || '—'},
   {id:'lineComment', key:'col.receiptComposition.lineComment', label:'Комментарий', default:1, wrap:true, render:l=>l.lineComment || '—'},
+  // качество строки поступления (V100) — как в заказе
+  {id:'quality', key:'col.receiptComposition.quality', label:'Качество', default:1, render:l=>orderLineQualityName(l)},
 ];
 const orderCompositionColumnDefs = [
   {id:'code', key:'col.orderComposition.code', label:'Коммерческий код', default:1, render:l=>l.code},
@@ -440,6 +442,8 @@ const transferCompositionColumnDefs = [
   {id:'qty', key:'col.transferComposition.qty', label:'Кол-во', default:1, num:true, render:l=>l.qty},
   {id:'qtyWms', key:'col.transferComposition.qtyWms', label:'Количество WMS', default:1, num:true, render:l=>l.qtyWms ?? l.qty},
   {id:'lineComment', key:'col.transferComposition.lineComment', label:'Комментарий', default:1, wrap:true, render:l=>l.lineComment || '—'},
+  // качество строки перемещения (V101) — как в заказе и поступлении
+  {id:'quality', key:'col.transferComposition.quality', label:'Качество', default:1, render:l=>orderLineQualityName(l)},
 ];
 const orderLineDetailColumnDefs = [
   {id:'q', key:'col.orderLineDetail.q', label:'Качество', default:1, render:b=>b.q},
@@ -2099,6 +2103,13 @@ const FC_COMPOSITION_SECTION_ID = {receipts:'receiptCompositionSection', orders:
 const EXTRA_INFO_FIELDS = Array.from({length:10}, (_,i)=>'customField'+(i+1));
 // Префикс поля на экране однозначно говорит, чья это карточка.
 const EXTRA_INFO_TABLE = {rf:'receipts', of:'orders', tf:'transfers'};
+// Доп. поля, открытые поклажедателю (03.11.2026). Закрытые в «Доступах
+// поклажедателей» не рисуются, а если закрыты все — вкладки нет вовсе:
+// пустая вкладка выглядит как ошибка, а не как настройка.
+function fcExtraInfoFields(docType){
+  const allowed = window.PORTAL && PORTAL.fieldAllowed;
+  return EXTRA_INFO_FIELDS.filter(f => !allowed || allowed(f, docType));
+}
 function fcExtraInfoFieldHtml(prefix, doc, dbField, isDraft){
   const id = prefix + '_' + dbField;
   // Подпись собирается ПРИ ОТРИСОВКЕ, а не при загрузке файла: раньше
@@ -2122,6 +2133,9 @@ function fcRenderDocTabs(docType, doc, isDraft, specialFn, buttonsId, contentId)
   let tabs = STATIC_DOC_TABS[docType].slice();
   if(currentUser && currentUser.hideServicesTab){
     tabs = tabs.filter(t=>t !== 'Услуги');
+  }
+  if(!fcExtraInfoFields(docType).length){
+    tabs = tabs.filter(t=>STATIC_TAB_KIND[t] !== 'extra');
   }
   const state = fcActiveDocTab[docType];
   if(!state || state.no !== doc.no || !tabs.includes(state.tab)){
@@ -2149,7 +2163,7 @@ function fcRenderDocTabs(docType, doc, isDraft, specialFn, buttonsId, contentId)
   }
   if(kind === 'extra'){
     const prefix = {receipts:'rf', orders:'of', transfers:'tf'}[docType];
-    const html = EXTRA_INFO_FIELDS.map(f=>fcExtraInfoFieldHtml(prefix, doc, f, isDraft)).join('');
+    const html = fcExtraInfoFields(docType).map(f=>fcExtraInfoFieldHtml(prefix, doc, f, isDraft)).join('');
     document.getElementById(contentId).innerHTML = `<div class="kv-columns" style="display:flex; gap:20px 24px; flex-wrap:wrap;">${html}</div>`;
     return;
   }
@@ -2602,6 +2616,7 @@ function openLineEditModal(idx){
   fcSetupLineEditPackaging('lineEdit', lineEditSelectedProduct, 'lineEditExpected', line.packagingCode || null, line.packageCount || null);
   fcSetupLineEditPricing('lineEdit', lineEditSelectedProduct, 'lineEditExpected', line.price ?? null, line.currency || null);
   document.getElementById('lineEditComment').value = line.lineComment || '';
+  fillLineQualitySelect('lineEditQuality', orderLineQuality(line));
 }
 function openLineAddModal(){
   if(!currentReceiptRef || currentReceiptRef.status !== 'draft') return;
@@ -2617,6 +2632,7 @@ function openLineAddModal(){
   document.getElementById('lineEditExpected').value = '';
   document.getElementById('lineEditExpected').classList.remove('kv-input-invalid');
   document.getElementById('lineEditComment').value = '';
+  fillLineQualitySelect('lineEditQuality', LINE_QUALITY.good);
 }
 function closeLineEditModal(){
   document.getElementById('lineEditOverlay').classList.remove('active');
@@ -2676,6 +2692,8 @@ function saveLineEditModal(){
   const packageCount = packagingCode ? (Number(document.getElementById('lineEditPackageCount').value) || 0) : null;
   const price = document.getElementById('lineEditPrice').value !== '' ? Number(document.getElementById('lineEditPrice').value) : null;
   const currency = document.getElementById('lineEditCurrency').textContent !== '—' ? document.getElementById('lineEditCurrency').textContent : null;
+  const qualityBox = document.getElementById('lineEditQuality');
+  const quality = (qualityBox && qualityBox.value) || LINE_QUALITY.good;
   const finishReceiptSave = ()=>{
     if(currentReceiptRef) currentReceiptRef.lines = currentReceiptComposition.map(({checked, ...l})=>l);
     closeLineEditModal();
@@ -2683,7 +2701,10 @@ function saveLineEditModal(){
     notify(lineEditMode === 'add' ? 'Строка добавлена' : 'Строка обновлена');
   };
   if(lineEditMode === 'add'){
-    const dupIdx = currentReceiptComposition.findIndex(l=>l.code === lineEditSelectedProduct.code);
+    // Повтор — тот же товар с тем же качеством и комментарием, как в заказе
+    // (V100): строки разного качества — разные строки.
+    const dupIdx = currentReceiptComposition.findIndex(l=>l.code === lineEditSelectedProduct.code
+      && orderLineQuality(l) === quality && (l.lineComment || '') === lineComment);
     if(dupIdx > -1){
       const existing = currentReceiptComposition[dupIdx];
       openDuplicateLineDialog({
@@ -2700,10 +2721,11 @@ function saveLineEditModal(){
       expected: Number(expectedEl.value),
       expectedWms: 0,
       accepted: '', defect: '', series: '', batch: '',
-      exp: '—', checked: false, lineComment, packagingCode, packageCount, price, currency,
+      exp: '—', checked: false, lineComment, packagingCode, packageCount, price, currency, quality,
     });
   }else{
     const line = currentReceiptComposition[lineEditIndex];
+    line.quality = quality;
     line.code = lineEditSelectedProduct.code;
     line.name = lineEditSelectedProduct.name;
     line.unit = lineEditSelectedProduct.unit;
@@ -3025,6 +3047,7 @@ function openTransferLineEditModal(idx){
   document.getElementById('transferLineEditQty').classList.remove('kv-input-invalid');
   fcSetupLineEditPackaging('transferLineEdit', transferLineEditSelectedProduct, 'transferLineEditQty', line.packagingCode || null, line.packageCount || null);
   document.getElementById('transferLineEditComment').value = line.lineComment || '';
+  fillLineQualitySelect('transferLineEditQuality', orderLineQuality(line));
 }
 function openTransferLineAddModal(){
   if(!currentTransferRef || currentTransferRef.status !== 'draft') return;
@@ -3040,6 +3063,7 @@ function openTransferLineAddModal(){
   document.getElementById('transferLineEditQty').value = '';
   document.getElementById('transferLineEditQty').classList.remove('kv-input-invalid');
   document.getElementById('transferLineEditComment').value = '';
+  fillLineQualitySelect('transferLineEditQuality', LINE_QUALITY.good);
 }
 function closeTransferLineEditModal(){
   document.getElementById('transferLineEditOverlay').classList.remove('active');
@@ -3097,6 +3121,8 @@ function saveTransferLineEditModal(){
   const lineComment = document.getElementById('transferLineEditComment').value.trim();
   const packagingCode = document.getElementById('transferLineEditPackaging').value || null;
   const packageCount = packagingCode ? (Number(document.getElementById('transferLineEditPackageCount').value) || 0) : null;
+  const qualityBox = document.getElementById('transferLineEditQuality');
+  const quality = (qualityBox && qualityBox.value) || LINE_QUALITY.good;
   const finishTransferSave = ()=>{
     if(currentTransferRef) currentTransferRef.lines = currentTransferComposition.map(({checked, ...l})=>l);
     closeTransferLineEditModal();
@@ -3104,7 +3130,9 @@ function saveTransferLineEditModal(){
     notify(transferLineEditMode === 'add' ? 'Строка добавлена' : 'Строка обновлена');
   };
   if(transferLineEditMode === 'add'){
-    const dupIdx = currentTransferComposition.findIndex(l=>l.code === transferLineEditSelectedProduct.code);
+    // Повтор — тот же товар, качество и комментарий, как в заказе (V101)
+    const dupIdx = currentTransferComposition.findIndex(l=>l.code === transferLineEditSelectedProduct.code
+      && orderLineQuality(l) === quality && (l.lineComment || '') === lineComment);
     if(dupIdx > -1){
       const existing = currentTransferComposition[dupIdx];
       openDuplicateLineDialog({
@@ -3121,10 +3149,11 @@ function saveTransferLineEditModal(){
       qty: Number(qtyEl.value),
       qtyWms: 0,
       series: '', batch: '',
-      exp: '—', checked: false, lineComment, packagingCode, packageCount,
+      exp: '—', checked: false, lineComment, packagingCode, packageCount, quality,
     });
   }else{
     const line = currentTransferComposition[transferLineEditIndex];
+    line.quality = quality;
     line.code = transferLineEditSelectedProduct.code;
     line.name = transferLineEditSelectedProduct.name;
     line.unit = transferLineEditSelectedProduct.unit;
@@ -3425,16 +3454,22 @@ function orderLineQualityName(line){
   const found = (window.PORTAL && PORTAL.qualities || []).find(q => q.code === code);
   return found ? found.name : code;
 }
+/**
+ * Список качества в окне строки — заказа (V89), поступления (V100)
+ * или перемещения (V101).
+ * Строится из перечисления при каждом открытии окна: язык могли
+ * переключить, а значения — дополнить.
+ */
+function fillLineQualitySelect(boxId, code){
+  const box = document.getElementById(boxId);
+  if(!box) return;
+  const list = (window.PORTAL && PORTAL.qualities) || [];
+  box.innerHTML = list.map(q => `<option value="${q.code}">${q.name}</option>`).join('');
+  box.value = code || LINE_QUALITY.good;
+  if(!box.value && list.length) box.value = list[0].code;
+}
 function setOrderLineQuality(code){
-  const box = document.getElementById('orderLineEditQuality');
-  if(box){
-    // Список строится из перечисления при каждом открытии окна:
-    // язык могли переключить, а значения — дополнить.
-    const list = (window.PORTAL && PORTAL.qualities) || [];
-    box.innerHTML = list.map(q => `<option value="${q.code}">${q.name}</option>`).join('');
-    box.value = code || LINE_QUALITY.good;
-    if(!box.value && list.length) box.value = list[0].code;
-  }
+  fillLineQualitySelect('orderLineEditQuality', code);
   if(typeof onOrderLineEditQualityChange === 'function') onOrderLineEditQualityChange();
 }
 function openOrderLineEditModal(idx){

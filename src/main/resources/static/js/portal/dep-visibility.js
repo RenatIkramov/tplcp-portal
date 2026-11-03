@@ -50,15 +50,16 @@
   /* ============ Поля, недоступные поклажедателю ============ */
 
   /**
-   * Доступна ли колонка этому клиенту.
+   * Доступна ли колонка этому клиенту. Таблица по умолчанию — товар;
+   * карточки документов спрашивают свою (доп. поля шапки, 03.11.2026).
    *
    * Раскладка с сервера запрещённых колонок не содержит вовсе
    * (table_columns их не отдаёт), поэтому «нет в раскладке» и значит
    * «клиенту недоступна». Пока раскладка не пришла, показываем всё:
    * мигание карточки хуже лишнего поля на долю секунды.
    */
-  function isColumnAvailable(columnId){
-    const rows = PORTAL.columns && PORTAL.columns.raw && PORTAL.columns.raw.sku;
+  function isColumnAvailable(columnId, tableKey){
+    const rows = PORTAL.columns && PORTAL.columns.raw && PORTAL.columns.raw[tableKey || 'sku'];
     if (!rows) return true;
     return rows.indexOf(columnId) >= 0;
   }

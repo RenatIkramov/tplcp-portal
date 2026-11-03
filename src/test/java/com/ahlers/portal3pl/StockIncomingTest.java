@@ -109,7 +109,7 @@ class StockIncomingTest extends PortalTestBase {
         String warehouseId = pair[1];
 
         Map<String, Object> card = drafts.create(DocumentType.RECEIPTS,
-                Map.of("warehouse_id", warehouseId));
+                withErp(Map.of("warehouse_id", warehouseId)));
         String docId = docIdOf(card);
         try {
             drafts.addLine(DocumentType.RECEIPTS, docId,
@@ -204,7 +204,7 @@ class StockIncomingTest extends PortalTestBase {
      */
     private String createSentReceipt(String skuCode, String warehouseId, int qty) {
         Map<String, Object> card = drafts.create(DocumentType.RECEIPTS,
-                Map.of("warehouse_id", warehouseId));
+                withErp(Map.of("warehouse_id", warehouseId)));
         String docId = docIdOf(card);
         drafts.addLine(DocumentType.RECEIPTS, docId,
                 Map.of("sku_id", skuIdOf(skuCode), "expected_qty", qty));

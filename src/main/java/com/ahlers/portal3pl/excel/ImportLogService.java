@@ -2,11 +2,13 @@ package com.ahlers.portal3pl.excel;
 
 import com.ahlers.portal3pl.admin.AdminUserService;
 import com.ahlers.portal3pl.auth.PortalUser;
+import com.ahlers.portal3pl.common.ActorText;
 import com.ahlers.portal3pl.common.SqlRows;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -34,10 +36,12 @@ public class ImportLogService {
 
     private final JdbcClient jdbc;
     private final AdminUserService users;
+    private final ActorText texts;
 
-    public ImportLogService(JdbcClient jdbc, AdminUserService users) {
+    public ImportLogService(JdbcClient jdbc, AdminUserService users, ActorText texts) {
         this.jdbc = jdbc;
         this.users = users;
+        this.texts = texts;
     }
 
     /**
@@ -52,9 +56,51 @@ public class ImportLogService {
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("imports", rows("SELECT * FROM dbo.admin_excel_imports(:dep::uuid, 200)",
                 depositorId));
-        out.put("issues", rows("SELECT * FROM dbo.admin_excel_import_issues(:dep::uuid, 500)",
-                depositorId));
+        out.put("issues", inReadersLanguage(
+                rows("SELECT * FROM dbo.admin_excel_import_issues(:dep::uuid, 500)", depositorId)));
         return out;
+    }
+
+    /**
+     * Причина на языке администратора, а не того, кто загружал (V98).
+     *
+     * <p>У причины с ключом фраза собирается заново, по ключу и
+     * подстановкам. У прежних записей и у загрузок товаров и упаковок
+     * ключа нет — остаётся записанный текст.
+     */
+    private List<Map<String, Object>> inReadersLanguage(List<Map<String, Object>> rows) {
+        List<Map<String, Object>> out = new ArrayList<>(rows.size());
+        for (Map<String, Object> row : rows) {
+            Map<String, Object> r = new LinkedHashMap<>(row);
+            List<String> names = strings(r.remove("paramNames"));
+            List<String> values = strings(r.remove("paramValues"));
+            Object key = r.get("messageKey");
+            if (key != null) {
+                Map<String, Object> params = new LinkedHashMap<>();
+                for (int i = 0; i < names.size() && i < values.size(); i++) {
+                    params.put(names.get(i), values.get(i));
+                }
+                r.put("message", texts.text(String.valueOf(key), params));
+            }
+            out.add(r);
+        }
+        return out;
+    }
+
+    private static List<String> strings(Object array) {
+        if (array instanceof java.sql.Array a) {
+            try {
+                Object[] items = (Object[]) a.getArray();
+                List<String> out = new ArrayList<>(items.length);
+                for (Object o : items) {
+                    out.add(o == null ? null : String.valueOf(o));
+                }
+                return out;
+            } catch (java.sql.SQLException e) {
+                return List.of();
+            }
+        }
+        return List.of();
     }
 
     private List<Map<String, Object>> rows(String sql, String depositorId) {

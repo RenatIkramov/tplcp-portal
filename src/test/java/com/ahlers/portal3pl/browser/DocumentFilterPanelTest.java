@@ -67,9 +67,9 @@ class DocumentFilterPanelTest extends BrowserTestBase {
         // Подпись фильтра — это подпись колонки, и приходит она
         // с сервера. Пустая подпись означала бы, что справочник
         // до экрана не доехал, а поля всё равно нарисовались.
-        assertEquals(label("receipts", "trip"), labelOf("filter-receipts-trip"),
+        assertEquals(columnLabel("receipts", "trip"), labelOf("filter-receipts-trip"),
                 "подпись фильтра по рейсу не совпадает с подписью колонки");
-        assertTrue(labelOf("filter-receipts-date-from").startsWith(label("receipts", "date")),
+        assertTrue(labelOf("filter-receipts-date-from").startsWith(columnLabel("receipts", "date")),
                 "подпись «с» не названа колонкой: " + labelOf("filter-receipts-date-from"));
 
         for (String old : List.of("receiptsSearchNo", "receiptsSearchSupplier",
@@ -450,7 +450,6 @@ class DocumentFilterPanelTest extends BrowserTestBase {
 
     /* ---------------- помощники ---------------- */
 
-
     /** Где стоит кнопка «Найти» — в целых пикселях. */
     private Object searchButtonBox() {
         return page.evaluate("""
@@ -461,7 +460,6 @@ class DocumentFilterPanelTest extends BrowserTestBase {
                 }
                 """);
     }
-
 
     /**
      * Снимает галочку у строки окна по подписи колонки.
@@ -489,7 +487,7 @@ class DocumentFilterPanelTest extends BrowserTestBase {
                   }
                   return false;
                 }
-                """, label("receipts", columnId)));
+                """, columnLabel("receipts", columnId)));
     }
 
     /** Возвращает панель к набору по умолчанию — чтобы не мешать соседям. */
@@ -501,7 +499,6 @@ class DocumentFilterPanelTest extends BrowserTestBase {
                         .listOfRows());
     }
 
-
     private int rowCount() {
         return ((Number) page.evaluate(
                 "() => document.querySelectorAll('#receiptsBody tr').length")).intValue();
@@ -512,17 +509,6 @@ class DocumentFilterPanelTest extends BrowserTestBase {
         return (String) page.evaluate(
                 "id => { const l = document.querySelector('label[for=\"' + id + '\"]');"
                         + " return l ? l.textContent.trim() : ''; }", fieldId);
-    }
-
-    /** Подпись колонки для этого пользователя — из того же справочника. */
-    private String label(String table, String columnId) {
-        return jdbc.sql("SELECT label FROM dbo.table_columns(:user::uuid, 'ru'::text, :table::text)"
-                        + " WHERE column_id = :column::text")
-                .param("user", userId(USER))
-                .param("table", table)
-                .param("column", columnId)
-                .query(String.class)
-                .single();
     }
 
     private PortalUser signedInUser() {

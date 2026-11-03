@@ -192,9 +192,59 @@ public class DraftRepository {
      * Заполнен ли транспорт хоть одним полем. «Рейс» не в счёт: он живёт
      * и в шапке, и сам по себе транспортной сущности WMS не делает.
      */
+    /**
+     * Номер портала документа того же типа и поклажедателя с тем же
+     * номером ERP (без регистра и пробелов по краям), кроме {@code exceptDocId};
+     * нет такого — null.
+     */
+    public String documentWithErpNumber(DocumentType type, String depositorId, String erp,
+                                        String exceptDocId) {
+        String sql = """
+                SELECT COALESCE(document_no, doc_number, doc_id::text) FROM dbo.%s
+                WHERE depositor_id = :dep::uuid
+                  AND lower(btrim(erp_number)) = lower(btrim(:erp))
+                  AND (CAST(:except AS uuid) IS NULL OR doc_id <> CAST(:except AS uuid))
+                LIMIT 1
+                """.formatted(type.headerTable());
+        return jdbc.sql(sql)
+                .param("dep", depositorId)
+                .param("erp", erp)
+                .param("except", exceptDocId)
+                .query(String.class)
+                .optional()
+                .orElse(null);
+    }
+
+    /** Склад поклажедателя, если доступный ему склад ровно один; иначе null. */
+    public String onlyWarehouse() {
+        List<String> all = jdbc.sql("""
+                        SELECT warehouse_id FROM dbo.v_warehouses
+                        WHERE COALESCE(is_active, true) LIMIT 2
+                        """)
+                .query(String.class)
+                .list();
+        return all.size() == 1 ? all.getFirst() : null;
+    }
+
+    /**
+     * Доп. поля шапки, закрытые поклажедателю в «Доступах поклажедателей»:
+     * имена колонок базы ({@code custom_field_3}). Таблица под RLS,
+     * поэтому видны только настройки текущего поклажедателя.
+     */
+    public Set<String> closedCustomFields(DocumentType type) {
+        return new java.util.HashSet<>(jdbc.sql("""
+                        SELECT 'custom_field_' || substr(column_id, length('customField') + 1)
+                          FROM dbo.depositor_table_column
+                         WHERE table_key = :table AND NOT is_available
+                           AND column_id ~ '^customField[0-9]+$'
+                        """)
+                .param("table", type.tableKey())
+                .query(String.class)
+                .list());
+    }
+
     public boolean hasTransport(DocumentType type, String docId) {
         String columns = DocumentType.transportColumns().stream()
-                .filter(c -> !"trip".equals(c))
                 .sorted()
                 .map(c -> "NULLIF(btrim(" + c + "::text), '')")
                 .collect(Collectors.joining(", "));

@@ -469,3 +469,13 @@
   .enum-confirm{display:flex;align-items:center;gap:8px;margin-top:12px;padding:8px 10px;border-radius:6px;background:var(--warn-bg);}
   .enum-confirm span{flex:1;}
   @media (max-width:900px){ .enum-layout{grid-template-columns:1fr;} }
+
+  /* ===== Документ из Excel: окно ошибок (заказ — V96, поступление — V100) ===== */
+  .col-panel.doc-import-panel{
+    width:760px;max-width:calc(100vw - 32px);height:auto;max-height:88vh;
+    border-radius:10px;box-shadow:0 8px 32px rgba(0,0,0,.24);
+  }
+  .doc-import-panel .doc-import-list{flex:1 1 auto;overflow-y:auto;min-height:0;margin-top:6px;}
+  .doc-import-panel table{width:100%;border-collapse:collapse;font-size:13px;}
+  .doc-import-panel th,.doc-import-panel td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top;}
+  .doc-import-panel td.num,.doc-import-panel th.num{text-align:right;white-space:nowrap;}
