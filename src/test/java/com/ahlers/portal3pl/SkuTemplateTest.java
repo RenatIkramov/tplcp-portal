@@ -243,8 +243,17 @@ class SkuTemplateTest extends PortalTestBase {
 
         localeOf(user, "en");
         signIn();
-        try (XSSFWorkbook wb = open(template.build(user).content())) {
-            XSSFSheet sheet = wb.getSheet("Номенклатура");
+        SkuTemplateService.Template english = template.build(user);
+        // Шаблон целиком на языке скачавшего (V102): имя файла, лист,
+        // тексты проверок ячеек. Таблица — латиницей и не переводится.
+        assertTrue(english.fileName().startsWith("Product_template"), english.fileName());
+        try (XSSFWorkbook wb = open(english.content())) {
+            XSSFSheet sheet = wb.getSheet("Items");
+            assertNotNull(sheet, "лист английского шаблона называется «Items»");
+            assertEquals("Items", sheet.getTables().getFirst().getName());
+            assertTrue(sheet.getDataValidations().stream()
+                            .noneMatch(v -> String.valueOf(v.getErrorBoxText()).matches(".*[А-Яа-яЁё].*")),
+                    "в английском шаблоне русские тексты проверок");
             assertEquals(List.of(List.of("yes", "no")), booleanLists(sheet));
             assertTrue(sheet.getDataValidations().stream()
                             .filter(v -> v.getValidationConstraint().getExplicitListValues() != null)

@@ -1544,25 +1544,6 @@
     if (sum) sum.textContent = '—';
   }
 
-  /**
-   * Прячет кнопки Excel у перемещений.
-   *
-   * <p>Загрузка строк перемещения из файла не сделана, и кнопки в вёрстке
-   * остались от демо: по нажатию они показывают плашку «Скачивается…»,
-   * а файла нет. Кнопка, которая выглядит рабочей и не работает, хуже
-   * отсутствующей — так уже поступили с упаковками.
-   */
-  function hideDeadExcelButtons(){
-    const host = document.getElementById('view-transfers');
-    if (!host) return;
-    host.querySelectorAll('button').forEach(btn => {
-      const onclick = btn.getAttribute('onclick') || '';
-      if (onclick.indexOf('Шаблон_Перемещение') >= 0 || onclick.indexOf('Excel с перемещением') >= 0){
-        btn.style.display = 'none';
-      }
-    });
-  }
-
   function install(){
     wrapHeaderFields();
     wrapLeave();
@@ -1603,7 +1584,6 @@
       refs.loaded = false;
       Object.keys(stockByWarehouse).forEach(id => delete stockByWarehouse[id]);
       Object.keys(addresses).forEach(id => delete addresses[id]);
-      hideDeadExcelButtons();
       loadDirectories().catch(() => {});
     });
   }

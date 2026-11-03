@@ -396,6 +396,45 @@ class SkuImportTest extends PortalTestBase {
                 "2 и 2,00 — одно число: " + row.get("issuesJson"));
     }
 
+    /**
+     * Замечание загрузки — на языке того, кто смотрит (V102): то же окно
+     * проверки, открытое по-английски, говорит по-английски. В базе —
+     * ключ и подстановки, а текст — на языке загрузившего, запасной.
+     */
+    @Test
+    void issuesAreShownInTheReadersLanguage() {
+        byte[] content = file(
+                List.of("Коммерческий код *", "Наименование товара *",
+                        "Базовая единица измерения *", "Вес брутто, кг"),
+                List.of(row(PREFIX + "L1", "Язык замечания", "шт", "-5"),
+                        row(PREFIX + "L1", "Повтор кода", "шт", "1")));
+        String importId = checkOnly(content);          // загружал — по-русски
+
+        String ru = String.valueOf(rowNumber(imports.result(importId), 2).get("issuesJson"));
+        assertTrue(ru.contains(uiText("error.catalog_import.negative", "ru")), ru);
+
+        PortalUser user = authService.authenticate(USER, USER_PASSWORD);
+        localeOf(user, "en");
+        try {
+            Map<String, Object> english = imports.result(importId);
+            String en = String.valueOf(rowNumber(english, 2).get("issuesJson"));
+            assertTrue(en.contains(uiText("error.catalog_import.negative", "en")), en);
+            String duplicate = String.valueOf(rowNumber(english, 3).get("issuesJson"));
+            assertTrue(duplicate.contains("already in row 2"), "подстановка {row}: " + duplicate);
+        } finally {
+            localeOf(user, "ru");
+        }
+
+        assertEquals("error.catalog_import.negative|" + uiText("error.catalog_import.negative", "ru"),
+                singleValue("SELECT message_key || '|' || message FROM dbo.excel_import_issue"
+                        + " WHERE import_id = '" + importId + "'::uuid AND row_number = 2"),
+                "в базе — ключ и текст на языке загрузившего");
+    }
+
+    private String uiText(String key, String locale) {
+        return singleValue("SELECT value FROM dbo.ui_texts('" + locale + "') WHERE text_key = '" + key + "'");
+    }
+
     @Test
     void unparsableValuesAreReportedPerCell() {
         byte[] content = file(

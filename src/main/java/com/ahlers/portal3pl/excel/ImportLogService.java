@@ -65,24 +65,34 @@ public class ImportLogService {
      * Причина на языке администратора, а не того, кто загружал (V98).
      *
      * <p>У причины с ключом фраза собирается заново, по ключу и
-     * подстановкам. У прежних записей и у загрузок товаров и упаковок
-     * ключа нет — остаётся записанный текст.
+     * подстановкам. У записей до V98 (документы) и до V102 (товары
+     * и упаковки) ключа нет — остаётся записанный текст.
      */
     private List<Map<String, Object>> inReadersLanguage(List<Map<String, Object>> rows) {
         List<Map<String, Object>> out = new ArrayList<>(rows.size());
         for (Map<String, Object> row : rows) {
             Map<String, Object> r = new LinkedHashMap<>(row);
-            List<String> names = strings(r.remove("paramNames"));
-            List<String> values = strings(r.remove("paramValues"));
+            Map<String, Object> params = params(r.remove("paramNames"), r.remove("paramValues"));
             Object key = r.get("messageKey");
             if (key != null) {
-                Map<String, Object> params = new LinkedHashMap<>();
-                for (int i = 0; i < names.size() && i < values.size(); i++) {
-                    params.put(names.get(i), values.get(i));
-                }
                 r.put("message", texts.text(String.valueOf(key), params));
             }
             out.add(r);
+        }
+        return out;
+    }
+
+    /**
+     * Подстановки причины из двух массивов базы — имён и значений.
+     * Общий шаг журнала и окна проверки загрузки: JSON разбирает база,
+     * а не портал.
+     */
+    static Map<String, Object> params(Object names, Object values) {
+        List<String> n = strings(names);
+        List<String> v = strings(values);
+        Map<String, Object> out = new LinkedHashMap<>();
+        for (int i = 0; i < n.size() && i < v.size(); i++) {
+            out.put(n.get(i), v.get(i));
         }
         return out;
     }

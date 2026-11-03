@@ -51,7 +51,8 @@ public class SkuTemplateService {
     /** Сколько строк данных в умной таблице шаблона — см. {@link ExcelTemplateWriter}. */
     public static final int TEMPLATE_ROWS = ExcelTemplateWriter.TEMPLATE_ROWS;
 
-    private static final String SHEET = "Номенклатура";
+    /** Умная таблица шаблона: латиницей и не переводится, как у документов (V102). */
+    static final String TABLE = "Items";
 
     private final JdbcClient jdbc;
     private final DepositorScope depositorScope;
@@ -97,10 +98,10 @@ public class SkuTemplateService {
         }
 
         try {
-            byte[] bytes = ExcelTemplateWriter.write(SHEET, fields, labels, dictionaryValues(),
-                    Map.of(), ExcelTemplateWriter.BooleanText.of(texts),
-                    str(depositor.get("code")), MAX_ROWS);
-            return new Template(ExcelTemplateWriter.fileName("Шаблон_Номенклатура",
+            byte[] bytes = ExcelTemplateWriter.write(texts.of("excel.sku.sheet"), TABLE, fields, labels,
+                    dictionaryValues(), Map.of(), ExcelTemplateWriter.BooleanText.of(texts),
+                    str(depositor.get("code")), MAX_ROWS, texts);
+            return new Template(ExcelTemplateWriter.fileName(texts.of("common.text.sku_template_file_name"),
                     str(depositor.get("org_name"))), bytes);
         } catch (IOException e) {
             throw Fail.internal("error.template.build_failed");

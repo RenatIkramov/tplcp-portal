@@ -63,8 +63,6 @@ public class SkuImportService {
      */
     public static final int MAX_ROWS = SkuTemplateService.MAX_ROWS;
 
-    private static final String SHEET = "Номенклатура";
-
     private final JdbcClient jdbc;
     private final DepositorScope depositorScope;
     private final SkuImportColumns matcher;
@@ -102,7 +100,7 @@ public class SkuImportService {
         try (Workbook wb = new XSSFWorkbook(new ByteArrayInputStream(content))) {
             support.requireOwnFile(wb, fileName);
 
-            Sheet sheet = support.sheetOf(wb, SHEET);
+            Sheet sheet = support.sheetOf(wb, SkuTemplateService.TABLE, "excel.sku.sheet");
             List<String> headers = support.headers(sheet);
             Layout layout = matcher.match(headers, depositorId);
             requireKeyColumns(layout);
@@ -197,7 +195,7 @@ public class SkuImportService {
             Integer limit = lengths.get(f.column());
             if (limit != null && String.valueOf(value).length() > limit) {
                 issues.add(issue(f.catalogId(), "value",
-                        "Значение длиннее " + limit + " знаков", raw, null));
+                        "error.catalog_import.too_long", raw, null, "limit", limit));
                 continue;
             }
             values.put(f.column(), value);
@@ -215,13 +213,12 @@ public class SkuImportService {
             // Позицию определить нельзя — ни к новым, ни к существующим
             // такую строку отнести не получится.
             rowClass = "unknown";
-            issues.add(issue("code", "required",
-                    "Не заполнен коммерческий код — по нему опознаётся позиция", null, null));
+            issues.add(issue("code", "required", "error.sku_import.code_required", null, null));
         } else {
             Integer before = seenCode.putIfAbsent(code.toLowerCase(Locale.ROOT), excelRow);
             if (before != null) {
-                issues.add(issue("code", "duplicate",
-                        "Код повторяется: он уже есть в строке " + before, code, null));
+                issues.add(issue("code", "duplicate", "error.sku_import.code_duplicate", code, null,
+                        "row", before));
             }
             portal = existing.get(code.toLowerCase(Locale.ROOT));
             rowClass = portal == null ? "new" : "existing";
@@ -232,9 +229,7 @@ public class SkuImportService {
             checkRequired(values, issues);
         } else if ("existing".equals(rowClass)) {
             if (!Boolean.TRUE.equals(portal.get("is_active"))) {
-                issues.add(issue(null, "archived",
-                        "Позиция в архиве — верните её из архива, прежде чем обновлять",
-                        null, null));
+                issues.add(issue(null, "archived", "error.sku_import.archived", null, null));
             }
             compare(values, portal, fill, issues, dictionaries);
         }
@@ -266,7 +261,7 @@ public class SkuImportService {
             if (values.get(column) == null
                     && !ExcelImportSupport.hasIssue(issues, SkuTemplateFields.catalogId(column))) {
                 issues.add(issue(SkuTemplateFields.catalogId(column), "required",
-                        "Не заполнено обязательное поле", null, null));
+                        "error.catalog_import.required", null, null));
             }
         }
     }
@@ -299,7 +294,7 @@ public class SkuImportService {
                 // В замечании показываем названия, а не идентификаторы:
                 // «шт» против «кг» понятно, «1» против «3» — нет.
                 issues.add(issue(SkuTemplateFields.catalogId(column), "conflict",
-                        "Значение отличается от того, что уже в портале",
+                        "error.catalog_import.conflict",
                         shownOrSelf(column, e.getValue(), dictionaries),
                         shownOrSelf(column, was, dictionaries)));
             }
@@ -307,9 +302,7 @@ public class SkuImportService {
         if (fill.isEmpty() && issues.isEmpty()) {
             // Строка есть, а делать по ней нечего. По решению заказчика
             // это тоже ошибка: человек ждал от строки действия.
-            issues.add(issue(null, "nothing",
-                    "Строка не меняет ни одного поля — всё уже заполнено так же",
-                    null, null));
+            issues.add(issue(null, "nothing", "error.catalog_import.nothing", null, null));
         }
     }
 
@@ -333,7 +326,7 @@ public class SkuImportService {
      * нового. Null означает «экран покажет само значение»: для текста
      * и чисел отдельная подпись только раздувала бы хранимый JSON.
      */
-    private static String shown(String column, Object value,
+    private String shown(String column, Object value,
                                 Map<String, Dictionary> dictionaries) {
         if (value == null) {
             return null;
@@ -346,13 +339,13 @@ public class SkuImportService {
             return name != null ? name : String.valueOf(value);
         }
         if (value instanceof Boolean b) {
-            return b ? "Да" : "Нет";
+            return support.yesNo(b);
         }
         return null;
     }
 
     /** То же, но для текста замечания: там пустое место недопустимо. */
-    private static String shownOrSelf(String column, Object value,
+    private String shownOrSelf(String column, Object value,
                                       Map<String, Dictionary> dictionaries) {
         String name = shown(column, value, dictionaries);
         return name != null ? name : String.valueOf(value);
@@ -423,8 +416,8 @@ public class SkuImportService {
         support.cancel(importId);
     }
 
-    private static Map<String, Object> issue(String columnId, String kind, String message,
-                                             String fileValue, String portalValue) {
-        return ExcelImportSupport.issue(columnId, kind, message, fileValue, portalValue);
+    private static Map<String, Object> issue(String columnId, String kind, String messageKey,
+                                             String fileValue, String portalValue, Object... params) {
+        return ExcelImportSupport.issue(columnId, kind, messageKey, fileValue, portalValue, params);
     }
 }
