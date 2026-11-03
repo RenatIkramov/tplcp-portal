@@ -55,10 +55,11 @@ class ServerMessagesTest extends PortalTestBase {
      * такой ключ в коде не встречается, поэтому перечисляем их здесь.
      *
      * <p>Так же устроены причины отказа загрузки документа из Excel (V100):
-     * общие — у корня {@code error.doc_import}, свои у заказа, поступления и перемещения.
+     * общие — у корня {@code error.doc_import}, свои у заказа, поступления
+     * и перемещения (их собирает {@code DocumentExcel.Spec.error} — класс
+     * виден только в пакете {@code excel}, поэтому без ссылки).
      *
      * @see com.ahlers.portal3pl.catalog.PartnerKind#error(String)
-     * @see com.ahlers.portal3pl.excel.DocumentExcel.Spec#error(String)
      */
     private static final List<String> OWN_IMPORT_ERRORS =
             List.of("archived_item", "erp_taken", "field_not_available", "no_goods", "no_goods_table");
