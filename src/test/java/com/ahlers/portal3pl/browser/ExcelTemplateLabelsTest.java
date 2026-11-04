@@ -7,6 +7,7 @@ import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -60,9 +61,21 @@ class ExcelTemplateLabelsTest extends BrowserTestBase {
         assertNoJsErrors();
     }
 
+    /**
+     * Настройки «Доступов» поклажедателя: тест начинает с портальных,
+     * а после себя возвращает те, что были, — не стирает настроенное
+     * человеком для живой проверки (03.11.2026).
+     */
+    private Runnable restoreSetup = () -> { };
+
+    @BeforeEach
+    void portalSetup() {
+        restoreSetup = startFromPortalSetup(DEPOSITOR);
+    }
+
     @AfterEach
     void dropRename() {
-        rename("");
+        restoreSetup.run();
     }
 
     /**

@@ -5,6 +5,8 @@ import com.ahlers.portal3pl.columns.ColumnService;
 import com.ahlers.portal3pl.documents.DocumentService;
 import com.ahlers.portal3pl.documents.DocumentType;
 import com.ahlers.portal3pl.lists.ListService;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -29,6 +31,23 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * не находил ничего, а «дата по» отсекала последний день диапазона.
  */
 class DocumentFilterTest extends PortalTestBase {
+
+    /**
+     * Настройки «Доступов» поклажедателя: тест начинает с портальных,
+     * а после себя возвращает те, что были, — не стирает настроенное
+     * человеком для живой проверки (03.11.2026).
+     */
+    private Runnable restoreSetup = () -> { };
+
+    @BeforeEach
+    void portalSetup() {
+        restoreSetup = startFromPortalSetup(DEPOSITOR);
+    }
+
+    @AfterEach
+    void restoreDepositorSetup() {
+        restoreSetup.run();
+    }
 
     @Autowired
     DocumentService documents;

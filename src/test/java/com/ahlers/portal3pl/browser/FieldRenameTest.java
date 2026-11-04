@@ -2,6 +2,7 @@ package com.ahlers.portal3pl.browser;
 
 import com.ahlers.portal3pl.auth.PortalUser;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -61,9 +62,21 @@ class FieldRenameTest extends BrowserTestBase {
     }
 
     /** Возвращаем справочник в исходное состояние: пустая подпись — это отмена. */
+    /**
+     * Настройки «Доступов» поклажедателя: тест начинает с портальных,
+     * а после себя возвращает те, что были, — не стирает настроенное
+     * человеком для живой проверки (03.11.2026).
+     */
+    private Runnable restoreSetup = () -> { };
+
+    @BeforeEach
+    void portalSetup() {
+        restoreSetup = startFromPortalSetup(DEPOSITOR);
+    }
+
     @AfterEach
     void dropRename() {
-        rename("");
+        restoreSetup.run();
     }
 
     private void rename(String label) {

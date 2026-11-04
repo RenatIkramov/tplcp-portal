@@ -14,6 +14,7 @@ import org.apache.poi.xssf.usermodel.XSSFSheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.openxmlformats.schemas.spreadsheetml.x2006.main.CTDataValidations;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -48,23 +49,21 @@ class SkuTemplateTest extends PortalTestBase {
     @Autowired
     CurrentUser currentUser;
 
+    /**
+     * Настройки «Доступов» поклажедателя: тест начинает с портальных,
+     * а после себя возвращает те, что были, — не стирает настроенное
+     * человеком для живой проверки (03.11.2026).
+     */
+    private Runnable restoreSetup = () -> { };
+
+    @BeforeEach
+    void portalSetup() {
+        restoreSetup = startFromPortalSetup(DEPOSITOR);
+    }
+
     @AfterEach
     void cleanUp() {
-        PortalUser admin = portalAdmin();
-        signInAs(ADMIN, DEPOSITOR);
-        columns.resetDepositorColumns(admin, depositorId(ADMIN, DEPOSITOR), null);
-        new TransactionTemplate(txManager).executeWithoutResult(tx ->
-                jdbc.sql("UPDATE dbo.user_settings SET can_upload_sku_excel = true"
-                                + " WHERE user_id IN (SELECT user_id FROM dbo.app_user"
-                                + " WHERE login = :login)")
-                        .param("login", USER)
-                        .update());
-        // язык пользователя возвращаем к портальному, чтобы он не утекал
-        // в другие тесты
-        new TransactionTemplate(txManager).executeWithoutResult(tx ->
-                jdbc.sql("UPDATE dbo.app_user SET locale_id = NULL WHERE login = :login")
-                        .param("login", USER)
-                        .update());
+        restoreSetup.run();
     }
 
     /**

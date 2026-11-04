@@ -160,7 +160,7 @@ class DraftTest extends PortalTestBase {
     void closedCustomFieldIsNotSaved() {
         var admin = portalAdmin();
         String dep = depositorId(USER, DEPOSITOR);
-        Runnable restore = keepDepositorColumns("receipts");
+        Runnable restore = keepDepositorSetup(DEPOSITOR);
         columnService.saveDepositorColumn(admin, dep, "receipts", "customField1", true, false);
         columnService.saveDepositorColumn(admin, dep, "receipts", "customField2", false, false);
         try {

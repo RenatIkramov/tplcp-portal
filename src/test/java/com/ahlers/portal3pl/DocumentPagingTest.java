@@ -5,6 +5,8 @@ import com.ahlers.portal3pl.columns.ColumnService;
 import com.ahlers.portal3pl.lists.ListPaging;
 import com.ahlers.portal3pl.documents.DocumentService;
 import com.ahlers.portal3pl.documents.DocumentType;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -44,6 +46,23 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * а то, что нашлось в справочнике (V78).
  */
 class DocumentPagingTest extends PortalTestBase {
+
+    /**
+     * Настройки «Доступов» поклажедателя: тест начинает с портальных,
+     * а после себя возвращает те, что были, — не стирает настроенное
+     * человеком для живой проверки (03.11.2026).
+     */
+    private Runnable restoreSetup = () -> { };
+
+    @BeforeEach
+    void portalSetup() {
+        restoreSetup = startFromPortalSetup(DEPOSITOR);
+    }
+
+    @AfterEach
+    void restoreDepositorSetup() {
+        restoreSetup.run();
+    }
 
     @Autowired
     DocumentService documents;

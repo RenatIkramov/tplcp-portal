@@ -3,6 +3,7 @@ package com.ahlers.portal3pl;
 import com.ahlers.portal3pl.admin.DepositorSettingsService;
 import com.ahlers.portal3pl.auth.PortalUser;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -32,11 +33,21 @@ class DepositorSettingsTest extends PortalTestBase {
     @Autowired
     DepositorSettingsService settings;
 
+    /**
+     * Настройки «Доступов» поклажедателя: тест начинает с портальных,
+     * а после себя возвращает те, что были, — не стирает настроенное
+     * человеком для живой проверки (03.11.2026).
+     */
+    private Runnable restoreSetup = () -> { };
+
+    @BeforeEach
+    void portalSetup() {
+        restoreSetup = startFromPortalSetup(DEPOSITOR);
+    }
+
     @AfterEach
-    void restoreDefaults() {
-        PortalUser actor = portalAdmin();
-        settings.save(actor, depositorId(ADMIN, DEPOSITOR),
-                new DepositorSettingsService.Settings(false, false, false));
+    void restoreDepositorSetup() {
+        restoreSetup.run();
     }
 
     /** По умолчанию цены в окне строки нет: так просил заказчик. */

@@ -180,7 +180,8 @@ public abstract class BrowserTestBase extends PortalTestBase {
         // Язык, выставленный проверкой, не должен достаться следующей:
         // без этого итог проверок зависел от порядка их запуска — тест
         // сервера ждал английский, а получал русский от браузерного.
-        inContext("UPDATE dbo.app_user SET locale_id = NULL WHERE login IN ('" + USER + "', '" + ADMIN + "')");
+        // Язык клиентов возвращает PortalTestBase, здесь — служебный админ.
+        inContext("UPDATE dbo.app_user SET locale_id = NULL WHERE login = '" + ADMIN + "'");
     }
 
     /**

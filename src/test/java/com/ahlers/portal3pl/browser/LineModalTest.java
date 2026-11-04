@@ -4,6 +4,7 @@ import com.ahlers.portal3pl.admin.DepositorSettingsService;
 import com.ahlers.portal3pl.stock.StockService;
 import com.ahlers.portal3pl.auth.PortalUser;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -355,10 +356,21 @@ class LineModalTest extends BrowserTestBase {
         return authService.authenticate(USER, USER_PASSWORD);
     }
 
+    /**
+     * Настройки «Доступов» поклажедателя: тест начинает с портальных,
+     * а после себя возвращает те, что были, — не стирает настроенное
+     * человеком для живой проверки (03.11.2026).
+     */
+    private Runnable restoreSetup = () -> { };
+
+    @BeforeEach
+    void portalSetup() {
+        restoreSetup = startFromPortalSetup(DEPOSITOR);
+    }
+
     /** Черновик за собой убираем: проверка создаёт настоящий документ. */
     @AfterEach
     void cleanUp() {
-        priceSetting(false, false);
         if (docId != null && page != null) {
             try {
                 page.evaluate("id => fetch('/api/receipts/' + id, {method: 'DELETE'})", docId);
@@ -366,5 +378,6 @@ class LineModalTest extends BrowserTestBase {
                 System.out.println("не удалось удалить черновик поступления: " + e.getMessage());
             }
         }
+        restoreSetup.run();
     }
 }

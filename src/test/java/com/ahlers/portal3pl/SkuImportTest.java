@@ -11,6 +11,7 @@ import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -54,15 +55,24 @@ class SkuImportTest extends PortalTestBase {
     @Autowired
     ImportLogService importLog;
 
+    /**
+     * Настройки «Доступов» поклажедателя: тест начинает с портальных,
+     * а после себя возвращает те, что были, — не стирает настроенное
+     * человеком для живой проверки (03.11.2026).
+     */
+    private Runnable restoreSetup = () -> { };
+
+    @BeforeEach
+    void portalSetup() {
+        restoreSetup = startFromPortalSetup(DEPOSITOR);
+    }
+
     @AfterEach
     void cleanUp() {
         inContext("DELETE FROM dbo.excel_import");
         inContext("UPDATE dbo.sku SET order_unit_id = NULL WHERE code LIKE '" + PREFIX + "%'");
         inContext("DELETE FROM dbo.sku WHERE code LIKE '" + PREFIX + "%'");
-        PortalUser admin = portalAdmin();
-        signInAs(ADMIN, DEPOSITOR);
-        columns.resetDepositorColumns(admin, depositorId(ADMIN, DEPOSITOR), null);
-        columns.saveFieldLabel(admin, depositorId(ADMIN, DEPOSITOR), "sku", "code", null);
+        restoreSetup.run();
     }
 
     /* ======================= Сборка файла ======================= */

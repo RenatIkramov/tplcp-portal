@@ -2,6 +2,7 @@ package com.ahlers.portal3pl.browser;
 
 import com.ahlers.portal3pl.auth.PortalUser;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -27,7 +28,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 class DepositorFieldVisibilityTest extends BrowserTestBase {
 
     private String columnId;
-    private boolean portalDefault;
     private String label;
 
     @Test
@@ -63,11 +63,21 @@ class DepositorFieldVisibilityTest extends BrowserTestBase {
     }
 
     /** Возвращаем колонку клиенту: проверка не должна менять настройки насовсем. */
+    /**
+     * Настройки «Доступов» поклажедателя: тест начинает с портальных,
+     * а после себя возвращает те, что были, — не стирает настроенное
+     * человеком для живой проверки (03.11.2026).
+     */
+    private Runnable restoreSetup = () -> { };
+
+    @BeforeEach
+    void portalSetup() {
+        restoreSetup = startFromPortalSetup(DEPOSITOR);
+    }
+
     @AfterEach
     void restoreColumn() {
-        if (columnId != null) {
-            setAvailable(true, portalDefault);
-        }
+        restoreSetup.run();
     }
 
     private PortalUser signedInUser() {
@@ -79,7 +89,7 @@ class DepositorFieldVisibilityTest extends BrowserTestBase {
     private void chooseColumn() {
         Map<String, Object> row = new TransactionTemplate(txManager).execute(tx ->
                 jdbc.sql("""
-                                SELECT c.column_id, c.is_default, t.value AS label
+                                SELECT c.column_id, t.value AS label
                                   FROM dbo.table_column c
                                   JOIN dbo.ui_texts('ru') t ON t.text_key = c.text_key
                                  WHERE c.table_key = 'sku' AND NOT c.is_locked AND c.is_default
@@ -95,7 +105,6 @@ class DepositorFieldVisibilityTest extends BrowserTestBase {
             Assumptions.abort("в справочнике колонок нет незапертой колонки товара");
         }
         columnId = String.valueOf(row.get("column_id"));
-        portalDefault = Boolean.TRUE.equals(row.get("is_default"));
         label = String.valueOf(row.get("label"));
     }
 

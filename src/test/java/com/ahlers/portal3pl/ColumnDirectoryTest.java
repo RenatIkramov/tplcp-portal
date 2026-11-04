@@ -5,6 +5,7 @@ import com.ahlers.portal3pl.auth.PortalUser;
 import com.ahlers.portal3pl.columns.ColumnService;
 import com.ahlers.portal3pl.config.CurrentUser;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -39,36 +40,26 @@ class ColumnDirectoryTest extends PortalTestBase {
     CurrentUser current;
 
     /**
-     * Уборка идёт теми же путями, какими работает приложение, а не прямыми
-     * DELETE. Причина не в красоте: depositor_table_column и
-     * depositor_field_label под FORCE ROW LEVEL SECURITY, и запрос без
-     * контекста поклажедателя удаляет ноль строк — молча, без ошибки.
-     * Настройка от одного теста доживала до следующего и роняла его.
+     * Настройки «Доступов» обоих поклажедателей: тест начинает
+     * с портальных, а после себя возвращает те, что были, — не стирает
+     * настроенное человеком для живой проверки (03.11.2026).
      */
+    private Runnable restoreSetup = () -> { };
+
+    /**
+     * Сброс — прямыми запросами под контекстом каждого поклажедателя
+     * (PortalTestBase): depositor_table_column и depositor_field_label под
+     * FORCE ROW LEVEL SECURITY, и запрос без контекста удалил бы ноль
+     * строк — молча, без ошибки.
+     */
+    @BeforeEach
+    void portalSetup() {
+        restoreSetup = startFromPortalSetup(DEPOSITOR, OTHER_DEPOSITOR);
+    }
+
     @AfterEach
     void cleanUp() {
-        PortalUser admin = portalAdmin();
-        signInAs(ADMIN, DEPOSITOR);
-        for (String code : new String[]{DEPOSITOR, OTHER_DEPOSITOR}) {
-            String id = depositorId(ADMIN, code);
-            columns.resetDepositorColumns(admin, id, null);
-            columns.saveFieldLabel(admin, id, "sku", "code", null);
-            // настройки разделов тоже возвращаем: скрытый раздел дожил бы
-            // до следующего теста и уронил бы его
-            depositorSettings.save(admin, id,
-                    new DepositorSettingsService.Settings(false, false, false));
-        }
-        new TransactionTemplate(txManager).executeWithoutResult(tx ->
-                jdbc.sql("DELETE FROM dbo.user_table_column WHERE user_id IN"
-                                + " (SELECT user_id FROM dbo.app_user WHERE login IN (:a, :b))")
-                        .param("a", USER)
-                        .param("b", OTHER_USER)
-                        .update());
-        // язык пользователя возвращаем к портальному
-        new TransactionTemplate(txManager).executeWithoutResult(tx ->
-                jdbc.sql("UPDATE dbo.app_user SET locale_id = NULL WHERE login = :login")
-                        .param("login", USER)
-                        .update());
+        restoreSetup.run();
     }
 
     private static boolean visible(List<Map<String, Object>> layout, String columnId) {

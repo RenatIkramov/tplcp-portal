@@ -4,6 +4,7 @@ import com.ahlers.portal3pl.auth.AuthService;
 import com.ahlers.portal3pl.auth.PortalUser;
 import com.ahlers.portal3pl.config.DepositorContext;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -178,6 +179,38 @@ public abstract class PortalTestBase {
         DepositorContext.clear();
     }
 
+    /**
+     * Личные настройки клиентов, под которыми ходят тесты: запомнить,
+     * начать с известного состояния, после теста вернуть как были.
+     * Под этими же учётками заказчик проверяет портал руками —
+     * подробности в {@link PersonalSettings}.
+     * <p>
+     * Методы базового класса JUnit вызывает раньше {@code @BeforeEach}
+     * наследника и позже его {@code @AfterEach}: снимок снят до любой
+     * подготовки теста, а возврат идёт после любой его уборки.
+     */
+    private PersonalSettings personal;
+
+    /** Хэш тестового пароля — один на прогон: шифровать его на каждый тест долго. */
+    private static String testPasswordHash;
+
+    @BeforeEach
+    void rememberPersonalSettings() {
+        if (testPasswordHash == null) {
+            testPasswordHash = passwordEncoder.encode(USER_PASSWORD);
+        }
+        personal = new PersonalSettings(jdbc, txManager, List.of(USER, OTHER_USER),
+                testPasswordHash).remember();
+        personal.startClean();
+    }
+
+    @AfterEach
+    void restorePersonalSettings() {
+        if (personal != null) {
+            personal.restore();
+        }
+    }
+
     /** Проверяет, что вызов отклонён с ожидаемым кодом ответа. */
     protected void expectRejection(int httpStatus, Runnable action) {
         ResponseStatusException e = assertThrows(ResponseStatusException.class, action::run);
@@ -252,35 +285,108 @@ public abstract class PortalTestBase {
     }
 
     /**
-     * Запомнить настройки колонок поклажедателя по таблице и вернуть
-     * функцию, которая их восстановит — ровно как были, а не «как
-     * у портала». Тест, который закрывает поля, иначе стирал бы то, что
-     * человек настроил в «Доступах» для живой проверки.
+     * Запомнить всё, что администратор настроил поклажедателям в «Доступах»,
+     * и вернуть функцию, которая вернёт это ровно как было: колонки всех
+     * таблиц, переименованные поля и галочки карточки клиента.
+     * <p>
+     * Для тестов, которые сбрасывают настройки к портальным: раньше они
+     * после себя оставляли «как у портала» и стирали то, что человек
+     * настроил «Рогам и Копытам» для живой проверки (03.11.2026).
+     * Таблицы под FORCE ROW LEVEL SECURITY, поэтому чтение и запись — под
+     * контекстом каждого поклажедателя.
      */
-    protected Runnable keepDepositorColumns(String tableKey) {
-        List<Map<String, Object>> saved = new TransactionTemplate(txManager).execute(tx -> {
+    protected Runnable keepDepositorSetup(String... depositorCodes) {
+        portalAdmin();
+        List<Runnable> restores = new java.util.ArrayList<>();
+        for (String code : depositorCodes) {
+            restores.add(keepDepositorSetupOf(depositorId(ADMIN, code)));
+        }
+        return () -> restores.forEach(Runnable::run);
+    }
+
+    /**
+     * Запомнить настройки «Доступов» поклажедателей и начать тест
+     * с портальных: колонки как у портала, переименований полей нет,
+     * галочки карточки клиента сняты. Возвращает функцию, которая вернёт
+     * настройки ровно как были.
+     * <p>
+     * Сбрасывается всё, а не только то, что трогает тест: иначе проверка
+     * зависела бы от того, что человек настроил для живой проверки
+     * (переименованное поле — лишняя подпись в справочнике полей).
+     */
+    protected Runnable startFromPortalSetup(String... depositorCodes) {
+        Runnable restore = keepDepositorSetup(depositorCodes);
+        for (String code : depositorCodes) {
+            String depositorId = depositorId(ADMIN, code);
+            new TransactionTemplate(txManager).executeWithoutResult(tx -> {
+                jdbc.sql("SELECT set_config('app.depositor_id', :id, true)")
+                        .param("id", depositorId).query(String.class).single();
+                jdbc.sql("DELETE FROM dbo.depositor_table_column"
+                        + " WHERE depositor_id = dbo.current_depositor_id()").update();
+                jdbc.sql("DELETE FROM dbo.depositor_field_label"
+                        + " WHERE depositor_id = dbo.current_depositor_id()").update();
+                jdbc.sql("SELECT dbo.admin_save_depositor_settings(:id::uuid, false, false, false)")
+                        .param("id", depositorId).query().listOfRows();
+            });
+        }
+        return restore;
+    }
+
+    private Runnable keepDepositorSetupOf(String depositorId) {
+        record Saved(List<Map<String, Object>> columns,
+                     List<Map<String, Object>> labels,
+                     Map<String, Object> settings) {
+        }
+        Saved saved = new TransactionTemplate(txManager).execute(tx -> {
             jdbc.sql("SELECT set_config('app.depositor_id', :id, true)")
-                    .param("id", depositorId(USER, DEPOSITOR)).query(String.class).single();
-            return jdbc.sql("SELECT column_id, is_available, is_default, sort_order"
-                            + " FROM dbo.depositor_table_column WHERE table_key = :t")
-                    .param("t", tableKey).query().listOfRows();
+                    .param("id", depositorId).query(String.class).single();
+            return new Saved(
+                    jdbc.sql("SELECT table_key, column_id, is_available, is_default, sort_order"
+                            + " FROM dbo.depositor_table_column"
+                            + " WHERE depositor_id = dbo.current_depositor_id()").query().listOfRows(),
+                    jdbc.sql("SELECT object_type_id, field_id, custom_label"
+                            + " FROM dbo.depositor_field_label"
+                            + " WHERE depositor_id = dbo.current_depositor_id()").query().listOfRows(),
+                    jdbc.sql("SELECT hide_transfers_tab, price_in_receipts, price_in_orders"
+                                    + " FROM dbo.depositor_settings_of(:id::uuid)")
+                            .param("id", depositorId).query().listOfRows()
+                            .stream().findFirst().orElse(Map.of()));
         });
         return () -> new TransactionTemplate(txManager).executeWithoutResult(tx -> {
             jdbc.sql("SELECT set_config('app.depositor_id', :id, true)")
-                    .param("id", depositorId(USER, DEPOSITOR)).query(String.class).single();
-            jdbc.sql("DELETE FROM dbo.depositor_table_column WHERE table_key = :t")
-                    .param("t", tableKey).update();
-            for (Map<String, Object> r : saved) {
+                    .param("id", depositorId).query(String.class).single();
+            jdbc.sql("DELETE FROM dbo.depositor_table_column"
+                    + " WHERE depositor_id = dbo.current_depositor_id()").update();
+            for (Map<String, Object> r : saved.columns()) {
                 jdbc.sql("INSERT INTO dbo.depositor_table_column"
                                 + " (depositor_id, table_key, column_id, is_available, is_default, sort_order)"
                                 + " VALUES (dbo.current_depositor_id(), :t, :c, :a, :d, :o)")
-                        .param("t", tableKey)
+                        .param("t", r.get("table_key"))
                         .param("c", r.get("column_id"))
                         .param("a", r.get("is_available"))
                         .param("d", r.get("is_default"))
                         .param("o", r.get("sort_order"))
                         .update();
             }
+            jdbc.sql("DELETE FROM dbo.depositor_field_label"
+                    + " WHERE depositor_id = dbo.current_depositor_id()").update();
+            for (Map<String, Object> r : saved.labels()) {
+                jdbc.sql("INSERT INTO dbo.depositor_field_label"
+                                + " (depositor_id, object_type_id, field_id, custom_label)"
+                                + " VALUES (dbo.current_depositor_id(), :o, :f, :l)")
+                        .param("o", r.get("object_type_id"))
+                        .param("f", r.get("field_id"))
+                        .param("l", r.get("custom_label"))
+                        .update();
+            }
+            Map<String, Object> s = saved.settings();
+            jdbc.sql("SELECT dbo.admin_save_depositor_settings(:id::uuid,"
+                            + " :h::boolean, :r::boolean, :o::boolean)")
+                    .param("id", depositorId)
+                    .param("h", Boolean.TRUE.equals(s.get("hide_transfers_tab")))
+                    .param("r", Boolean.TRUE.equals(s.get("price_in_receipts")))
+                    .param("o", Boolean.TRUE.equals(s.get("price_in_orders")))
+                    .query().listOfRows();
         });
     }
 

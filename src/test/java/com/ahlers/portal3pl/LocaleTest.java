@@ -31,11 +31,9 @@ class LocaleTest extends PortalTestBase {
 
     @AfterEach
     void restoreState() {
-        // язык пользователя и пробные переводы возвращаем как было
+        // пробные переводы убираем; язык пользователя возвращает PortalTestBase
         new org.springframework.transaction.support.TransactionTemplate(txManager)
                 .executeWithoutResult(tx -> {
-                    jdbc.sql("UPDATE dbo.app_user SET locale_id = NULL WHERE login = :login")
-                            .param("login", USER).update();
                     jdbc.sql("DELETE FROM dbo.ui_text WHERE locale_id ="
                                     + " (SELECT locale_id FROM dbo.dictionary_locale WHERE code = 'nl')")
                             .update();
