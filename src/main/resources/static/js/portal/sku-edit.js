@@ -7,10 +7,15 @@
 
   /** Кто ведёт справочник. Кладовщик и разработчик — только смотрят. */
   const EDITOR_ROLES = ['depositor', 'manager', 'admin'];
-  const mayEdit = () => EDITOR_ROLES.includes(PORTAL.session && PORTAL.session.roleCode);
+  const mayEdit = () => EDITOR_ROLES.includes(PORTAL.session ? PORTAL.session.roleCode : '');
 
   // Состояние карточки держим в одном объекте: вкладки перерисовывают
   // тело целиком, и после переключения вкладки введённое должно остаться.
+  /**
+   * @type {{mode: string, skuId: string | null, row?: CardRow, draft: CardRow, packagings: PackagingRow[],
+   *         pkgForm: {packagingId: string | null, values: CardRow} | null,
+   *         dict: Record<string, any[]> | null}}
+   */
   const state = {
     mode: 'view',      // view | edit | create
     skuId: null,
@@ -20,6 +25,9 @@
     dict: null
   };
   PORTAL.skuEdit = state;
+
+  /** Код открытого товара; пусто — карточка ещё не загружена. */
+  const openCode = () => (state.row ? state.row.code : '');
 
   const dash = v => (v === null || v === undefined || v === '') ? '—' : v;
   const esc = v => String(v === null || v === undefined ? '' : v)
@@ -318,6 +326,7 @@
 
   window.portalPackagingField = function(el){
     const col = el.getAttribute('data-pkg');
+    if (!state.pkgForm) return;
     state.pkgForm.values[col] = el.value === '' ? null : el.value;
     if (DIMENSIONS.includes(col)) syncVolume(el.closest('.kv-grid'));
   };
@@ -343,7 +352,7 @@
 
   /** Поле «Объём» вслед за размерами — без перерисовки, фокус остаётся. */
   function syncVolume(grid){
-    if (!grid) return;
+    if (!grid || !state.pkgForm) return;
     const values = state.pkgForm.values;
     const field = grid.querySelector('[data-pkg="volume_m3"]');
     const hint = grid.querySelector('[data-pkg-volume-hint]');
@@ -460,7 +469,7 @@
   window.portalSkuEdit = function(){
     state.mode = 'edit';
     state.draft = {};
-    openSkuItem(state.row.code);
+    openSkuItem(openCode());
   };
 
   window.portalSkuCancel = function(){
@@ -472,14 +481,14 @@
       return;
     }
     state.mode = 'view';
-    openSkuItem(state.row.code);
+    openSkuItem(openCode());
   };
 
   window.portalSkuSave = async function(){
     const creating = state.mode === 'create';
     if (!creating && Object.keys(state.draft).length === 0){
       state.mode = 'view';
-      openSkuItem(state.row.code);
+      openSkuItem(openCode());
       return;
     }
     try {
@@ -518,7 +527,7 @@
 
   window.portalSkuDelete = async function(){
     // Подтверждение нужно: удаление необратимо, в отличие от архива
-    if (!window.confirm(T('sku.message.confirm_delete_item', { code: state.row.code })
+    if (!window.confirm(T('sku.message.confirm_delete_item', { code: openCode() })
         + '\n' + T('sku.text.if_it_is_used_anywhere_the_portal'))) return;
     try {
       await api('DELETE', '/api/sku/' + state.skuId);
@@ -538,7 +547,7 @@
 
   window.portalPackagingAdd = function(){
     state.pkgForm = {packagingId: null, values: {}};
-    openSkuItem(state.row.code);
+    openSkuItem(openCode());
   };
 
   window.portalPackagingEdit = function(id){
@@ -547,7 +556,7 @@
     const values = {};
     PKG_FIELDS.forEach(col => { values[col] = r[camel(col)]; });
     state.pkgForm = {packagingId: id, values: values};
-    openSkuItem(state.row.code);
+    openSkuItem(openCode());
   };
 
   /**
@@ -561,11 +570,12 @@
 
   window.portalPackagingCancel = function(){
     state.pkgForm = null;
-    openSkuItem(state.row.code);
+    openSkuItem(openCode());
   };
 
   window.portalPackagingSave = async function(){
     const form = state.pkgForm;
+    if (!form) return;
     try {
       state.packagings = form.packagingId
         ? await api('PUT', '/api/packagings/' + form.packagingId, form.values)
@@ -573,7 +583,7 @@
       state.pkgForm = null;
       await reloadPackagingScreen();
       refreshLineModal();
-      openSkuItem(state.row.code);
+      openSkuItem(openCode());
       say(T('sku.message.packaging_saved'));
     } catch (e){
       say(e.message);
@@ -586,7 +596,7 @@
       await PORTAL.reloadProducts();
       await reloadPackagingScreen();
       refreshLineModal();
-      openSkuItem(state.row.code);
+      openSkuItem(openCode());
     } catch (e){
       say(e.message);
     }
@@ -600,7 +610,7 @@
       state.packagings = await api('DELETE', '/api/packagings/' + id);
       await reloadPackagingScreen();
       refreshLineModal();
-      openSkuItem(state.row.code);
+      openSkuItem(openCode());
       say(T('sku.text.packaging_deleted'));
     } catch (e){
       say(e.message);

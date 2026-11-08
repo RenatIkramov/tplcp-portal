@@ -38,6 +38,11 @@
 
   // catalog — один на весь портал (какие поля вообще можно
   // переименовать), rows — что переименовано у ЭТОГО клиента.
+  /**
+   * @type {{depositorId: string | null, catalog: FieldCatalogRow[], rows: FieldLabelRow[],
+   *         filterObject: string, filterField: string, load?: (depositorId: string) => Promise<void>,
+   *         html?: () => string, wire?: (el: HTMLElement, repaint: () => void) => void}}
+   */
   const state = {
     depositorId: null,
     catalog: [],

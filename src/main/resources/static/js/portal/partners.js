@@ -6,7 +6,7 @@
   if (!PORTAL) return;
 
   const EDITOR_ROLES = ['depositor', 'manager', 'admin'];
-  const mayEdit = () => EDITOR_ROLES.includes(PORTAL.session && PORTAL.session.roleCode);
+  const mayEdit = () => EDITOR_ROLES.includes(PORTAL.session ? PORTAL.session.roleCode : '');
 
   const dash = v => (v === null || v === undefined || v === '') ? '—' : v;
   const esc = v => String(v === null || v === undefined ? '' : v)
@@ -60,6 +60,11 @@
 
   const camel = col => col.replace(/_([a-z])/g, (m, c) => c.toUpperCase());
 
+  /**
+   * @type {{kind: string | null, mode: string, id: string | null, row: CardRow | null,
+   *         draft: CardRow, addresses: DeliveryPoint[],
+   *         addressForm: {addressId: string | null, values: CardRow} | null, tab: string}}
+   */
   const state = {
     kind: null, mode: 'view', id: null, row: null, draft: {},
     addresses: [], addressForm: null, tab: 'card'
@@ -182,6 +187,7 @@
   }
 
   window.portalAddressField = function(el){
+    if (!state.addressForm) return;
     state.addressForm.values[el.getAttribute('data-addr')] = el.value === '' ? null : el.value;
   };
 
@@ -326,7 +332,7 @@
   };
 
   window.portalPartnerDelete = async function(){
-    if (!window.confirm(T('common.message.confirm_delete_forever', { name: state.row.name || '' })
+    if (!window.confirm(T('common.message.confirm_delete_forever', { name: (state.row && state.row.name) || '' })
         + '\n' + T('partners.text.if_the_partner_appears_in_document'))) return;
     try {
       await api('DELETE', '/api/' + state.kind + '/' + state.id);
@@ -360,6 +366,7 @@
 
   window.portalAddressSave = async function(){
     const form = state.addressForm;
+    if (!form) return;
     try {
       state.addresses = form.addressId
         ? await api('PUT', '/api/addresses/' + form.addressId, form.values)
@@ -423,7 +430,7 @@
     PORTAL.catalog[kindName] = rows;
 
     if (typeof fcDirSortArray === 'function'){
-      rows = fcDirSortArray(kindName, rows.slice(), r => r[dirSortState[kindName].col] ?? '');
+      rows = fcDirSortArray(kindName, rows.slice(), r => r[dirSortState[kindName].col || ''] ?? '');
     }
     const counter = document.getElementById(kind.count);
     if (counter) counter.textContent = '(' + rows.length + ')';

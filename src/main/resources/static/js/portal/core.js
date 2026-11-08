@@ -5,7 +5,10 @@
   // Поклажедатель и пользователь берутся из сеанса (этап 5): сервер знает,
   // кто вошёл, по cookie сессии. В адресе и заголовках ничего не передаётся —
   // подставить чужой код поклажедателя из браузера невозможно.
-  const PORTAL = {
+  // Объект собирается по частям — здесь и в модулях, — поэтому тип
+  // объявлен целиком (src/main/types/portal.d.ts), а начальная часть
+  // приводится к нему.
+  const PORTAL = /** @type {Portal} */ (/** @type {unknown} */ ({
     depositorCode: '',      // заполняется из GET /api/auth/session
     depositorName: '',
     session: null,
@@ -16,7 +19,7 @@
     loadedAt: null,
     error: null,
     loading: false
-  };
+  }));
 
   /**
    * Коды статусов документов (V87) — один список для поступлений,
@@ -79,7 +82,7 @@
   PORTAL.dateTimeText = function(iso){
     if (!iso) return '—';
     const d = new Date(iso);
-    return isNaN(d) ? String(iso)
+    return isNaN(d.getTime()) ? String(iso)
       : d.toLocaleString(PORTAL.timeLocale(), {day:'2-digit', month:'2-digit', year:'numeric',
                                                hour:'2-digit', minute:'2-digit'});
   };
@@ -95,7 +98,7 @@
   PORTAL.localDay = function(iso){
     if (!iso) return '';
     const d = new Date(iso);
-    if (isNaN(d)) return String(iso).slice(0, 10);
+    if (isNaN(d.getTime())) return String(iso).slice(0, 10);
     const pad = n => String(n).padStart(2, '0');
     return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
   };

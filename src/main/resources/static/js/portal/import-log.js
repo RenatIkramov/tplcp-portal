@@ -10,7 +10,10 @@
   const dash = v => (v === null || v === undefined || v === '') ? '—' : v;
   const say = m => { if (typeof notify === 'function') notify(m); };
   const T_ = k => (typeof T === 'function' ? T(k) : k);
+  /** Текст исключения: бросают не только Error. */
+  const messageOf = e => (e instanceof Error ? e.message : String(e));
 
+  /** @type {Portal['importLog']} */
   const state = {imports: [], issues: [], depositorId: '', loaded: false};
 
   /**
@@ -35,6 +38,7 @@
     const url = '/api/admin/excel-imports'
       + (state.depositorId ? '?depositorId=' + encodeURIComponent(state.depositorId) : '');
     try {
+      /** @type {ImportLogAnswer} */
       const response = await PORTAL.fetchJson(url);
       state.imports = response.imports || [];
       state.issues = response.issues || [];
@@ -42,7 +46,7 @@
     } catch (e){
       state.imports = [];
       state.issues = [];
-      say(e.message);
+      say(messageOf(e));
     }
     render();
   }
@@ -78,7 +82,8 @@
       + '<th>' + esc(T_('admin.column.error')) + '</th>'
       + '</tr></thead><tbody id="impLogBody"></tbody></table></div>';
 
-    const choice = document.getElementById('impLogDepositor');
+    const choice = /** @type {HTMLSelectElement | null} */ (document.getElementById('impLogDepositor'));
+    if (!choice) return;
     choice.innerHTML = '<option value="">' + esc(T_('common.option.all')) + '</option>'
       + (PORTAL.session && PORTAL.session.depositors || []).map(d =>
           '<option value="' + esc(d.depositorId) + '">' + esc(d.orgName) + '</option>').join('');
@@ -141,8 +146,9 @@
     // чтобы журнал читался при открытии, а не висел устаревшим.
     const previous = window.showAdminSub;
     if (typeof previous === 'function' && !previous.__implog){
+      /** @this {unknown} */
       const wrapper = function(sub){
-        const r = previous.apply(this, arguments);
+        const r = previous.call(this, sub);
         if (sub === 'excel'){
           prepare();
           load();

@@ -15,6 +15,7 @@
     const text = await resp.text();
     const data = text ? JSON.parse(text) : null;
     if (!resp.ok){
+      /** @type {PortalHttpError} */
       const e = new Error(PORTAL.errorText(resp.status, data));
       e.status = resp.status;
       throw e;
@@ -259,6 +260,7 @@
      2. Справочник «Пользователи» из базы портала
      ====================================================================== */
 
+  /** @type {{users: AdminUser[], roles: AdminRole[], depositors: AdminDepositor[], error: string | null}} */
   const admin = {users: [], roles: [], depositors: [], error: null};
 
   async function loadUsers(){
@@ -379,6 +381,7 @@
     const readOnly = currentUserRole === 'developer';
 
     // Какие поклажедатели уже выданы — спрашиваем отдельно, в списке их нет
+    /** @type {string[]} */
     let granted = [];
     if (!isNew){
       try { granted = await api('GET', '/api/admin/users/' + encodeURIComponent(u.userId) + '/depositors'); }
@@ -410,9 +413,9 @@
       + input('auPhone', T('partners.label.phone'), isNew ? '' : u.phone, '+7 701 000 00 00')
       + roleField(isNew ? 'depositor' : u.roleCode)
       + (isNew ? '' : dataRow(T('admin.text.last_sign_in'),
-            u.lastLoginAt ? ruDateTime(u.lastLoginAt) : T('common.text.never')))
+            u.lastLoginAt ? PORTAL.dateTimeText(u.lastLoginAt) : T('common.text.never')))
       + (isNew ? '' : dataRow(T('admin.text.password_set'),
-            u.passwordChangedAt ? ruDateTime(u.passwordChangedAt) : '—'))
+            u.passwordChangedAt ? PORTAL.dateTimeText(u.passwordChangedAt) : '—'))
       + '</div></div>'
       + (isSelf ? '<div class="hint" style="margin:-6px 0 14px;">'
           + T('admin.hint.own_account') + '</div>' : '')
@@ -488,13 +491,6 @@
         () => { showTab('admin'); showAdminSub('users'); });
     showView('admin-user-edit');
   };
-
-  function ruDateTime(iso){
-    const d = new Date(iso);
-    return isNaN(d) ? String(iso)
-      : d.toLocaleString('ru-RU', {day:'2-digit', month:'2-digit', year:'numeric',
-                                   hour:'2-digit', minute:'2-digit'});
-  }
 
   /**
    * Пароль из слогов и цифр: читается вслух и переносится без ошибок.
@@ -630,7 +626,7 @@
   function install(){
     wireProfileButton();
     window.renderAdminUsers = drawList;
-    const create = document.querySelector('#usersRefActions .btn.primary');
+    const create = /** @type {HTMLButtonElement | null} */ (document.querySelector('#usersRefActions .btn.primary'));
     if (create) create.onclick = () => window.portalOpenAdminUser(null);
     // onSession, а не onLogin: справочник пользователей — это портал
     // целиком, а не данные выбранного клиента. На onLogin он не грузился

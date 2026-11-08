@@ -64,6 +64,12 @@
     }
   };
 
+  /** @typedef {ReturnType<typeof parseAnswer>} ImportCheck */
+
+  /**
+   * @type {{kind: string, result: ImportCheck | null, tab: string, onlyErrors: boolean,
+   *         showNew: boolean, showExisting: boolean}}
+   */
   const state = {
     kind: 'sku',               // sku | packaging
     result: null,              // ответ сервера целиком
@@ -325,7 +331,7 @@
     // Подписи берём из колонок файла: это те же названия, которые он
     // видит в шапке своего файла.
     const label = {};
-    (state.result.columns || []).forEach(c => { label[dbColumnOf(c)] = c.header; });
+    ((state.result && state.result.columns) || []).forEach(c => { label[dbColumnOf(c)] = c.header; });
     const names = [...fields].map(f => label[f] || f);
     return '<div class="hint" style="margin:-4px 0 10px;">'
       + esc(T_('sku.text.will_fill')) + ': ' + names.map(esc).join(', ') + '</div>';
@@ -376,7 +382,7 @@
     if (button) button.disabled = true;
     try {
       const response = await PORTAL.fetchJson(kind().url + '/'
-          + encodeURIComponent(state.result.importId) + '/' + action,
+          + encodeURIComponent(state.result ? state.result.importId : '') + '/' + action,
           {method: 'POST'});
       state.result = parseAnswer(response);
       render();

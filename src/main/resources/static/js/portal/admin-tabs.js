@@ -42,7 +42,7 @@
   // Разработчику раздел открыт для разбора, как и прежде: он смотрит,
   // но не правит — это решают сами экраны, а не ряд вкладок.
   const isAdmin = () => ['admin', 'developer']
-      .includes(PORTAL.session && PORTAL.session.roleCode);
+      .includes(PORTAL.session ? PORTAL.session.roleCode : '');
 
   /** Группы и их состав; порядок списка — порядок на экране. */
   const GROUPS = [
@@ -87,6 +87,10 @@
     'enumValues':       'admin.button.enums'
   };
 
+  /**
+   * @type {{group: string | null, sub: string | null, chosen: boolean,
+   *         openers: Record<string, Function>, last: Record<string, string>}}
+   */
   const state = {group: null, sub: null, chosen: false, openers: {}, last: {}};
 
   /** Прототипное переключение панелей — подменяется ниже обёрткой. */

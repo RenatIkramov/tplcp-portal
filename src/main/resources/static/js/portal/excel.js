@@ -6,6 +6,8 @@
   if (!PORTAL) return;
 
   const say = m => { if (typeof notify === 'function') notify(m); };
+  /** Текст исключения: бросают не только Error. */
+  const messageOf = e => (e instanceof Error ? e.message : String(e));
 
   /**
    * Скачивание файла с сервера.
@@ -14,6 +16,11 @@
    * и разбор отказа (403, если загрузка из Excel отключена) — иначе
    * вместо объяснения человек получил бы пустой файл или страницу
    * с ошибкой вместо таблицы.
+   */
+  /**
+   * @param {string} url
+   * @param {string} fallbackName
+   * @returns {Promise<string>} имя сохранённого файла
    */
   async function download(url, fallbackName){
     const resp = await fetch(url, {headers: {'Accept': '*/*'}});
@@ -49,9 +56,14 @@
    * кнопка сразу говорит «Готовлю шаблон…» и до прихода файла (или
    * сообщения об ошибке) не нажимается: повторные клики пропадают.
    */
+  /**
+   * @param {BusyButton} btn
+   * @param {string} url
+   * @param {string} nameKey
+   */
   async function downloadTemplate(btn, url, nameKey){
     if (btn && btn.dataset.busy) return;
-    const label = btn ? btn.innerHTML : null;
+    const label = btn ? btn.innerHTML : '';
     if (btn){
       btn.dataset.busy = '1';
       btn.disabled = true;
@@ -61,7 +73,7 @@
       const name = await download(url, T(nameKey) + '.xlsx');
       say(T('common.message.downloading_file', {name: name}));
     } catch (e){
-      say(e.message);
+      say(messageOf(e));
     } finally {
       if (btn){
         btn.innerHTML = label;
@@ -98,10 +110,10 @@
    */
   function templateOf(onclick){
     if (onclick.indexOf('Шаблон_Номенклатура') >= 0){
-      return {id: 'skuTemplateBtn', run: btn => portalDownloadSkuTemplate(btn)};
+      return {id: 'skuTemplateBtn', run: btn => window.portalDownloadSkuTemplate(btn)};
     }
     if (onclick.indexOf('Шаблон_Упаковка') >= 0){
-      return {id: 'packagingTemplateBtn', run: btn => portalDownloadPackagingTemplate(btn)};
+      return {id: 'packagingTemplateBtn', run: btn => window.portalDownloadPackagingTemplate(btn)};
     }
     return null;
   }

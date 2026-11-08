@@ -20,6 +20,7 @@
   const T_ = k => (typeof T === 'function' ? T(k) : k);
   const dash = v => (v === null || v === undefined || v === '' ? '—' : v);
 
+  /** @type {{loaded: boolean, data: ContactsAnswer | null}} */
   const state = {loaded: false, data: null};
   PORTAL.contacts = state;
 
@@ -50,7 +51,7 @@
     if (head) view.appendChild(head);
 
     view.insertAdjacentHTML('beforeend',
-        operators() + warehouses() + managers());
+        operators(state.data) + warehouses(state.data) + managers(state.data));
   }
 
   function title(key){
@@ -72,8 +73,9 @@
     return address ? '<a href="mailto:' + esc(address) + '">' + esc(address) + '</a>' : '—';
   }
 
-  function operators(){
-    const rows = state.data.operators || [];
+  /** @param {ContactsAnswer} data */
+  function operators(data){
+    const rows = data.operators || [];
     if (!rows.length){
       return title('common.text.company_details')
         + '<div class="hint">' + PORTAL.t('common.text.no_contacts_yet') + '</div>';
@@ -94,8 +96,9 @@
           + '</div></div>').join('');
   }
 
-  function warehouses(){
-    const rows = state.data.warehouses || [];
+  /** @param {ContactsAnswer} data */
+  function warehouses(data){
+    const rows = data.warehouses || [];
     if (!rows.length) return '';
     return title('references.button.warehouses')
       + '<div class="about-grid">'
@@ -110,8 +113,9 @@
       + '</div>';
   }
 
-  function managers(){
-    const rows = state.data.managers || [];
+  /** @param {ContactsAnswer} data */
+  function managers(data){
+    const rows = data.managers || [];
     if (!rows.length) return '';
     return title('common.text.account_managers')
       + '<div class="about-grid">'
@@ -149,8 +153,9 @@
 
   function install(){
     const original = window.openContacts;
+    /** @this {unknown} */
     window.openContacts = function(){
-      if (typeof original === 'function') original.apply(this, arguments);
+      if (typeof original === 'function') original.call(this);
       // Читаем при каждом открытии: справочники правятся в соседней
       // вкладке, и показывать вчерашний адрес склада незачем.
       load();

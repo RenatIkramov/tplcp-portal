@@ -15,6 +15,7 @@
     const text = await resp.text();
     const data = text ? JSON.parse(text) : null;
     if (!resp.ok){
+      /** @type {PortalHttpError} */
       const e = new Error(PORTAL.errorText(resp.status, data));
       e.status = resp.status;
       throw e;
@@ -30,6 +31,12 @@
   // Состояние открытой карточки. Галочки живут здесь, а не в DOM:
   // подвкладка перерисовывается целиком, и снятые на другой подвкладке
   // галочки иначе потерялись бы при переключении.
+  /**
+   * @type {{depositorId: string | null, depositor: DepositorAccessRow | null, tab: string,
+   *         object: string, group: string | null, warehouses: string[], settings: DepositorSettings,
+   *         columns: DepositorColumnRow[], draft: Record<string, boolean>,
+   *         defaults: Record<string, boolean>}}
+   */
   const state = {
     depositorId: null, depositor: null,
     tab: 'sections',          // sections | fields | labels
@@ -358,7 +365,7 @@
   function render(){
     const el = document.getElementById('adminUserEditContent');
     if (!el) return;
-    const d = state.depositor || {};
+    const d = state.depositor;
     // Вкладка наименований полей сохраняет каждую правку сразу, своим
     // окном: общая кнопка «Сохранить» на ней сохраняла бы пустоту,
     // а человек решил бы, что она сохранила названия.
@@ -368,9 +375,9 @@
       : (state.tab === 'fields' ? fields() : warehousesAndSections());
     el.innerHTML = ''
       + '<div class="detail-head"><div>'
-      + '  <h2>' + esc(d.orgName || '') + '</h2>'
+      + '  <h2>' + esc((d && d.orgName) || '') + '</h2>'
       + '  <div class="meta">' + esc(T_('admin.column.depositor')) + ': '
-      + esc(d.code || '') + '</div></div></div>'
+      + esc((d && d.code) || '') + '</div></div></div>'
       + tabs()
       + body
       + (labels ? '' : actions);
@@ -446,9 +453,10 @@
       if (cb.getAttribute('data-field') === 'default') state.defaults[key] = cb.checked;
       else state.draft[key] = cb.checked;
     });
+    /** @type {HTMLInputElement[]} */
     const warehouseList = [...el.querySelectorAll('input[data-warehouse-id]')];
     if (warehouseList.length) state.warehouses = warehouseList.filter(c => c.checked)
-      .map(c => c.getAttribute('data-warehouse-id'));
+      .map(c => c.getAttribute('data-warehouse-id') || '');
     const transfers = el.querySelector('#depVisTransfers');
     if (transfers) state.settings.hideTransfersTab = !transfers.checked;
     const priceReceipts = el.querySelector('#depVisPriceReceipts');
@@ -463,10 +471,10 @@
       // Склады и настройку разделов отправляем всегда: их видно на одной
       // вкладке, и человек вправе рассчитывать, что кнопка сохраняет всё.
       DEPVIS.access = await api('PUT', '/api/admin/depositors/'
-        + encodeURIComponent(state.depositorId) + '/warehouses',
+        + encodeURIComponent(state.depositorId || '') + '/warehouses',
         {warehouseIds: state.warehouses});
       await api('PUT', '/api/admin/depositors/'
-        + encodeURIComponent(state.depositorId) + '/settings',
+        + encodeURIComponent(state.depositorId || '') + '/settings',
         {hideTransfersTab: state.settings.hideTransfersTab,
          priceInReceipts: state.settings.priceInReceipts,
          priceInOrders: state.settings.priceInOrders});
@@ -516,12 +524,13 @@
 
   /* ================== Открытие ================== */
 
+  /** @type {{warehouseList: AdminWarehouse[], access: DepositorAccessRow[]}} */
   const DEPVIS = {warehouseList: [], access: []};
 
   window.portalOpenDepositorSettings = async function(depositorId){
     const d = (DEPVIS.access || []).find(x => x.depositorId === depositorId);
     state.depositorId = depositorId;
-    state.depositor = d || {};
+    state.depositor = d || null;
     state.tab = 'sections';
     state.object = 'sku';
     state.group = null;

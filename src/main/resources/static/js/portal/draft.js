@@ -17,6 +17,7 @@
     const text = await resp.text();
     const data = text ? JSON.parse(text) : null;
     if (!resp.ok){
+      /** @type {PortalHttpError} */
       const e = new Error(PORTAL.errorText(resp.status, data));
       e.status = resp.status;
       throw e;
@@ -26,8 +27,23 @@
 
   /* ---------------- справочники для выпадающих списков ---------------- */
 
+  /**
+   * Функции прототипа по имени — их подменяют обёртки этого файла.
+   * Глобальные функции классических скриптов — свойства window.
+   * @type {Record<string, any>}
+   */
+  const globals = /** @type {any} */ (window);
+
+  /**
+   * Справочники для выбора в черновике.
+   * @type {{loaded: boolean, warehouses: SelectOption[], suppliers: SelectOption[],
+   *         consignees: SelectOption[], skuByCode: Record<string, SkuRow>, packagings: PackagingRow[],
+   *         orderTypes: SelectOption[], docTypes: SelectOption[], transportTypes?: SelectOption[],
+   *         skuList?: object[]}}
+   */
   const refs = {loaded:false, warehouses:[], suppliers:[], consignees:[], skuByCode:{},
                 packagings:[], orderTypes:[], docTypes:[]};
+  /** @type {{canEditTransport: boolean, priceInReceipts: boolean, priceInOrders: boolean, loaded: boolean, roleCode?: string}} */
   const me = {canEditTransport:false, priceInReceipts:false, priceInOrders:false, loaded:false};
 
   async function loadDirectories(){
@@ -496,6 +512,7 @@
   function wrapLeave(){
     const original = window.showTab;
     if (typeof original !== 'function') return;
+    /** @this {unknown} */
     window.showTab = function(tab){
       const open = ['receipts', 'orders', 'transfers']
           .find(type => { const ref = refOf(type); return ref && !ref.docId; });
@@ -504,19 +521,20 @@
         return;
       }
       if (open) forgetRef(open);
-      return original.apply(this, arguments);
+      return original.call(this, tab);
     };
   }
 
   function wrapTabSwitch(){
     const original = window.fcSwitchDocTab;
     if (typeof original !== 'function') return;
+    /** @this {unknown} */
     window.fcSwitchDocTab = function(docType, tabName){
       const ref = refOf(docType);
       if (ref && ref.statusCode === PORTAL.STATUS.DRAFT){
         keepUnsaved(docType);
       }
-      return original.apply(this, arguments);
+      return original.call(this, docType, tabName);
     };
   }
 
@@ -753,9 +771,9 @@
     // вычислялась бы при загрузке файла, до входа — то есть до того, как
     // известен язык учётной записи и переименования полей клиентом.
     const wrap = (functionName, tableKey, rules) => {
-      const original = window[functionName];
+      const original = globals[functionName];
       if (typeof original !== 'function') return;
-      window[functionName] = function(dbField, doc, editable){
+      globals[functionName] = function(dbField, doc, editable){
         if (editable && readOnlyField(tableKey, dbField)){
           return original(dbField, doc, false);
         }
@@ -901,7 +919,10 @@
       docId: null, no: '', erpNo: '', wmsNumber: '—',
       status: 'draft', statusCode: PORTAL.STATUS.DRAFT, statusLabel: T('receipts.option.draft'),
       date: PORTAL.dateTimeText(new Date().toISOString()),
-      author: (window.currentUser && currentUser.full_name) || '',
+      // currentUser — let прототипа, свойства window у него нет: через
+      // window.currentUser автор нового черновика всегда выходил пустым
+      // (нашла проверка типов).
+      author: (currentUser && currentUser.full_name) || '',
       comment: '', trip: '', lineCount: 0, totalPieces: 0,
       weight: '', volume: '', palletCount: '', cargoPlaces: '',
       carrier: '', transportType: '', transportBrand: '', carNumber: '', trailerNumber: '',
@@ -1013,7 +1034,7 @@
       const closeConfirm = {receipts: 'closeDeleteReceiptDraftConfirm',
                             orders: 'closeDeleteOrderDraftConfirm',
                             transfers: 'closeDeleteTransferDraftConfirm'}[type];
-      if (typeof window[closeConfirm] === 'function') window[closeConfirm]();
+      if (typeof globals[closeConfirm] === 'function') globals[closeConfirm]();
       forgetRef(type);
       showTab(type);
       return;
@@ -1023,7 +1044,7 @@
       const closeConfirm = {receipts: 'closeDeleteReceiptDraftConfirm',
                             orders: 'closeDeleteOrderDraftConfirm',
                             transfers: 'closeDeleteTransferDraftConfirm'}[type];
-      if (typeof window[closeConfirm] === 'function') window[closeConfirm]();
+      if (typeof globals[closeConfirm] === 'function') globals[closeConfirm]();
       forgetRef(type);
       showTab(type);
       if (typeof portalReloadDocuments === 'function') portalReloadDocuments();
@@ -1041,10 +1062,11 @@
   // пересчёт, цена, объединение дублей. Мы подключаемся после сохранения
   // и отправляем получившийся состав целиком.
   function afterLinesChanged(functionName, type){
-    const original = window[functionName];
+    const original = globals[functionName];
     if (typeof original !== 'function') return;
-    window[functionName] = function(){
-      const result = original.apply(this, arguments);
+    /** @this {unknown} */
+    globals[functionName] = function(...args){
+      const result = original.apply(this, args);
       const ref = refOf(type);
       // Несохранённый документ строкой состава в базу не проваливается:
       // пока человек не нажал «Сохранить», его там нет. Строки живут
@@ -1065,13 +1087,13 @@
       window['render' + prefix.charAt(0).toUpperCase() + prefix.slice(1) + 'Composition'] = function(){
         const result = original.apply(this, arguments);
         const composition = compositionOf(prefix + 's');
-        const rows = document.querySelectorAll('#' + prefix + 'DetailRows tr');
+        const rows = /** @type {NodeListOf<HTMLTableRowElement>} */ (document.querySelectorAll('#' + prefix + 'DetailRows tr'));
         (composition || []).forEach((l, i) => {
           const row = rows[i];
           if (!row || l.skuInWms !== false) return;
           row.style.background = '#fff6e6';
           const cells = Array.from(row.querySelectorAll('td'));
-          const cell = cells.find(td => td.textContent.trim() === String(l.code)) || cells[0];
+          const cell = cells.find(td => (td.textContent || '').trim() === String(l.code)) || cells[0];
           if (cell && !cell.querySelector('.pd-chip')){
             cell.insertAdjacentHTML('beforeend',
               '<span class="pd-chip" style="margin-left:8px; padding:1px 8px; border-radius:10px;'
@@ -1413,7 +1435,7 @@
       const available = !row ? null
           : code ? qualityStock(row, code).available : Number(row.availableQty);
       const result = original.apply(this, arguments);
-      if (row && count && count > available && typeof notify === 'function'){
+      if (row && count && available !== null && count > available && typeof notify === 'function'){
         notify(T(textKey, {count: count + ' ' + (product.unit || ''),
                            available: available + ' ' + (product.unit || '')}));
       }
@@ -1441,8 +1463,10 @@
   function fillPackagings(){
     if (typeof PRODUCT_PACKAGING === 'undefined' || !refs.packagings) return;
     let depositorId = null;
-    try { depositorId = eval('typeof currentDepositorId') !== 'undefined'
-        ? eval('currentDepositorId') : null; } catch (e){ depositorId = null; }
+    // let прототипа виден из любого классического скрипта по имени —
+    // eval для этого не нужен.
+    try { depositorId = typeof currentDepositorId !== 'undefined' ? currentDepositorId : null; }
+    catch (e){ depositorId = null; }
     PRODUCT_PACKAGING.length = 0;
     refs.packagings.forEach(p => PRODUCT_PACKAGING.push({
       productCode: p.skuCode, depositorId: depositorId,

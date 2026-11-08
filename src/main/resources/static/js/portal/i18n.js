@@ -11,6 +11,11 @@
 
   // fromAccount — язык взят из учётной записи вошедшего, и портальный
   // язык по умолчанию его больше не перебивает (см. install).
+  /**
+   * @type {{locales: PortalLocale[], texts: Record<string, string>, code: string | null,
+   *         matrix: UiTextRow[] | null, allLocales?: LocaleAdminRow[], fromAccount: boolean,
+   *         rebuildSwitch?: () => Promise<void>}}
+   */
   const state = {locales: [], texts: {}, code: null, matrix: null, fromAccount: false};
   PORTAL.i18n = state;
 
@@ -35,9 +40,11 @@
   function fillMap(texts){
     // I18N_MAP объявлена через const: это лексическая глобальная переменная,
     // свойства window у неё нет — обращаться надо по имени.
+    const code = state.code;
+    if (!code) return;
     Object.keys(texts).forEach(key => {
       if (!I18N_MAP[key]) I18N_MAP[key] = {};
-      I18N_MAP[key][state.code] = texts[key];
+      I18N_MAP[key][code] = texts[key];
     });
   }
 
@@ -51,7 +58,7 @@
                     transfers: 'common.button.transfers'};
 
   function applyNav(){
-    document.querySelectorAll('nav.tabs button[data-tab]').forEach(btn => {
+    /** @type {NodeListOf<HTMLButtonElement>} */ (document.querySelectorAll('nav.tabs button[data-tab]')).forEach(btn => {
       const text = state.texts[NAV_KEYS[btn.dataset.tab]];
       if (text) btn.textContent = text;
     });
@@ -118,15 +125,15 @@
       if (t) el.innerHTML = t;
     });
     Array.from(root.querySelectorAll('[data-i18n-placeholder]')).forEach(el => {
-      const t = state.texts[el.getAttribute('data-i18n-placeholder')];
+      const t = state.texts[el.getAttribute('data-i18n-placeholder') || ''];
       if (t) el.setAttribute('placeholder', t);
     });
     Array.from(root.querySelectorAll('[data-i18n-title]')).forEach(el => {
-      const t = state.texts[el.getAttribute('data-i18n-title')];
+      const t = state.texts[el.getAttribute('data-i18n-title') || ''];
       if (t) el.setAttribute('title', t);
     });
     Array.from(root.querySelectorAll('[data-i18n-aria]')).forEach(el => {
-      const t = state.texts[el.getAttribute('data-i18n-aria')];
+      const t = state.texts[el.getAttribute('data-i18n-aria') || ''];
       if (t) el.setAttribute('aria-label', t);
     });
   }
@@ -150,15 +157,15 @@
 
   function applyAttributes(){
     document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
-      const t = state.texts[el.getAttribute('data-i18n-placeholder')];
+      const t = state.texts[el.getAttribute('data-i18n-placeholder') || ''];
       if (t) el.setAttribute('placeholder', t);
     });
     document.querySelectorAll('[data-i18n-title]').forEach(el => {
-      const t = state.texts[el.getAttribute('data-i18n-title')];
+      const t = state.texts[el.getAttribute('data-i18n-title') || ''];
       if (t) el.setAttribute('title', t);
     });
     document.querySelectorAll('[data-i18n-aria]').forEach(el => {
-      const t = state.texts[el.getAttribute('data-i18n-aria')];
+      const t = state.texts[el.getAttribute('data-i18n-aria') || ''];
       if (t) el.setAttribute('aria-label', t);
     });
   }
@@ -312,7 +319,7 @@
     // а человек уже занят другим.
     if (!document.body.dataset.langMenuWired){
       document.addEventListener('click', () => {
-        document.querySelectorAll('.lang-menu').forEach(m => { m.hidden = true; });
+        /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('.lang-menu')).forEach(m => { m.hidden = true; });
         document.querySelectorAll('.lang-current').forEach(c =>
             c.setAttribute('aria-expanded', 'false'));
       });
@@ -342,7 +349,7 @@
    * отсутствия.
    */
   function applyAboutLink(){
-    const link = document.querySelector('a[data-i18n="common.text.about_us"]');
+    const link = /** @type {HTMLAnchorElement | null} */ (document.querySelector('a[data-i18n="common.text.about_us"]'));
     if (!link) return;
     const url = String(state.texts['about.url'] || '').trim();
     const ok = /^https?:\/\//i.test(url);
@@ -521,8 +528,9 @@
       say(e.message);
       return;
     }
-    fillFilter('uiTextsScope', state.matrix.map(r => r.scope));
-    fillFilter('uiTextsElement', state.matrix.map(r => r.element));
+    const matrix = state.matrix || [];
+    fillFilter('uiTextsScope', matrix.map(r => r.scope));
+    fillFilter('uiTextsElement', matrix.map(r => r.element));
     portalUiTextsRender();
   }
 
@@ -564,7 +572,7 @@
 
     const scope = document.getElementById('uiTextsScope')?.value || '';
     const element = document.getElementById('uiTextsElement')?.value || '';
-    let rows = state.matrix;
+    let rows = state.matrix || [];
     if (scope) rows = rows.filter(r => r.scope === scope);
     if (element) rows = rows.filter(r => r.element === element);
     if (q){
@@ -638,7 +646,7 @@
     // а не от выбранного поклажедателя. На onLogin администратор, которому
     // доступны все клиенты, не получал ни того, ни другого до выбора.
     PORTAL.onSession(() => {
-      if (['admin', 'developer'].includes(PORTAL.session && PORTAL.session.roleCode)){
+      if (['admin', 'developer'].includes(PORTAL.session ? PORTAL.session.roleCode : '')){
         addAdminScreen();
       }
       // язык из учётной записи: он мог отличаться от языка формы входа.

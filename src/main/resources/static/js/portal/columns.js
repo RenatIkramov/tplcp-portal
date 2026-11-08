@@ -180,9 +180,10 @@
   // остальные — та же беда уже была при смене языка.
   function redraw(tableKey){
     const name = RENDER[tableKey];
-    if (!name || typeof window[name] !== 'function') return;
+    const draw = name ? /** @type {Record<string, unknown>} */ (/** @type {unknown} */ (window))[name] : null;
+    if (typeof draw !== 'function') return;
     try {
-      window[name]();
+      draw();
       if (typeof updateTopScrollWidth === 'function') updateTopScrollWidth(tableKey);
     } catch (e){ /* экран не открыт — перерисуется при открытии */ }
   }
@@ -203,6 +204,7 @@
   function wrapPicker(){
     const applyOrig = window.applyColumnPicker;
     if (typeof applyOrig === 'function'){
+      /** @this {unknown} */
       window.applyColumnPicker = function(){
         // прочитать ДО вызова оригинала: он закрывает окно и обнуляет обе
         const tableKey = hasGlobal('colPickerTable') ? colPickerTable : null;
@@ -216,7 +218,7 @@
         // а выбор не доходил до сервера. Своя перерисовка идёт ниже
         // и этой карты не спрашивает.
         try {
-          applyOrig.apply(this, arguments);
+          applyOrig.call(this);
         } catch (e){
           // Выбор он к этому моменту уже применил — падает позже,
           // на отрисовке, и до закрытия окна не доходит. Закрываем
@@ -249,8 +251,9 @@
     // и видит колонку на месте — выглядит как сломанное окно.
     const renderOrig = window.renderColumnPickerList;
     if (typeof renderOrig === 'function'){
+      /** @this {unknown} */
       window.renderColumnPickerList = function(){
-        renderOrig.apply(this, arguments);
+        renderOrig.call(this);
         const tableKey = hasGlobal('colPickerTable') ? colPickerTable : null;
         if (!tableKey) return;
         const pinned = new Set((layout[tableKey] || [])
@@ -313,14 +316,15 @@
   // Право решает сервер; здесь — только показывать ли блок вовсе.
   // Разработчик ходит по порталу в режиме чтения, ему править нельзя.
   const mayEdit = () => ['admin'].includes(
-      PORTAL.session && PORTAL.session.roleCode);
+      PORTAL.session ? PORTAL.session.roleCode : '');
 
 
   function wrapUserCard(){
     const openOrig = window.portalOpenAdminUser;
     if (typeof openOrig !== 'function') return;
+    /** @this {unknown} */
     window.portalOpenAdminUser = async function(userId){
-      await openOrig.apply(this, arguments);
+      await openOrig.call(this, userId);
       if (!mayEdit() || !userId) return;
       await addCopyBlock(userId);
     };

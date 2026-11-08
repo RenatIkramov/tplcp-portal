@@ -15,6 +15,7 @@
     const text = await resp.text();
     const data = text ? JSON.parse(text) : null;
     if (!resp.ok){
+      /** @type {PortalHttpError} */
       const e = new Error(PORTAL.errorText(resp.status, data));
       e.status = resp.status;
       throw e;
@@ -26,6 +27,10 @@
   const esc = v => String(v === null || v === undefined ? '' : v)
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
+  /**
+   * @type {{users: AdminUser[], depositors: AdminDepositor[], warehouseList: AdminWarehouse[],
+   *         depositorAccess: DepositorAccessRow[]}}
+   */
   const store = {users: [], depositors: [], warehouseList: [], depositorAccess: []};
 
   async function load(){

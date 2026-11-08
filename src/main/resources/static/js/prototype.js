@@ -32,7 +32,6 @@ function applyLanguage(lang){
   if(document.getElementById('view-profile')?.classList.contains('active') && typeof currentUser !== 'undefined' && currentUser){
     renderProfile(currentUser);
   }
-  localStorage?.setItem && null; // demo: no persistence needed
 }
 function setLanguage(lang){
   if(lang === 'kz'){ notify(currentLang==='en' ? 'Kazakh version is not available in this demo' : 'Казахская версия недоступна в демо-версии'); return; }
@@ -323,7 +322,7 @@ function setDepositorData(depositorId){
   const d = DEPOSITOR_DATA[depositorId] || DEPOSITOR_DATA.none;
   products = d.products; receipts = d.receipts; orders = d.orders; reports = d.reports; transfers = d.transfers || [];
   ['receipts','orders','stock','sku','transfers'].forEach(k=>{ if(paginationState[k]) paginationState[k].page = 1; });
-  updateWarehouseFilterUI(depositorId);
+  updateWarehouseFilterUI();
   renderReceipts(); renderOrders(); renderStock(); renderSku(); renderReports(); renderTransfers();
   renderBillingServices(); renderBillingInvoices();
   if(typeof renderSuppliers==='function'){ renderSuppliers(); renderConsignees(); }
@@ -758,7 +757,7 @@ const COLUMN_LABEL_I18N = {
   'Вес, кг':'Weight, kg', 'Код':'Code',  'Наименование':'Name', 'Группа':'Category',
   'Ед.':'Unit', 'Наличие':'In stock', 'Резерв':'Reserved', 'Брак':'Defect', 'Партия / срок годности':'Batch / expiry',
   'Склад':'Warehouse', 'Дата':'Date', 'Склад-отправитель':'From warehouse', 'Склад-получатель':'To warehouse',
-  'Дата отгрузки':'Ship date', 'Дата приёма':'Receipt date',
+  'Дата приёма':'Receipt date',
 };
 function localizeColumnLabel(ruLabel, tableKey, colId){
   if(tableKey && colId){
@@ -1039,7 +1038,7 @@ function renderSuppliers(){
     const col = dirSortState.suppliers.col;
     if(col === 'name') return name;
     const d = SUPPLIER_DETAILS[name] || {};
-    return d[col] ?? '';
+    return d[col || ''] ?? '';
   });
   document.getElementById('suppliersCount').textContent = `(${names.length})`;
   body.innerHTML = names.length ? names.map(name=>{
@@ -1060,6 +1059,13 @@ const WAREHOUSE_DIRECTORY = [
   {code:'WH-ALM', name:'Алматы', address:'с. Байсерке, ул. Султана Бейбарыса, 1', responsible:'Оспанов Данияр Ерланович', phone:'8 701 555 10 20', email:'almaty.wh@ahlers.kz'},
   {code:'WH-KGD', name:'Караганда', address:'г. Караганда, ул. Складская, 14', responsible:'Ертаев Серик Болатович', phone:'8 705 555 30 40', email:'karagandy.wh@ahlers.kz'},
 ];
+/**
+ * Упаковки для окна строки: draft.js наполняет массив из справочника
+ * (/api/packaging/options), значения из базы бывают пустыми.
+ * @type {Array<{productCode: string | null, depositorId: string | null, packagingCode: string | null,
+ *   barcode: string, type: string | null, coefficient: number, length: number | null,
+ *   width: number | null, height: number | null, volume: number | null, weightGross: number | null}>}
+ */
 const PRODUCT_PACKAGING = [
   {productCode:'RK-1001', depositorId:'rogaikopyta', packagingCode:'PKG-01B', barcode:'4810001000012', type:'Короб', coefficient:10, length:30, width:25, height:15, volume:0.01125, weightGross:3.2},
   {productCode:'RK-2001', depositorId:'rogaikopyta', packagingCode:'PKG-04B', barcode:'4810001000029', type:'Групповая упаковка', coefficient:12, length:30, width:20, height:25, volume:0.015, weightGross:13.5},
@@ -1161,6 +1167,7 @@ function clearTransfersFilters(){
   paginationState.transfers.page = 1;
   renderTransfers();
 }
+/** @type {Record<string, {col: string | null, dir: number}>} */
 let dirSortState = {suppliers:{col:null,dir:1}, consignees:{col:null,dir:1}, depositorsDir:{col:null,dir:1}, warehousesDir:{col:null,dir:1}, packaging:{col:null,dir:1}};
 function onDirSortClick(table, col){
   const st = dirSortState[table];
@@ -1200,7 +1207,7 @@ function renderPackaging(){
   let filtered = PRODUCT_PACKAGING.filter(pk=>pk.depositorId === currentDepositorId).filter(pk=>{
     const p = findProductAnyDepositor(pk.productCode);
     const name = p ? p.name : '';
-    if(codeQ && !pk.productCode.toLowerCase().includes(codeQ)) return false;
+    if(codeQ && !(pk.productCode || '').toLowerCase().includes(codeQ)) return false;
     if(nameQ && !name.toLowerCase().includes(nameQ)) return false;
     return true;
   });
@@ -1210,7 +1217,7 @@ function renderPackaging(){
     if(col === 'productName') return p ? p.name : '';
     if(col === 'unit') return p ? p.unit : '';
     if(col === 'displayName') return fcPackagingName(pk, p ? p.unit : '');
-    return pk[col] ?? '';
+    return pk[col || ''] ?? '';
   });
   const { items: rows, totalPages, total } = getPage('packaging', filtered);
   document.getElementById('packagingCount').textContent = `(${total})`;
@@ -1241,7 +1248,7 @@ function renderPackaging(){
 function renderDepositorsDir(){
   const body = document.getElementById('depositorsDirBody');
   if(!body) return;
-  const list = fcDirSortArray('depositorsDir', DEPOSITOR_DIRECTORY, k=>k[dirSortState.depositorsDir.col] ?? '');
+  const list = fcDirSortArray('depositorsDir', DEPOSITOR_DIRECTORY, k=>k[dirSortState.depositorsDir.col || ''] ?? '');
   document.getElementById('depositorsDirCount').textContent = `(${list.length})`;
   body.innerHTML = list.length ? list.map(k=>`
     <tr><td>${k.code}</td><td>${k.org_name}</td><td>${k.bin}</td><td>${k.legalAddress}</td><td>${k.phone}</td><td>${k.email}</td><td>${k.contractNumber}</td><td>${k.contractValidUntil}</td></tr>`).join('')
@@ -1250,7 +1257,7 @@ function renderDepositorsDir(){
 function renderWarehousesDir(){
   const body = document.getElementById('warehousesDirBody');
   if(!body) return;
-  const list = fcDirSortArray('warehousesDir', WAREHOUSE_DIRECTORY, w=>w[dirSortState.warehousesDir.col] ?? '');
+  const list = fcDirSortArray('warehousesDir', WAREHOUSE_DIRECTORY, w=>w[dirSortState.warehousesDir.col || ''] ?? '');
   document.getElementById('warehousesDirCount').textContent = `(${list.length})`;
   body.innerHTML = list.length ? list.map(w=>`
     <tr><td>${w.code}</td><td>${w.name}</td><td>${w.address}</td><td>${w.responsible}</td><td>${w.phone}</td><td>${w.email}</td></tr>`).join('')
@@ -1304,7 +1311,7 @@ function renderConsignees(){
     const col = dirSortState.consignees.col;
     if(col === 'name') return name;
     const d = CONSIGNEE_DETAILS[name] || {};
-    return d[col] ?? '';
+    return d[col || ''] ?? '';
   });
   document.getElementById('consigneesCount').textContent = `(${names.length})`;
   if(!names.length){
@@ -1747,7 +1754,7 @@ function openReportConfigEdit(id){
   const r = id ? REPORTS_CONFIG.find(x=>x.id===id) : null;
   document.getElementById('reportConfigTitle').textContent = id ? 'Редактирование отчёта' : T('common.title.add_report');
   document.getElementById('reportConfigOverlay').classList.add('active');
-  const nextOrder = r ? r.order : (Math.max(0, ...REPORTS_CONFIG.filter(x=>x.depositorId===(r?r.depositorId:Object.keys(DEPOSITORS)[0])).map(x=>x.order||0)) + 1);
+  const nextOrder = r ? r.order : (Math.max(0, ...REPORTS_CONFIG.filter(x=>x.depositorId===Object.keys(DEPOSITORS)[0]).map(x=>x.order||0)) + 1);
   document.getElementById('rc_order').value = nextOrder;
   document.getElementById('rc_depositorId').innerHTML = Object.values(DEPOSITORS).map(k=>`<option value="${k.id}" ${r&&r.depositorId===k.id?'selected':''}>${k.name}</option>`).join('');
   document.getElementById('rc_name').value = r ? r.name : '';
@@ -2007,7 +2014,7 @@ function fcHandlePhotoUpload(docType, input){
       doc.photos.push({
         id:'m'+Date.now()+Math.random().toString(36).slice(2),
         objectKey:'depositors/'+currentDepositorId+'/'+(doc.no||'doc')+'/manual-'+Date.now()+'-'+file.name,
-        url:e.target.result,
+        url:reader.result,
         fileName:file.name,
         caption:file.name,
         mimeType:file.type,
@@ -2405,7 +2412,7 @@ function renderReceiptComposition(){
   const cols = tableColumns.receiptComposition;
   const order = tableColumnState.receiptComposition;
   const hidden = tableColumnHidden.receiptComposition;
-  const visibleCols = order.filter(id=>!hidden.has(id)).map(id=>cols.find(c=>c.id===id));
+  const visibleCols = order.filter(id=>!hidden.has(id)).map(id=>cols.find(c=>c.id===id)).filter(c=>c !== undefined);
   document.getElementById('receiptCompositionHeadRow').innerHTML =
     `<th id="receiptCheckboxHead" style="display:${isDraft?'':'none'}; width:36px;"><input type="checkbox" onclick="toggleAllReceiptLineChecks(this)"></th>` +
     visibleCols.map(c=>`<th data-col="${c.id}"${c.num?' class="num"':''}>${typeof COLTH === 'function' ? COLTH(c) : c.label}</th>`).join('');
@@ -2465,7 +2472,7 @@ function renderReceiptLineDetailTable(){
   const cols = tableColumns.receiptLineDetail;
   const order = tableColumnState.receiptLineDetail;
   const hidden = tableColumnHidden.receiptLineDetail;
-  const visibleCols = order.filter(id=>!hidden.has(id)).map(id=>cols.find(c=>c.id===id));
+  const visibleCols = order.filter(id=>!hidden.has(id)).map(id=>cols.find(c=>c.id===id)).filter(c=>c !== undefined);
   document.getElementById('receiptLineDetailHeadRow').innerHTML = visibleCols.map(c=>`<th${c.num?' class="num"':''}>${typeof COLTH === 'function' ? COLTH(c) : c.label}</th>`).join('');
   document.getElementById('receiptLineDetailRows').innerHTML = batches.length ? batches.map(b=>`
     <tr>${visibleCols.map(c=>`<td${c.num?' class="num"':''}>${c.render(b)}</td>`).join('')}</tr>
@@ -2922,7 +2929,7 @@ function renderTransferComposition(){
   const cols = tableColumns.transferComposition;
   const order = tableColumnState.transferComposition;
   const hidden = tableColumnHidden.transferComposition;
-  const visibleCols = order.filter(id=>!hidden.has(id)).map(id=>cols.find(c=>c.id===id));
+  const visibleCols = order.filter(id=>!hidden.has(id)).map(id=>cols.find(c=>c.id===id)).filter(c=>c !== undefined);
   document.getElementById('transferCompositionHeadRow').innerHTML =
     `<th id="transferCheckboxHead" style="display:${isDraft?'':'none'}; width:36px;"><input type="checkbox" onclick="toggleAllTransferLineChecks(this)"></th>` +
     visibleCols.map(c=>`<th data-col="${c.id}"${c.num?' class="num"':''}>${typeof COLTH === 'function' ? COLTH(c) : c.label}</th>`).join('');
@@ -2980,7 +2987,7 @@ function renderTransferLineDetailTable(){
   const cols = tableColumns.transferLineDetail;
   const order = tableColumnState.transferLineDetail;
   const hidden = tableColumnHidden.transferLineDetail;
-  const visibleCols = order.filter(id=>!hidden.has(id)).map(id=>cols.find(c=>c.id===id));
+  const visibleCols = order.filter(id=>!hidden.has(id)).map(id=>cols.find(c=>c.id===id)).filter(c=>c !== undefined);
   document.getElementById('transferLineDetailHeadRow').innerHTML = visibleCols.map(c=>`<th${c.num?' class="num"':''}>${typeof COLTH === 'function' ? COLTH(c) : c.label}</th>`).join('');
   document.getElementById('transferLineDetailRows').innerHTML = batches.length ? batches.map(b=>`
     <tr>${visibleCols.map(c=>`<td${c.num?' class="num"':''}>${c.render(b)}</td>`).join('')}</tr>
@@ -3326,7 +3333,7 @@ function renderOrderComposition(){
   const cols = tableColumns.orderComposition;
   const order = tableColumnState.orderComposition;
   const hidden = tableColumnHidden.orderComposition;
-  const visibleCols = order.filter(id=>!hidden.has(id)).map(id=>cols.find(c=>c.id===id));
+  const visibleCols = order.filter(id=>!hidden.has(id)).map(id=>cols.find(c=>c.id===id)).filter(c=>c !== undefined);
   document.getElementById('orderCompositionHeadRow').innerHTML =
     `<th id="orderCheckboxHead" style="display:${isDraft?'':'none'}; width:36px;"><input type="checkbox" onclick="toggleAllOrderLineChecks(this)"></th>` +
     visibleCols.map(c=>`<th data-col="${c.id}"${c.num?' class="num"':''}>${typeof COLTH === 'function' ? COLTH(c) : c.label}</th>`).join('');
@@ -3386,7 +3393,7 @@ function renderOrderLineDetailTable(){
   const cols = tableColumns.orderLineDetail;
   const order = tableColumnState.orderLineDetail;
   const hidden = tableColumnHidden.orderLineDetail;
-  const visibleCols = order.filter(id=>!hidden.has(id)).map(id=>cols.find(c=>c.id===id));
+  const visibleCols = order.filter(id=>!hidden.has(id)).map(id=>cols.find(c=>c.id===id)).filter(c=>c !== undefined);
   document.getElementById('orderLineDetailHeadRow').innerHTML = visibleCols.map(c=>`<th${c.num?' class="num"':''}>${typeof COLTH === 'function' ? COLTH(c) : c.label}</th>`).join('');
   document.getElementById('orderLineDetailRows').innerHTML = batches.length ? batches.map(b=>`
     <tr>${visibleCols.map(c=>`<td${c.num?' class="num"':''}>${c.render(b)}</td>`).join('')}</tr>
@@ -5199,7 +5206,7 @@ function renderStockBatchTable(){
   const cols = tableColumns.stockBatch;
   const order = tableColumnState.stockBatch;
   const hidden = tableColumnHidden.stockBatch;
-  const visibleCols = order.filter(id=>!hidden.has(id)).map(id=>cols.find(c=>c.id===id));
+  const visibleCols = order.filter(id=>!hidden.has(id)).map(id=>cols.find(c=>c.id===id)).filter(c=>c !== undefined);
   document.getElementById('stockBatchHead').innerHTML = visibleCols.map(c=>`<th${c.num?' class="num"':''}>${typeof COLTH === 'function' ? COLTH(c) : c.label}</th>`).join('');
   document.getElementById('productDetailBatches').innerHTML = batches.map(b=>`
     <tr>${visibleCols.map(c=>`<td${c.num?' class="num"':''}>${c.render(b)}</td>`).join('')}</tr>
@@ -5397,7 +5404,7 @@ function saveAdminDepositorAccessEdit(depositorId){
   persistAdminState();
   notify(T('admin.text.accessible_warehouses_updated', {name: DEPOSITORS[depositorId].name}));
   renderAdminDepositorAccess();
-  if(currentDepositorId === depositorId) updateWarehouseFilterUI(depositorId);
+  if(currentDepositorId === depositorId) updateWarehouseFilterUI();
   showView('admin');
   showAdminSub('depositor-access');
 }

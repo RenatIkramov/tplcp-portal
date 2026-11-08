@@ -5,7 +5,7 @@
   const PORTAL = window.PORTAL;
   if (!PORTAL) return;
 
-  const isAdmin = () => ['admin', 'developer'].includes(PORTAL.session && PORTAL.session.roleCode);
+  const isAdmin = () => ['admin', 'developer'].includes(PORTAL.session ? PORTAL.session.roleCode : '');
   // Разработчик смотрит, но не правит: раздел ему открыт для разбора,
   // а не для ведения справочников.
   const mayEdit = () => PORTAL.session && PORTAL.session.roleCode === 'admin';
@@ -94,6 +94,7 @@
     }
   };
 
+  /** @type {{dir: string | null, mode: string, id: string | null, row: CardRow | null, draft: CardRow}} */
   const state = {dir: null, mode: 'view', id: null, row: null, draft: {}};
   PORTAL.portalDir = state;
 
@@ -116,6 +117,7 @@
    * и промолчало бы о следующем справочнике портала, который кто-то
    * положит в общее хранилище.
    */
+  /** @type {{rows: Record<string, CardRow[]>, error: Record<string, string | null>}} */
   const lists = {rows: {}, error: {}};
   PORTAL.portalDirLists = lists;
 
@@ -299,7 +301,7 @@
       const body = dir.asRecord ? recordBody() : state.draft;
       const card = creating
         ? await api('POST', dir.base, body)
-        : await api('PUT', dir.base + '/' + encodeURIComponent(state.id), body);
+        : await api('PUT', dir.base + '/' + encodeURIComponent(state.id || ''), body);
       state.mode = 'view';
       state.row = card;
       state.id = card[dir.key];
@@ -315,7 +317,7 @@
   window.portalDirArchive = async function(archived){
     try {
       state.row = await api('POST', DIRS[state.dir].base + '/'
-          + encodeURIComponent(state.id) + '/archive', {active: archived});
+          + encodeURIComponent(state.id || '') + '/archive', {active: archived});
       await reload(state.dir);
       render();
       say(archived ? T('portal.text.restored') : T('portal.text.archived3'));
@@ -329,7 +331,7 @@
     if (!window.confirm(T('common.message.confirm_delete_forever', { name: name })
         + '\n' + T('portal.text.if_the_record_is_used_anywhere_the'))) return;
     try {
-      await api('DELETE', DIRS[state.dir].base + '/' + encodeURIComponent(state.id));
+      await api('DELETE', DIRS[state.dir].base + '/' + encodeURIComponent(state.id || ''));
       await reload(state.dir);
       say(T('portal.message.record_deleted'));
       portalDirBack();
@@ -359,7 +361,7 @@
     const show = document.getElementById(dirName + 'ShowArchived')?.checked;
     let rows = (lists.rows[dirName] || []).filter(r => show || r.isActive !== false);
     if (typeof fcDirSortArray === 'function'){
-      rows = fcDirSortArray(dirName, rows.slice(), r => r[dirSortState[dirName].col] ?? '');
+      rows = fcDirSortArray(dirName, rows.slice(), r => r[dirSortState[dirName].col || ''] ?? '');
     }
     const counter = document.getElementById(dir.count);
     if (counter) counter.textContent = '(' + rows.length + ')';

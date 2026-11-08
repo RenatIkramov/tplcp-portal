@@ -15,6 +15,7 @@
     const text = await resp.text();
     const data = text ? JSON.parse(text) : null;
     if (!resp.ok){
+      /** @type {PortalHttpError} */
       const e = new Error(PORTAL.errorText(resp.status, data));
       e.status = resp.status;
       throw e;
@@ -33,7 +34,10 @@
   let sessionLost = false;
   window.fetch = async function(url, opts){
     const resp = await builtinFetch(url, opts);
-    const address = String(typeof url === 'string' ? url : (url && url.url) || '');
+    // Адрес бывает строкой, URL или Request; у URL нет поля url —
+    // раньше для него получалась пустая строка (нашла проверка типов).
+    const address = typeof url === 'string' ? url
+      : url instanceof Request ? url.url : String(url || '');
     if (resp.status === 401 && address.indexOf('/api/') === 0
         && address.indexOf('/api/auth/') !== 0 && !sessionLost){
       sessionLost = true;
@@ -67,7 +71,7 @@
     const email = field('loginEmail');
     if (email) email.placeholder = 'client@roga-kopyta.kz';
 
-    const btn = card.querySelector('button.btn.primary');
+    const btn = /** @type {HTMLButtonElement | null} */ (card.querySelector('button.btn.primary'));
     if (btn){
       btn.disabled = false;
       btn.style.opacity = '';
@@ -322,10 +326,10 @@
   window.renderDepositorSwitcher = function(){
     const el = field('depositorSwitcher');
     if (!el) return;
-    const s = PORTAL.session || {depositors: []};
-    const selected = s.depositorId;
+    const s = PORTAL.session;
+    const selected = s ? s.depositorId : null;
     el.innerHTML = '<div class="ks-title">' + T('auth.text.switch_depositor') + '</div>'
-      + (s.depositors || []).map(d =>
+      + ((s && s.depositors) || []).map(d =>
           '<div class="ks-item ' + (d.depositorId === selected ? 'current' : '') + '"'
           + ' onclick="portalSelectDepositor(\'' + d.depositorId + '\')">'
           + '<span>' + d.orgName + '</span>'
