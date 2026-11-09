@@ -52,7 +52,6 @@
     defaults: {}              // показывать ли его сразу
   };
 
-  const readOnly = () => currentUserRole === 'developer';
 
   /* ============ Поля, недоступные поклажедателю ============ */
 
@@ -71,25 +70,6 @@
     return rows.indexOf(columnId) >= 0;
   }
   PORTAL.fieldAllowed = isColumnAvailable;
-
-  /**
-   * Строка карточки товара с привязкой к колонке.
-   *
-   * Сборка переписывает fcKv(...) в fcKvC('columnId', ...), чтобы строка
-   * знала своё поле. Недоступное поле не рисуется — иначе запрет работал
-   * бы только в шаблоне Excel и в выборе колонок, а в карточке поле
-   * оставалось бы на месте.
-   */
-  window.fcKvC = function(columnId, label, value){
-    if (!isColumnAvailable(columnId)) return '';
-    // Подпись берём из раскладки по идентификатору колонки: там и перевод,
-    // и переименование поля клиентом. В разметку карточки подписи вписаны
-    // русскими строками, и по строке переименование не найти — только
-    // по идентификатору.
-    const own = PORTAL.columns && PORTAL.columns.renameOf
-        ? PORTAL.columns.renameOf('sku', columnId) : null;
-    return fcKv(own || label, value);
-  };
 
   /* ================== Вкладки карточки ================== */
 
@@ -410,17 +390,6 @@
 
     if (labels){
       if (PORTAL.fieldLabels) PORTAL.fieldLabels.wire(el, render);
-      if (readOnly()){
-        el.querySelectorAll('input, select').forEach(e => e.disabled = true);
-        el.querySelectorAll('#flAddBtn, [data-fl-del]').forEach(b => b.remove());
-        el.querySelectorAll('[data-fl-row]').forEach(tr => {
-          tr.onclick = null;
-          tr.style.cursor = 'default';
-        });
-        // фильтры разработчику оставляем: смотреть не запрещено
-        el.querySelectorAll('#flFilterObject2, #flFilterField2')
-          .forEach(e => e.disabled = false);
-      }
       return;
     }
 
@@ -431,10 +400,6 @@
     cancel.textContent = T_('common.button.cancel');
     cancel.onclick = () => { showView('admin'); showAdminSub('depositor-access'); };
 
-    if (readOnly()){
-      el.querySelectorAll('input').forEach(e => e.disabled = true);
-      save.style.display = 'none';
-    }
   }
 
   /**

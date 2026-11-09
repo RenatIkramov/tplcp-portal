@@ -32,25 +32,7 @@
 
   /* ================= Применение языка ================= */
 
-  /**
-   * Подписи приходят с сервера одним списком «ключ → текст». Демо брало
-   * их из I18N_MAP; подменяем сам словарь, чтобы работал и штатный
-   * applyLanguage, и всё, что на него завязано.
-   */
-  function fillMap(texts){
-    // I18N_MAP объявлена через const: это лексическая глобальная переменная,
-    // свойства window у неё нет — обращаться надо по имени.
-    const code = state.code;
-    if (!code) return;
-    Object.keys(texts).forEach(key => {
-      if (!I18N_MAP[key]) I18N_MAP[key] = {};
-      I18N_MAP[key][code] = texts[key];
-    });
-  }
-
-  // Подписи вкладок демо берёт из своего короткого словаря на два языка.
-  // Те же тексты уже есть в базе под этими ключами — подставляем их,
-  // иначе на нидерландском шапка осталась бы русской.
+  // Подписи вкладок верхнего меню — ключи каталога по имени вкладки.
   const NAV_KEYS = {orders: 'common.button.orders', receipts: 'common.button.receipts',
                     stock: 'common.button.stock', sku: 'references.button.products',
                     billing: 'common.button.billing', reports: 'common.button.reports',
@@ -71,14 +53,9 @@
     // подсказка для следующей загрузки страницы: с какого языка начинать,
     // чтобы списки рисовались сразу на нём
     try { window.localStorage.setItem('portalLocale', code); } catch (e) { /* не беда */ }
-    fillMap(state.texts);
-    // Прототип при смене языка перерисовывает разом все экраны, включая
-    // скрытые, и на скрытом иногда падает на отсутствующем элементе.
-    // Из-за одной такой ошибки не должен срываться весь перевод —
-    // и тем более сохранение выбранного языка, которое идёт следом.
-    safely('перерисовка экранов', () => {
-      if (typeof applyLanguage === 'function') applyLanguage(code);
-    });
+    // Каждый шаг — отдельно: ошибка на одном экране не должна срывать
+    // весь перевод, и тем более сохранение выбранного языка, которое
+    // идёт следом.
     safely('подписи вкладок', applyNav);
     safely('подсказки в полях', applyAttributes);
     // разметка, нарисованная кодом до смены языка, тоже должна перевестись
@@ -171,75 +148,16 @@
   }
 
   /**
-   * Подпись колонки: сначала переименование клиентом, потом перевод.
-   *
-   * Переименование спрашиваем у раскладки с сервера — только она
-   * о нём знает. Если клиент поле не переименовывал, переводим
-   * по ключу, как и раньше.
-   *
-   * Переименование действует на любом языке (решение заказчика):
-   * клиент назвал поле по-своему, и язык интерфейса его слово
-   * не отменяет. Прежний код прятал переименование на всех языках
-   * кроме русского — и это была одна из двух причин, по которым
-   * его не видел никто. Вторая: эта функция присваивалась здесь
-   * целиком, затирая обёртку columns.js, которая о переименовании
-   * знала.
-   */
-  const ownLabel = (tableKey, colId) => {
-    if (!tableKey || !colId) return null;
-    const columns = window.PORTAL && PORTAL.columns;
-    return columns && columns.renameOf ? columns.renameOf(tableKey, colId) : null;
-  };
-
-  function patchColumnLabels(){
-    window.localizeColumnLabel = function(ruLabel, tableKey, colId){
-      const own = ownLabel(tableKey, colId);
-      if (own) return own;
-
-      let key = (tableKey && colId) ? 'col.' + tableKey + '.' + colId : null;
-      if (!key && typeof colPickerTable === 'string' && colPickerTable){
-        // окно выбора колонок зовёт эту функцию без таблицы — берём открытую
-        const c = (tableColumns[colPickerTable] || []).find(x => x.label === ruLabel);
-        if (c){
-          const mine = ownLabel(colPickerTable, c.id);
-          if (mine) return mine;
-          if (c.key) key = c.key;
-        }
-      }
-      const t = key ? state.texts[key] : null;
-      // подпись могла прийти готовым русским текстом — из карточек
-      // документов и справочников, где ключа рядом нет
-      return t || (typeof TRU === 'function' ? TRU(ruLabel) : ruLabel);
-    };
-
-    // Внутри карточек документов и регистров заголовок рисуется по самой
-    // колонке. У колонки рядом лежит ключ — он точнее обратного поиска
-    // по русскому тексту, потому что одна и та же подпись встречается
-    // в разных таблицах с разным переводом.
-    window.COLTH = function(c){
-      if (!c) return '';
-      const columns = window.PORTAL && PORTAL.columns;
-      const table = columns && columns.tableOfColumn ? columns.tableOfColumn(c) : null;
-      const own = ownLabel(table, c.id);
-      if (own) return own;
-      const t = c.key ? state.texts[c.key] : null;
-      if (t) return t;
-      return window.localizeColumnLabel ? window.localizeColumnLabel(c.label) : c.label;
-    };
-  }
-
-  /**
    * Перерисовка списков после смены языка.
    * <p>
    * Таблицы собираются кодом, и подписи в них подставляются в момент
    * отрисовки. Пока список не перерисован, он показывает язык, который
-   * был при его построении. Прототип это делает сам, но одним куском:
-   * первая же ошибка на скрытом экране обрывает остальные. Поэтому
-   * вызываем поимённо и каждую — отдельно.
+   * был при его построении. Вызываем поимённо и каждую — отдельно:
+   * первая же ошибка на скрытом экране не должна обрывать остальные.
    */
   function rerender(){
-    ['renderReceipts', 'renderOrders', 'renderTransfers', 'renderStock', 'renderSku',
-     'renderPackaging', 'renderSuppliers', 'renderConsignees', 'renderReports',
+    safely('таблицы', () => PORTAL.tables.redrawAll());
+    ['renderSuppliers', 'renderConsignees', 'renderReports',
      'renderBillingServices', 'renderBillingInvoices', 'renderAdminUsers',
      'renderAdminAccess', 'renderAdminDepositorAccess', 'renderAdminStaffAccess',
      'renderEnumValues', 'renderDepositorsDir', 'renderWarehousesDir',
@@ -247,6 +165,11 @@
      'populateReportsConfigDepositorFilter'
     ].forEach(name => {
       if (typeof window[name] === 'function') safely(name, window[name]);
+    });
+    // Личный кабинет собран кодом — перерисовываем, если он открыт.
+    safely('личный кабинет', () => {
+      if (document.getElementById('view-profile')?.classList.contains('active')
+          && PORTAL.uiUser && typeof window.renderProfile === 'function') window.renderProfile(PORTAL.uiUser);
     });
   }
 
@@ -626,7 +549,6 @@
   /* ================= Установка ================= */
 
   function install(){
-    patchColumnLabels();
     watchNewNodes();
     // Демо отказывалось переключаться на казахский заглушкой — теперь
     // язык выбирается из того, что есть в базе, и заглушка не нужна.
@@ -646,7 +568,7 @@
     // а не от выбранного поклажедателя. На onLogin администратор, которому
     // доступны все клиенты, не получал ни того, ни другого до выбора.
     PORTAL.onSession(() => {
-      if (['admin', 'developer'].includes(PORTAL.session ? PORTAL.session.roleCode : '')){
+      if (PORTAL.isAdmin()){
         addAdminScreen();
       }
       // язык из учётной записи: он мог отличаться от языка формы входа.

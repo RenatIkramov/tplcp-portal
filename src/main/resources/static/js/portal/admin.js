@@ -242,20 +242,6 @@
     }
   }
 
-  /** Кнопка «Сменить пароль» в личном кабинете — та же, что была в прототипе. */
-  function wireProfileButton(){
-    const builtin = window.renderProfile;
-    if (typeof builtin !== 'function') return;
-    window.renderProfile = function(user){
-      builtin(user);
-      const host = byId('profileContent');
-      if (!host) return;
-      [...host.querySelectorAll('button')]
-        .filter(b => b.textContent.trim().indexOf(T('admin.text.change_password2')) === 0)
-        .forEach(b => { b.onclick = () => window.portalOpenPasswordChange(); });
-    };
-  }
-
   /* ======================================================================
      2. Справочник «Пользователи» из базы портала
      ====================================================================== */
@@ -378,7 +364,6 @@
     const el = byId('adminUserEditContent');
     if (!el) return;
     const isSelf = !isNew && PORTAL.session && PORTAL.session.login === u.login;
-    const readOnly = currentUserRole === 'developer';
 
     // Какие поклажедатели уже выданы — спрашиваем отдельно, в списке их нет
     /** @type {string[]} */
@@ -476,20 +461,53 @@
     byId('adminSaveUser').onclick = () => isNew ? createUser() : saveCard(u);
     byId('adminCancelUser').onclick = () => { showTab('admin'); showAdminSub('users'); };
 
-    if (readOnly){
-      el.insertAdjacentHTML('afterbegin', '<div style="background:#eef2ff;border:1px solid #c7d2fe;'
-        + 'color:#3730a3;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:13px;">'
-        + T('admin.text.view_mode_users') + '</div>');
-      el.querySelectorAll('input, select, textarea').forEach(e => e.disabled = true);
-      ['adminSetPassword','adminSaveUser','adminGenPassword'].forEach(id => {
-        const b = byId(id);
-        if (b) b.style.display = 'none';
-      });
-    }
     // карточку пользователя открывают из справочника пользователей
     PORTAL.setBack('adminUserEditBack', 'admin.button.back_to_users',
         () => { showTab('admin'); showAdminSub('users'); });
     showView('admin-user-edit');
+    if (!isNew && PORTAL.isAdmin()) await addCopyBlock(u.userId);
+  };
+
+  /* ---------------- скопировать настройки другого пользователя ---------------- */
+
+  /** Блок «Скопировать настройки от пользователя» — под кнопками пароля. Право решает сервер. */
+  async function addCopyBlock(userId){
+    const host = byId('adminSetPassword');
+    const row = host && host.parentNode;
+    if (!row || byId('copySettingsFrom')) return;
+    let users;
+    try {
+      users = await api('GET', '/api/admin/users');
+    } catch (e){ return; }
+    const others = users.filter(x => x.userId !== userId && x.isActive !== false);
+    if (!others.length) return;
+    const box = document.createElement('div');
+    box.style.cssText = 'display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap; margin-top:14px; width:100%;';
+    box.innerHTML = '<div class="kv" style="margin:0; min-width:280px;">'
+      + '<label>' + T('admin.label.copy_settings_from_user') + '</label>'
+      + '<select class="kv-input kv-input-editable" id="copySettingsFrom">'
+      + '<option value="">' + T('common.option.not_selected') + '</option>'
+      + others.map(x => '<option value="' + esc(x.userId) + '">'
+          + esc(x.fullName || x.login) + ' (' + esc(x.login) + ')</option>').join('')
+      + '</select></div>'
+      + '<button class="btn" type="button" onclick="portalCopyUserSettings(\'' + esc(userId) + '\')">'
+      + T('admin.button.copy') + '</button>'
+      + '<div class="hint" style="width:100%; margin:0;">' + T('admin.hint.what_copy_settings_transfers') + '</div>';
+    row.parentNode.insertBefore(box, row.nextSibling);
+  }
+
+  window.portalCopyUserSettings = async function(toUserId){
+    const sel = byId('copySettingsFrom');
+    if (!sel || !sel.value){
+      if (typeof notify === 'function') notify(T('admin.message.pick_whom_to_copy_from'));
+      return;
+    }
+    try {
+      await api('POST', '/api/admin/users/copy-settings', {fromUserId: sel.value, toUserId: toUserId});
+      if (typeof notify === 'function') notify(T('admin.message.settings_copied'));
+    } catch (e){
+      if (typeof notify === 'function') notify(e.message);
+    }
   };
 
   /**
@@ -624,7 +642,6 @@
      ====================================================================== */
 
   function install(){
-    wireProfileButton();
     window.renderAdminUsers = drawList;
     const create = /** @type {HTMLButtonElement | null} */ (document.querySelector('#usersRefActions .btn.primary'));
     if (create) create.onclick = () => window.portalOpenAdminUser(null);
@@ -638,10 +655,6 @@
       // жило в переключателе подвкладок справочников — вкладка оттуда
       // переехала, и правило переехало вместе с ней.
       const actions = document.getElementById('usersRefActions');
-      if (actions){
-        actions.style.display =
-            (PORTAL.session && PORTAL.session.roleCode) === 'developer' ? 'none' : '';
-      }
       if (PORTAL.adminTabs) PORTAL.adminTabs.onOpen('users', drawList);
       return loadUsers();
     });

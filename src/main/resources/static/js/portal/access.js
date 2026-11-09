@@ -99,19 +99,6 @@
     + '  <button class="btn ghost" type="button" data-cancel>' + T('common.button.cancel') + '</button>'
     + '</div>';
 
-  const readOnly = () => currentUserRole === 'developer';
-
-  function lockEditing(){
-    if (!readOnly()) return;
-    const el = byId('adminUserEditContent');
-    el.insertAdjacentHTML('afterbegin', '<div style="background:#eef2ff;border:1px solid #c7d2fe;'
-      + 'color:#3730a3;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:13px;">'
-      + T('admin.text.view_mode_access') + '</div>');
-    el.querySelectorAll('input').forEach(e => e.disabled = true);
-    const button = el.querySelector('[data-save]');
-    if (button) button.style.display = 'none';
-  }
-
   /* ======================================================================
      1. «Доступы» — поклажедатели менеджера
      ====================================================================== */
@@ -168,7 +155,6 @@
     // возврат — в ту подвкладку, из которой открыли
     PORTAL.setBack('adminUserEditBack', 'admin.button.back_to_manager_access',
         () => { showView('admin'); showAdminSub('access'); });
-    lockEditing();
     showView('admin-user-edit');
   };
 
@@ -229,7 +215,6 @@
     // возврат — в ту подвкладку, из которой открыли
     PORTAL.setBack('adminUserEditBack', 'admin.button.back_to_staff_access',
         () => { showView('admin'); showAdminSub('staff-access'); });
-    lockEditing();
     showView('admin-user-edit');
   };
 
@@ -295,7 +280,6 @@
     // возврат — в ту подвкладку, из которой открыли
     PORTAL.setBack('adminUserEditBack', 'admin.button.back_to_depositor_access',
         () => { showView('admin'); showAdminSub('depositor-access'); });
-    lockEditing();
     showView('admin-user-edit');
   };
 

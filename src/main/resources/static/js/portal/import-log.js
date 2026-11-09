@@ -142,22 +142,13 @@
   /* ================= Установка ================= */
 
   function install(){
-    // Подвкладку открывает showAdminSub прототипа; оборачиваем её,
-    // чтобы журнал читался при открытии, а не висел устаревшим.
-    const previous = window.showAdminSub;
-    if (typeof previous === 'function' && !previous.__implog){
-      /** @this {unknown} */
-      const wrapper = function(sub){
-        const r = previous.call(this, sub);
-        if (sub === 'excel'){
-          prepare();
-          load();
-        }
-        return r;
-      };
-      wrapper.__implog = true;
-      window.showAdminSub = wrapper;
-    }
+    // Журнал читается при открытии вкладки, а не висит устаревшим.
+    PORTAL.onAdminSub(sub => {
+      if (sub === 'excel'){
+        prepare();
+        load();
+      }
+    });
     // Журнал загрузок администратор смотрит по всем клиентам,
     // выбирая нужного фильтром внутри экрана.
     PORTAL.onSession(() => {

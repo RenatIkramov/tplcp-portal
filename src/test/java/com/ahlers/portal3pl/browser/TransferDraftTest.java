@@ -33,7 +33,7 @@ class TransferDraftTest extends BrowserTestBase {
         signInUiAsClient();
         createDraft();
 
-        page.evaluate("() => confirmTransferDraft()");
+        page.evaluate("() => PORTAL.draft.confirm('transfers')");
         page.waitForSelector("#transferDetailBanner .hint");
 
         String refusal = bannerText();
@@ -52,7 +52,7 @@ class TransferDraftTest extends BrowserTestBase {
         signInUiAsClient();
         createDraft();
 
-        Object docId = page.evaluate("() => (currentTransferRef || {}).docId");
+        Object docId = page.evaluate("() => (PORTAL.card.doc('transfers') || {}).docId");
         assertNotNull(docId, "черновик перемещения не открылся");
 
         // Один и тот же склад в обоих полях — то, что экран не предлагает,
@@ -69,8 +69,8 @@ class TransferDraftTest extends BrowserTestBase {
                   });
                 }
                 """, docId);
-        page.evaluate("id => portalOpenDocumentById('transfers', id)", docId);
-        page.evaluate("() => confirmTransferDraft()");
+        page.evaluate("id => PORTAL.draft.open('transfers', id)", docId);
+        page.evaluate("() => PORTAL.draft.confirm('transfers')");
 
         String expected = text("error.ready.same_warehouse");
         page.waitForFunction("reason => { const b = document.getElementById('transferDetailBanner');"
@@ -89,11 +89,11 @@ class TransferDraftTest extends BrowserTestBase {
      * обращается к API.
      */
     private void createDraft() {
-        page.evaluate("() => createNewTransferDraft()");
-        page.waitForFunction("() => !!currentTransferRef");
+        page.evaluate("() => PORTAL.draft.create('transfers')");
+        page.waitForFunction("() => !!PORTAL.card.doc('transfers')");
         fillErp("transfers");
-        page.evaluate("() => saveTransferDraft()");
-        page.waitForFunction("() => !!(currentTransferRef && currentTransferRef.docId)");
+        page.evaluate("() => PORTAL.draft.save('transfers')");
+        page.waitForFunction("() => !!(PORTAL.card.doc('transfers') && PORTAL.card.doc('transfers').docId)");
         draftCreated = true;
     }
 
@@ -105,8 +105,8 @@ class TransferDraftTest extends BrowserTestBase {
     void removeDraft() {
         if (draftCreated && page != null) {
             try {
-                page.evaluate("() => deleteTransferDraft()");
-                page.waitForFunction("() => !currentTransferRef");
+                page.evaluate("() => PORTAL.draft.remove('transfers')");
+                page.waitForFunction("() => !PORTAL.card.doc('transfers')");
             } catch (RuntimeException e) {
                 System.out.println("не удалось удалить черновик перемещения: " + e.getMessage());
             }

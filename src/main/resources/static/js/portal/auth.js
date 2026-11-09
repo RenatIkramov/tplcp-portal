@@ -38,7 +38,11 @@
     // раньше для него получалась пустая строка (нашла проверка типов).
     const address = typeof url === 'string' ? url
       : url instanceof Request ? url.url : String(url || '');
-    if (resp.status === 401 && address.indexOf('/api/') === 0
+    // Только если сессия была: до входа 401 — обычный ответ, а не
+    // «сессия закончилась». Прежде экран входа ловил 401 на запросах,
+    // ушедших до входа (панели фильтров при смене языка), и стирал
+    // пароль, который человек уже набирал, — проверки так и падали.
+    if (resp.status === 401 && PORTAL.session && address.indexOf('/api/') === 0
         && address.indexOf('/api/auth/') !== 0 && !sessionLost){
       sessionLost = true;
       showLogin(T('auth.text.session_ended_please_sign_in_again'));
@@ -50,6 +54,25 @@
      -------------------------------------------------------------------------- */
 
   function field(id){ return document.getElementById(id); }
+
+  // Стартовая страница — вход. Сразу при разборе скрипта, а не после
+  // ответа сервера: иначе портал мелькает пустым, пока идёт проверка
+  // сессии (install ниже). Жива сессия — signIn сам откроет портал.
+  (function bootScreen(){
+    const shell = field('appShell');
+    if (shell) shell.style.display = 'none';
+    field('loginScreen')?.classList.add('active');
+    /** @type {(HTMLInputElement | null)[]} */ ([
+      /** @type {HTMLInputElement | null} */ (field('loginEmail')),
+      /** @type {HTMLInputElement | null} */ (field('loginPassword'))
+    ]).forEach(input => { if (input) input.value = ''; });
+  })();
+
+  // Список поклажедателей закрывается щелчком мимо него.
+  document.addEventListener('click', e => {
+    const wrap = field('tabsOrg')?.closest('.tabs-org-wrap');
+    if (wrap && !wrap.contains(/** @type {Node} */ (e.target))) field('depositorSwitcher')?.classList.remove('active');
+  });
 
   function error(msg){
     const el = field('portalLoginError');
@@ -194,7 +217,6 @@
       case 'manager':   return T('auth.text.manager_mode_depositors',
                                  {names: names || T('common.text.none')});
       case 'admin':     return T('auth.text.administrator_mode_users_and_acces');
-      case 'developer': return T('auth.text.developer_mode_document_and_field');
       case 'staff':     return T('auth.text.warehouse_staff_mode_only_granted');
       default:          return T('auth.text.organization') + ': ' + (names || '—');
     }
@@ -212,8 +234,7 @@
     await PORTAL.reloadSession();
 
     const user = uiUser(sess, me);
-    currentUser = user;
-    currentUserRole = user.role;
+    PORTAL.uiUser = user;
 
     sessionLost = false;
     field('loginScreen')?.classList.remove('active');
@@ -223,13 +244,12 @@
     const pwd = field('loginPassword');
     if (pwd) pwd.value = '';
 
-    if (typeof applyUserTabVisibility === 'function') applyUserTabVisibility(user);
-    if (typeof applyUserCreatePermissions === 'function') applyUserCreatePermissions(user);
+    applyTabs(user);
+    applyCreateRights(user);
 
-    const admin = user.role === 'admin' || user.role === 'developer';
+    const admin = user.role === 'admin';
     const show = (id, visible) => { const el = field(id); if (el) el.style.display = visible ? '' : 'none'; };
     show('adminTabBtn', admin);
-    show('devSettingsTabBtn', user.role === 'developer');
     // Кнопок справочников портала здесь больше нет: типы, поклажедатели,
     // склады и пользователи переехали в «Администрирование → Общие
     // справочники», а весь раздел целиком и так показан по роли
@@ -241,8 +261,8 @@
 
     applyDepositor();
 
-    lastMainView = 'orders';
-    if (typeof showTab === 'function') showTab('orders');
+    PORTAL.lastView = 'orders';
+    window.showTab('orders');
 
     // §6.2: пароль выдал администратор — сначала свой пароль, данных пока нет
     if (sess.mustChangePassword && typeof window.portalOpenPasswordChange === 'function'){
@@ -277,26 +297,47 @@
       return;                       // не смогли спросить — оставляем как есть
     }
     PORTAL.user = me;
-    if (typeof currentUser === 'undefined' || !currentUser) return;
-    currentUser.hiddenTabs = [];
-    if (me.hideTransfersTab) currentUser.hiddenTabs.push('transfers');
-    if (me.hideBillingTab) currentUser.hiddenTabs.push('billing');
-    currentUser.hideServicesTab = me.hideServicesTab === true;
-    currentUser.canCreateReceipts = me.canCreateReceipts !== false;
-    currentUser.canCreateOrders = me.canCreateOrders !== false;
-    currentUser.canCreateTransfers = me.canCreateTransfers !== false;
-    currentUser.canUploadSkuExcel = me.canUploadSkuExcel !== false;
-    currentUser.canUploadPackagingExcel = me.canUploadPackagingExcel !== false;
-    if (typeof applyUserTabVisibility === 'function') applyUserTabVisibility(currentUser);
-    if (typeof applyUserCreatePermissions === 'function') {
-      applyUserCreatePermissions(currentUser);
-    }
-    // открытый раздел мог только что стать скрытым — уводим на заказы
-    if (typeof showTab === 'function' && typeof lastMainView === 'string'
-        && currentUser.hiddenTabs.indexOf(lastMainView) >= 0){
-      showTab('orders');
-    }
+    const user = PORTAL.uiUser;
+    if (!user) return;
+    user.hiddenTabs = [];
+    if (me.hideTransfersTab) user.hiddenTabs.push('transfers');
+    if (me.hideBillingTab) user.hiddenTabs.push('billing');
+    user.hideServicesTab = me.hideServicesTab === true;
+    user.canCreateReceipts = me.canCreateReceipts !== false;
+    user.canCreateOrders = me.canCreateOrders !== false;
+    user.canCreateTransfers = me.canCreateTransfers !== false;
+    user.canUploadSkuExcel = me.canUploadSkuExcel !== false;
+    user.canUploadPackagingExcel = me.canUploadPackagingExcel !== false;
+    // открытый раздел мог только что стать скрытым — applyTabs уведёт на заказы
+    applyTabs(user);
+    applyCreateRights(user);
   };
+
+  /** Разделы меню, закрытые человеку (флаги видимости, этап 5). */
+  function applyTabs(user){
+    const hidden = new Set((user && user.hiddenTabs) || []);
+    /** @type {NodeListOf<HTMLButtonElement>} */ (document.querySelectorAll('nav.tabs button[data-tab]'))
+        .forEach(btn => { btn.style.display = hidden.has(btn.dataset.tab || '') ? 'none' : ''; });
+    if (hidden.has(PORTAL.lastView)) window.showTab('orders');
+  }
+
+  /**
+   * Кнопки «Создать» и загрузки Excel — по правам человека. Кнопки
+   * загрузки документов знает doc-import.js: он отдаёт свою часть
+   * через PORTAL.applyImportRights.
+   */
+  function applyCreateRights(user){
+    const may = (/** @type {keyof PortalUiUser} */ right) => !user || user[right] !== false;
+    /** @type {[string, keyof PortalUiUser][]} */
+    const buttons = [['createReceiptBtn', 'canCreateReceipts'], ['createTransferBtn', 'canCreateTransfers'],
+                     ['createOrderBtn', 'canCreateOrders'], ['uploadSkuExcelBtn', 'canUploadSkuExcel'],
+                     ['uploadPackagingExcelBtn', 'canUploadPackagingExcel']];
+    buttons.forEach(([id, right]) => {
+      const b = field(id);
+      if (b) b.style.display = may(right) ? '' : 'none';
+    });
+    if (typeof PORTAL.applyImportRights === 'function') PORTAL.applyImportRights(user);
+  }
 
   /* --------------------------------------------------------------------------
      4. Переключатель поклажедателей
@@ -370,8 +411,18 @@
     enableLoginForm();
     // Обновление страницы не должно выбрасывать из портала: если сессия
     // ещё жива, сервер её узнает и экран входа даже не мелькнёт.
+    let sess;
     try {
-      const sess = await api('GET', '/api/auth/session');
+      sess = await api('GET', '/api/auth/session');
+    } catch (e){
+      // Сессии нет — экран входа уже открыт (bootScreen). Звать здесь
+      // showLogin нельзя: он стирает пароль, а человек мог начать его
+      // вводить, пока портал спрашивал сервер (проверки так и падали:
+      // пароль вписан, ответ «сессии нет» его стёр), — а если успел
+      // войти, этот поздний ответ закрыл бы ему портал.
+      return;
+    }
+    try {
       await signIn(sess);
     } catch (e){
       showLogin('');

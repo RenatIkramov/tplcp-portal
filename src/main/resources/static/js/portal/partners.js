@@ -429,9 +429,7 @@
     let rows = visible(kindName);
     PORTAL.catalog[kindName] = rows;
 
-    if (typeof fcDirSortArray === 'function'){
-      rows = fcDirSortArray(kindName, rows.slice(), r => r[dirSortState[kindName].col || ''] ?? '');
-    }
+    rows = PORTAL.tables.dirSorted(kindName, rows);
     const counter = document.getElementById(kind.count);
     if (counter) counter.textContent = '(' + rows.length + ')';
 
@@ -483,6 +481,8 @@
   function install(){
     window.renderSuppliers = () => renderList('suppliers');
     window.renderConsignees = () => renderList('consignees');
+    PORTAL.tables.dirRegister('suppliers', () => renderList('suppliers'));
+    PORTAL.tables.dirRegister('consignees', () => renderList('consignees'));
 
     PORTAL.onLogin(() => {
       ensureView();

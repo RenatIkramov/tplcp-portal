@@ -61,7 +61,7 @@ class ColumnPickerTest extends BrowserTestBase {
         assertTrue(expected.size() > 30,
                 "в справочнике колонок поступлений подозрительно мало строк: " + expected.size());
 
-        page.evaluate("() => openColumnPicker('receipts')");
+        page.evaluate("() => PORTAL.tables.picker('receipts')");
         page.waitForSelector("#colOverlay.active");
         List<String> offered = pickerColumnIds();
 
@@ -128,7 +128,7 @@ class ColumnPickerTest extends BrowserTestBase {
                   }).then(() => PORTAL.columns.reload('receipts'));
                 }
                 """);
-        page.waitForFunction("() => window.renderReceipts && (renderReceipts(), true)");
+        page.evaluate("() => PORTAL.tables.redraw('receipts')");
         page.waitForTimeout(300);
 
         List<String> head = headers("receiptsHead");
@@ -189,7 +189,7 @@ class ColumnPickerTest extends BrowserTestBase {
         try {
             // Убираем «Штрих код упаковки» тем же путём, каким это
             // делает человек: окно, галочка, «Применить».
-            page.evaluate("() => openColumnPicker('packaging')");
+            page.evaluate("() => PORTAL.tables.picker('packaging')");
             page.waitForSelector("#colOverlay.active");
             assertTrue(pickerColumnIds().contains("barcode"),
                     "в окне ⚙ Колонки упаковок нет штрихкода: " + pickerColumnIds());
@@ -202,7 +202,7 @@ class ColumnPickerTest extends BrowserTestBase {
                         const on = cb && (cb.getAttribute('onchange') || '');
                         if (on.indexOf("'barcode'") >= 0 && cb.checked) cb.click();
                       }
-                      applyColumnPicker();
+                      PORTAL.tables.pickerApply();
                     }
                     """);
             page.waitForFunction("want => !Array.from(document.querySelectorAll('#packagingHead th'))"
@@ -236,9 +236,8 @@ class ColumnPickerTest extends BrowserTestBase {
         List<String> out = (List<String>) page.evaluate("""
                 () => Array.from(document.querySelectorAll('#colList .col-item input[type=checkbox]'))
                         .map(cb => {
-                          const m = (cb.getAttribute('onchange') || '')
-                              .match(/toggleColVisibility\\('([^']+)'\\)/);
-                          return m ? m[1] : '';
+                          const item = cb.closest('.col-item');
+                          return item ? item.getAttribute('data-col') : '';
                         })
                         .filter(Boolean)
                 """);

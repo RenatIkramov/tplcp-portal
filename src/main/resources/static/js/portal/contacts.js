@@ -152,10 +152,8 @@
   /* ================= Установка ================= */
 
   function install(){
-    const original = window.openContacts;
-    /** @this {unknown} */
     window.openContacts = function(){
-      if (typeof original === 'function') original.call(this);
+      window.showView('contacts');
       // Читаем при каждом открытии: справочники правятся в соседней
       // вкладке, и показывать вчерашний адрес склада незачем.
       load();

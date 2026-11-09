@@ -51,7 +51,7 @@ class DepositorFieldVisibilityTest extends BrowserTestBase {
         assertFalse(sentByServer,
                 "сервер всё ещё отдаёт запрещённую колонку " + columnId);
 
-        page.evaluate("() => openColumnPicker('sku')");
+        page.evaluate("() => PORTAL.tables.picker('sku')");
         page.waitForSelector("#colList .col-item");
         String picker = (String) page.evaluate("() => document.getElementById('colList').innerText");
         assertFalse(picker.contains(label),

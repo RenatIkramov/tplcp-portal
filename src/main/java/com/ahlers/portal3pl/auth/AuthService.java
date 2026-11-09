@@ -74,11 +74,15 @@ public class AuthService {
                 Boolean.TRUE.equals(row.get("must_change_password")));
     }
 
-    /** Поклажедатели, доступные пользователю (§6.4). */
+    /**
+     * Поклажедатели, доступные пользователю (§6.4), — с номером договора:
+     * его показывает карточка документа (V108).
+     */
     @Transactional(readOnly = true)
     public List<Map<String, Object>> availableDepositors(String login) {
         return jdbc.sql("""
-                        SELECT depositor_id::text AS "depositorId", code, org_name AS "orgName"
+                        SELECT depositor_id::text AS "depositorId", code, org_name AS "orgName",
+                               contract_number AS "contractNumber"
                         FROM dbo.depositors_for_user(:login::text)
                         """)
                 .param("login", login)

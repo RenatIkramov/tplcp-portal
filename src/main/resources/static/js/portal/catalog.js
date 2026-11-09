@@ -16,7 +16,6 @@
   PORTAL.pageTotal = {};
 
   const dash = v => (v === null || v === undefined || v === '') ? '—' : v;
-  const yesNo = v => PORTAL.yesNo(v);
   const ruDate = iso => {
     if (!iso) return '—';
     const d = String(iso).slice(0, 10).split('-');
@@ -47,74 +46,13 @@
 
   /* ---------------- Товары (номенклатура) ---------------- */
 
-  // id колонки демо → поле строки API (или функция)
-  const SKU_MAP = {
-    itemCode: 'itemCode', code: 'code', name: 'name', unit: 'uomName',
-    orderUnit: 'orderUnitName', barcode: 'barcode',
-    group: 'itemGroupName', productType: 'itemTypeName',
-    length: 'length', width: 'width', height: 'height', volume: 'volume',
-    weightGross: 'weightGross', weightNet: 'weightNet',
-    manufacturer: 'manufacturer', countryOrigin: 'countryOrigin', brand: 'brand',
-    statusProduct: 'statusName', itemFullName: 'itemFullName',
-    hazardClass: 'hazardClassName', hazardGroup: 'hazardGroupName',
-    maxStorageTemp: 'maxStorageTemp', minStorageTemp: 'minStorageTemp',
-    maxHumidity: 'maxHumidity', minHumidity: 'minHumidity',
-    minDaysForReceipt: 'minDaysForReceipt', minDaysForReservation: 'minDaysForReservation',
-    shelfLifeDays: 'shelfLifeDays', color: 'color', size: 'size',
-    abcClass: 'abcClass', xyzClass: 'xyzClass',
-    hsCode: 'hsCode', enstruCode: 'enstruCode',
-    currency: 'currencyCode', cost: 'cost', comment: 'comment',
-    createdBy: 'createdBy', updatedBy: 'updatedBy', customAttr: 'customAttr1'
-  };
-  // batchTracking и expiryTracking — признаки с V91 (прежде текст «Да»/«Нет»)
-  const SKU_BOOL = ['hasPackaging', 'isFragile', 'isSerialTracked', 'isKit',
-                    'isMarkingRequired', 'isExcise', 'isControlled', 'isWmsActive',
-                    'batchTracking', 'expiryTracking'];
-
-  function patchSkuColumns(){
-    if (typeof tableColumns === 'undefined' || !tableColumns.sku) return;
-    tableColumns.sku.forEach(c => {
-      if (SKU_MAP[c.id]){
-        const field = SKU_MAP[c.id];
-        c.render = p => c.id === 'code' ? '<strong>' + dash(p[field]) + '</strong>' : dash(p[field]);
-      } else if (SKU_BOOL.includes(c.id)){
-        c.render = p => yesNo(p[c.id]);
-      } else if (c.id === 'createdAt' || c.id === 'updatedAt'){
-        c.render = p => ruDate(p[c.id]);
-      } else {
-        c.render = p => dash(p[c.id]);
-      }
-    });
-  }
-
   /**
-   * Страница товаров: строки те, что прислал сервер.
-   *
-   * <p>Отбор, порядок и страницы здесь больше не считаются. Считались:
-   * экран держал весь справочник и резал его сам. У клиента с тысячей
-   * позиций это значило тысячу строк в браузере на каждый вход — и,
-   * что хуже, сортировку, которая упорядочивала только показанные
-   * двадцать, оставаясь на вид настоящей.
+   * Страница товаров: строки те, что прислал сервер (отбор, порядок
+   * и страницы считает он). Колонки — table-columns.js.
    */
-  function renderSkuFromApi(){
-    const body = document.getElementById('skuBody');
-    if (!body) return;
-    const rows = PORTAL.page.sku || [];
-    const total = PORTAL.pageTotal.sku || 0;
-    const size = (typeof paginationState !== 'undefined' && paginationState.sku)
-        ? paginationState.sku.pageSize : rows.length;
-    const totalPages = Math.max(1, Math.ceil(total / (size || 1)));
-
-    const counter = document.getElementById('skuCount');
-    if (counter) counter.textContent = '(' + total + ')';
-
-    if (typeof renderTableHead === 'function') renderTableHead('sku');
-    body.innerHTML = rows.length
-      ? rows.map(p => renderTableRow('sku', p, 'portalOpenSku')).join('')
-      : '<tr><td colspan="24" style="color:var(--muted);">'
-        + (PORTAL.catalogError.sku ? T('partners.text.data_unavailable') : T('stock.text.nothing_found')) + '</td></tr>';
-    if (typeof renderPaginationBar === 'function') renderPaginationBar('sku', totalPages, total);
-    if (typeof updateTopScrollWidth === 'function') setTimeout(() => updateTopScrollWidth('sku'), 0);
+  function renderSku(){
+    PORTAL.tables.renderList('sku', {rows: PORTAL.page.sku || [], total: PORTAL.pageTotal.sku || 0,
+                                     error: PORTAL.catalogError.sku, open: 'portalOpenSku'});
   }
 
   /**
@@ -132,16 +70,14 @@
       PORTAL.pageTotal.sku = data.total || 0;
       // Номер страницы из ответа: сервер мог вернуть первую вместо
       // запрошенной пятой, если отбор сузился и пятой больше нет.
-      if (typeof paginationState !== 'undefined' && paginationState.sku && data.page){
-        paginationState.sku.page = data.page;
-      }
+      PORTAL.tables.setPage('sku', data.page);
       PORTAL.catalogError.sku = null;
     } catch (e){
       PORTAL.page.sku = [];
       PORTAL.pageTotal.sku = 0;
       PORTAL.catalogError.sku = e.message;
     }
-    renderSkuFromApi();
+    renderSku();
   }
 
   /**
@@ -207,11 +143,7 @@
   }
 
   function install(){
-    patchSkuColumns();
-    window.renderSku = renderSkuFromApi;
-    // Ряд страниц прототипа зовёт TABLE_RENDER_FN[ключ] — а новая
-    // страница теперь приходит с сервера, перерисовкой её не добыть.
-    if (typeof TABLE_RENDER_FN !== 'undefined') TABLE_RENDER_FN.sku = loadSku;
+    PORTAL.tables.register('sku', {load: loadSku, render: renderSku});
     window.renderBillingServices = renderTariffsFromApi;
     window.renderBillingInvoices = renderInvoicesFromApi;
     // Поставщиков и грузополучателей ведёт отдельный блок (этап 7б):

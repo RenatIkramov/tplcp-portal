@@ -5,10 +5,8 @@
   const PORTAL = window.PORTAL;
   if (!PORTAL) return;
 
-  const isAdmin = () => ['admin', 'developer'].includes(PORTAL.session ? PORTAL.session.roleCode : '');
-  // Разработчик смотрит, но не правит: раздел ему открыт для разбора,
-  // а не для ведения справочников.
-  const mayEdit = () => PORTAL.session && PORTAL.session.roleCode === 'admin';
+  const isAdmin = () => !!PORTAL.session && PORTAL.session.roleCode === 'admin';
+  const mayEdit = isAdmin;
 
   const dash = v => (v === null || v === undefined || v === '') ? '—' : v;
   const esc = v => String(v === null || v === undefined ? '' : v)
@@ -360,9 +358,7 @@
     if (!body) return;
     const show = document.getElementById(dirName + 'ShowArchived')?.checked;
     let rows = (lists.rows[dirName] || []).filter(r => show || r.isActive !== false);
-    if (typeof fcDirSortArray === 'function'){
-      rows = fcDirSortArray(dirName, rows.slice(), r => r[dirSortState[dirName].col || ''] ?? '');
-    }
+    rows = PORTAL.tables.dirSorted(dirName, rows);
     const counter = document.getElementById(dir.count);
     if (counter) counter.textContent = '(' + rows.length + ')';
 
@@ -456,6 +452,8 @@
   function install(){
     window.renderWarehousesDir = () => renderDir('warehousesDir');
     window.renderDepositorsDir = () => renderDir('depositorsDir');
+    PORTAL.tables.dirRegister('warehousesDir', () => renderDir('warehousesDir'));
+    PORTAL.tables.dirRegister('depositorsDir', () => renderDir('depositorsDir'));
     window.renderOperatorsDir = () => renderDir('operatorsDir');
 
     // onSession, а не onLogin: склады, поклажедатели и организации

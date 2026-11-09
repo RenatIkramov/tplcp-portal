@@ -33,14 +33,14 @@ class DraftReadinessTest extends BrowserTestBase {
         // нет: запись появляется по кнопке. Поэтому ждём саму карточку,
         // а не идентификатор — его выдаст сохранение, которое сделает
         // за нас «Подтвердить».
-        page.evaluate("() => createNewReceiptDraft()");
-        page.waitForFunction("() => !!currentReceiptRef");
+        page.evaluate("() => PORTAL.draft.create('receipts')");
+        page.waitForFunction("() => !!PORTAL.card.doc('receipts')");
         draftCreated = true;
         // Без номера ERP черновик не сохраняется вовсе (V98) — и до
         // проверки готовности дело бы не дошло.
         fillErp("receipts");
 
-        page.evaluate("() => confirmReceiptDraft()");
+        page.evaluate("() => PORTAL.draft.confirm('receipts')");
         page.waitForSelector("#receiptDetailBanner .hint");
 
         String refusal = (String) page.evaluate(
@@ -59,8 +59,8 @@ class DraftReadinessTest extends BrowserTestBase {
     void removeDraft() {
         if (draftCreated && page != null) {
             try {
-                page.evaluate("() => deleteReceiptDraft()");
-                page.waitForFunction("() => !currentReceiptRef");
+                page.evaluate("() => PORTAL.draft.remove('receipts')");
+                page.waitForFunction("() => !PORTAL.card.doc('receipts')");
             } catch (RuntimeException e) {
                 System.out.println("не удалось удалить черновик проверки: " + e.getMessage());
             }

@@ -90,8 +90,8 @@ class LineModalTest extends BrowserTestBase {
         // упала бы на пустом ожидании, а причина была бы в размере
         // страницы, а не в окне.
         page.evaluate("() => { showTab('stock');"
-                + " if (typeof paginationState !== 'undefined') paginationState.stock.pageSize = 100;"
-                + " return portalReloadStock(); }");
+                + " PORTAL.tables.pageOf('stock').pageSize = 100;"
+                + " return PORTAL.reloadStock(); }");
         page.waitForFunction("() => (PORTAL.rows || []).some(r => Number(r.stock) > 0)");
         @SuppressWarnings("unchecked")
         List<String> row = (List<String>) page.evaluate("""
@@ -120,9 +120,8 @@ class LineModalTest extends BrowserTestBase {
                         "() => { const f = document.getElementById('rf_warehouse');"
                                 + " return f ? f.value : 'поля нет'; }")
                 + "\nэкран выбрал товар: " + page.evaluate(
-                        "() => typeof lineEditSelectedProduct !== 'undefined'"
-                                + " && lineEditSelectedProduct"
-                                + " ? lineEditSelectedProduct.code : 'не выбран'")
+                        "() => PORTAL.lineModal.product('receipts')"
+                                + " ? PORTAL.lineModal.product('receipts').code : 'не выбран'")
                 + "\nзапросы к запасам: " + stockAsked
                 // Значения в кавычках и с длиной: невидимый пробел
                 // в коде или в складе выглядит в сообщении так же,
@@ -200,14 +199,14 @@ class LineModalTest extends BrowserTestBase {
                   const select = document.getElementById('lineEditPackaging');
                   const code = select.options[1].value;
                   select.value = code;
-                  onLineEditPackagingChange();
+                  PORTAL.lineModal.packagingChanged('receipts');
                   document.getElementById('lineEditPackageCount').value = 2;
-                  onLineEditPackageCountChange();
-                  const pkg = PRODUCT_PACKAGING.find(x => x.packagingCode === code);
+                  PORTAL.lineModal.packageCountChanged('receipts');
+                  const pkg = PORTAL.draft.refs.packagings.find(x => x.packagingCode === code);
                   return pkg ? pkg.coefficient : null;
                 }
                 """);
-        assertNotNull(coefficient, "упаковка выбралась, но её нет в списке PRODUCT_PACKAGING");
+        assertNotNull(coefficient, "упаковка выбралась, но её нет в справочнике упаковок окна");
 
         String quantity = (String) page.evaluate(
                 "() => document.getElementById('lineEditExpected').value");
@@ -272,12 +271,12 @@ class LineModalTest extends BrowserTestBase {
         // Сохраняем сразу: карточка нового документа живёт на экране,
         // а идентификатор, по которому проверка ставит склад запросом,
         // выдаёт база при сохранении.
-        page.evaluate("() => createNewReceiptDraft()");
-        page.waitForFunction("() => !!currentReceiptRef");
+        page.evaluate("() => PORTAL.draft.create('receipts')");
+        page.waitForFunction("() => !!PORTAL.card.doc('receipts')");
         fillErp("receipts");
-        page.evaluate("() => saveReceiptDraft()");
-        page.waitForFunction("() => !!(currentReceiptRef && currentReceiptRef.docId)");
-        docId = (String) page.evaluate("() => currentReceiptRef.docId");
+        page.evaluate("() => PORTAL.draft.save('receipts')");
+        page.waitForFunction("() => !!(PORTAL.card.doc('receipts') && PORTAL.card.doc('receipts').docId)");
+        docId = (String) page.evaluate("() => PORTAL.card.doc('receipts').docId");
         page.evaluate("""
                 async (arg) => {
                   await fetch('/api/receipts/' + arg.docId, {
@@ -291,15 +290,15 @@ class LineModalTest extends BrowserTestBase {
     }
 
     private void openDraft() {
-        page.evaluate("id => portalOpenDocumentById('receipts', id)", docId);
-        page.waitForFunction("() => !!(currentReceiptRef && currentReceiptRef.docId)");
+        page.evaluate("id => PORTAL.draft.open('receipts', id)", docId);
+        page.waitForFunction("() => !!(PORTAL.card.doc('receipts') && PORTAL.card.doc('receipts').docId)");
     }
 
     /** Открыть окно добавления строки и выбрать в нём товар по коду. */
     private void openLineModalWith(String skuCode) {
-        page.evaluate("() => openLineAddModal()");
+        page.evaluate("() => PORTAL.lineModal.add('receipts')");
         page.waitForSelector("#lineEditOverlay.active");
-        page.evaluate("code => selectLineEditProduct(code)", skuCode);
+        page.evaluate("code => PORTAL.lineModal.pick('receipts', code)", skuCode);
         // Числа дорисовываются после ответа с остатками — ждём не числа,
         // а исчезновение прочерка: само число проверяет уже тест.
         page.waitForFunction(

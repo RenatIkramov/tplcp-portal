@@ -111,21 +111,6 @@
     deliveryDate: ruDate(o.deliveryDate)
   });
 
-  /** Колонки, которые в демо вычислялись из mock-логики, читают поля API. */
-  function patchColumns(){
-    if (typeof tableColumns === 'undefined') return;
-    const set = (table, id, render) => {
-      const c = (tableColumns[table] || []).find(c => c.id === id);
-      if (c) c.render = render;
-    };
-    set('receipts', 'warehouse', r => r.warehouse);
-    set('receipts', 'receivingEndDate', r => r.receivingEndDate);
-    set('receipts', 'arrivalDate', r => r.arrivalDate);
-    set('receipts', 'volume', r => r.volume);
-    set('orders', 'warehouse', o => o.warehouse);
-    set('orders', 'volume', o => o.volume);
-  }
-
   function statusBar(table){
     const body = document.getElementById(table + 'Body');
     if (!body) return;
@@ -173,9 +158,7 @@
       // сузился, и пятой страницы больше нет. Номер в ответе —
       // не любезность, а то, что экран обязан подхватить, иначе
       // ряд страниц покажет «Стр. 5», а на экране будет первая.
-      if (typeof paginationState !== 'undefined' && paginationState[table] && data.page){
-        paginationState[table].page = data.page;
-      }
+      PORTAL.tables.setPage(table, data.page);
       PORTAL.docsLoadedAt[table] = new Date();
       PORTAL.docsError[table] = null;
     } catch (e){
@@ -187,40 +170,11 @@
   }
 
   function render(table){
-    const body = document.getElementById(table + 'Body');
-    if (!body) return;
-
-    // Отбор, порядок и страница — всё на сервере (DocumentFilters,
-    // DocumentPaging). Здесь не осталось ничего, кроме отрисовки.
-    //
-    // Так было не всегда. Отбор жил тут и отбирал по тому, что уже
-    // лежит на странице: статус сравнивался по переведённой подписи,
-    // и на английском не находилось ничего. Сортировка осталась
-    // клиентской дольше — и ошибалась тише: она упорядочивала
-    // двадцать строк текущей страницы, так что «самый тяжёлый
-    // документ» был самым тяжёлым из видимых.
-    const items = PORTAL.docs[table];
-    const total = PORTAL.docsTotal[table] || 0;
-    const size = (typeof paginationState !== 'undefined' && paginationState[table])
-        ? paginationState[table].pageSize : items.length;
-    const totalPages = Math.max(1, Math.ceil(total / (size || 1)));
-
-    const counter = document.getElementById(table + 'Count');
-    if (counter) counter.textContent = '(' + total + ')';
-
-    if (typeof renderTableHead === 'function') renderTableHead(table);
-    body.innerHTML = items.length
-      ? items.map(r => renderTableRow(table, r, 'portalOpenDocument')).join('')
-      : '<tr><td colspan="24" style="color:var(--muted);">'
-        + (PORTAL.docsError[table] ? T('partners.text.data_unavailable') : T('stock.text.nothing_found')) + '</td></tr>';
-
-    if (typeof renderPaginationBar === 'function') renderPaginationBar(table, totalPages, total);
-    if (typeof updateTopScrollWidth === 'function') setTimeout(() => updateTopScrollWidth(table), 0);
+    PORTAL.tables.renderList(table, {rows: PORTAL.docs[table] || [], total: PORTAL.docsTotal[table] || 0,
+                                     error: PORTAL.docsError[table], open: 'portalOpenDocument'});
     statusBar(table);
   }
 
-  // Заглушка portalOpenDocument удалена: карточку открывает card.js,
-  // а редактор черновика — draft.js, и оба грузятся позже этого файла.
 
   /** Перезагрузка списков — используется редактором черновиков. */
   /**
@@ -237,23 +191,9 @@
   };
 
   function install(){
-    patchColumns();
-    window.renderReceipts = () => render('receipts');
-    window.renderOrders = () => render('orders');
-    // Панель фильтров перечитывает список этим вызовом: отбор
-    // изменился — за данными надо идти заново, перерисовкой
-    // имеющихся строк тут не обойтись.
+    PORTAL.tables.register('receipts', {load: () => load('receipts'), render: () => render('receipts')});
+    PORTAL.tables.register('orders', {load: () => load('orders'), render: () => render('orders')});
     PORTAL.reloadDocs = load;
-
-    // Ряд страниц и щелчки по заголовкам ведут за данными, а не
-    // перерисовывают имеющиеся: страницу и порядок решает сервер.
-    // Прототип зовёт TABLE_RENDER_FN[ключ] — подменяем запись,
-    // а не кнопки: кнопок в ряду три, и каждая нашла бы свой путь
-    // мимо подмены.
-    if (typeof TABLE_RENDER_FN !== 'undefined'){
-      TABLE_RENDER_FN.receipts = () => load('receipts');
-      TABLE_RENDER_FN.orders = () => load('orders');
-    }
     PORTAL.onLogin(() => { load('receipts'); load('orders'); });
   }
 

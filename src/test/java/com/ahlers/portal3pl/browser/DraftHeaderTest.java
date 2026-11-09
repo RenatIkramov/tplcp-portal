@@ -37,12 +37,12 @@ class DraftHeaderTest extends BrowserTestBase {
 
     /** Тип документа → как его черновик создать, сохранить и удалить. */
     private static final Map<String, List<String>> ACTIONS = Map.of(
-            "receipts", List.of("createNewReceiptDraft", "saveReceiptDraft", "deleteReceiptDraft",
-                    "currentReceiptRef"),
-            "orders", List.of("createNewOrderDraft", "saveOrderDraft", "deleteOrderDraft",
-                    "currentOrderRef"),
-            "transfers", List.of("createNewTransferDraft", "saveTransferDraft",
-                    "deleteTransferDraft", "currentTransferRef"));
+            "receipts", List.of("PORTAL.draft.create('receipts')", "PORTAL.draft.save('receipts')",
+                    "PORTAL.draft.remove('receipts')", "PORTAL.card.doc('receipts')"),
+            "orders", List.of("PORTAL.draft.create('orders')", "PORTAL.draft.save('orders')",
+                    "PORTAL.draft.remove('orders')", "PORTAL.card.doc('orders')"),
+            "transfers", List.of("PORTAL.draft.create('transfers')", "PORTAL.draft.save('transfers')",
+                    "PORTAL.draft.remove('transfers')", "PORTAL.card.doc('transfers')"));
 
     private String type;
 
@@ -80,7 +80,7 @@ class DraftHeaderTest extends BrowserTestBase {
         // не рисуются (03.11.2026). Проверка берёт открытые — до трёх, —
         // а не поля 1–3: в рабочей базе часть полей бывает закрыта.
         waitForColumns("orders");
-        boolean anyOpen = (Boolean) page.evaluate("() => fcExtraInfoFields('orders').length > 0");
+        boolean anyOpen = (Boolean) page.evaluate("() => PORTAL.card.extraFields('orders').length > 0");
         Assumptions.assumeTrue(anyOpen, "у поклажедателя закрыты все доп. поля заказа — сохранять нечего");
         openExtraTab();
         @SuppressWarnings("unchecked")
@@ -130,7 +130,7 @@ class DraftHeaderTest extends BrowserTestBase {
 
         page.evaluate("() => { document.getElementById('of_comment').value = 'черновая заметка'; }");
         openExtraTab();
-        page.evaluate("() => fcSwitchDocTab('orders', 'Общая информация')");
+        page.evaluate("() => PORTAL.card.tab('orders', 'general')");
 
         Object onScreen = page.evaluate(
                 "() => String((document.getElementById('of_comment') || {}).value || '')");
@@ -140,7 +140,7 @@ class DraftHeaderTest extends BrowserTestBase {
         // В базе документа ещё нет вовсе: у карточки нет идентификатора.
         // Это и есть «до кнопки ничего не записано» — проверять нечего
         // по номеру, потому что номера тоже нет.
-        Object id = page.evaluate("() => (currentOrderRef || {}).docId || null");
+        Object id = page.evaluate("() => (PORTAL.card.doc('orders') || {}).docId || null");
         assertNull(id, "документ появился в базе до нажатия кнопки «Сохранить»");
 
         // И на всякий случай: заметки нет ни в одном заказе клиента.
@@ -151,7 +151,7 @@ class DraftHeaderTest extends BrowserTestBase {
     }
 
     private void openExtraTab() {
-        page.evaluate("() => fcSwitchDocTab('orders', 'Дополнительная информация')");
+        page.evaluate("() => PORTAL.card.tab('orders', 'extra')");
         page.waitForSelector("[id^=\"of_customField\"]");
     }
 
@@ -224,7 +224,7 @@ class DraftHeaderTest extends BrowserTestBase {
      * появляется по кнопке «Сохранить», её делает {@link #save()}.
      */
     private void createDraft() {
-        page.evaluate("() => " + action(0) + "()");
+        page.evaluate("() => " + action(0));
         page.waitForFunction("() => !!" + action(3));
         // Номер ERP обязателен и уникален (V98): ставится сразу, пока
         // поле на экране, — потом тест может уйти на другую вкладку.
@@ -284,7 +284,7 @@ class DraftHeaderTest extends BrowserTestBase {
 
     /** Нажать «Сохранить» и дождаться, пока карточка перечитается. */
     private void save() {
-        page.evaluate("() => " + action(1) + "()");
+        page.evaluate("() => " + action(1));
         // Сохранение — три запроса подряд (создание или правка шапки,
         // состав, чтение карточки). Ждём идентификатор: он появляется,
         // когда база создала запись, то есть сохранение состоялось.
@@ -310,7 +310,7 @@ class DraftHeaderTest extends BrowserTestBase {
         try {
             // Для несохранённого документа это просто закрывает карточку:
             // удалять в базе нечего.
-            page.evaluate("() => " + action(2) + "()");
+            page.evaluate("() => " + action(2));
             page.waitForFunction("() => !" + action(3));
         } catch (RuntimeException e) {
             System.out.println("не удалось удалить черновик " + type + ": " + e.getMessage());

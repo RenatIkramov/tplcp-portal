@@ -28,13 +28,6 @@
   /* ---------------- справочники для выпадающих списков ---------------- */
 
   /**
-   * Функции прототипа по имени — их подменяют обёртки этого файла.
-   * Глобальные функции классических скриптов — свойства window.
-   * @type {Record<string, any>}
-   */
-  const globals = /** @type {any} */ (window);
-
-  /**
    * Справочники для выбора в черновике.
    * @type {{loaded: boolean, warehouses: SelectOption[], suppliers: SelectOption[],
    *         consignees: SelectOption[], skuByCode: Record<string, SkuRow>, packagings: PackagingRow[],
@@ -85,13 +78,12 @@
     refs.orderTypes = (types.orderTypes || []).map(x => ({value:x.id, text:x.name}));
     refs.docTypes   = (types.receiptDocTypes || []).map(x => ({value:x.id, text:x.name}));
     // Качество строки заказа (V89): код и имя на языке пользователя.
-    // Прототип строит из него список в окне строки (setOrderLineQuality).
+    // Из него строится список в окне строки (line-modal.js).
     PORTAL.qualities = (types.qualities || []).map(x => ({code: x.code, name: x.name}));
     // Тип транспорта (V97): в документе хранится код
     refs.transportTypes = (types.transportTypes || []).map(x => ({value: x.code, text: x.name}));
 
-    // Окно ввода строки ищет товар в массиве products — наполняем его
-    // настоящей номенклатурой, чтобы поиск работал по данным базы.
+    // Товары для окна ввода строки (line-modal.js ищет в refs.skuList).
     // Упаковка по умолчанию — её окно подставляет сразу при выборе товара.
     const defaultPackaging = {};
     (refs.packagings || []).forEach(p => {
@@ -106,68 +98,12 @@
         defaultOrderPackaging: defaultPackaging[x.code] || null,
         group: x.itemGroupName || '', productType: x.itemTypeName || '',
         barcode: x.barcode || '', cost: x.cost, currency: x.currencyCode || 'KZT',
-        isInWms: x.isInWms !== false, stock: 0, reserved: 0, defect: 0,
-        // демо иначе придумает характеристики само — отдаём настоящие
-        __full: {cost: x.cost, currency: x.currencyCode || 'KZT',
-                 itemCode: x.itemCode || '—', itemFullName: x.itemFullName || x.name,
-                 customAttrs: Array.from({length:10}, () => '—')}
+        isInWms: x.isInWms !== false
       };
     });
-    fillProducts();
-    // Упаковки нужны не только окну строки: колонка «Используются упаковки»
-    // в списке товаров считает их по тому же массиву. Наполняем сразу,
-    // чтобы ответ не зависел от того, открывали ли окно.
-    fillPackagings();
     refs.loaded = true;
     return refs;
   }
-
-  /**
-   * Массив products демо переназначается при входе и смене поклажедателя,
-   * поэтому наполняем его не один раз, а перед каждым открытием окна строки:
-   * поиск товара в окне работает именно по нему.
-   */
-  function fillProducts(){
-    if (typeof products === 'undefined' || !refs.skuList) return;
-    products.length = 0;
-    refs.skuList.forEach(p => products.push(p));
-  }
-
-  /**
-   * Выпадающие списки должны показывать наименование, а отправлять
-   * идентификатор: наименования могут совпадать, идентификатор уникален.
-   * Штатный kvField умеет только простые строки, поэтому расширяем его
-   * вариантами вида {value, text}, не ломая прежнее поведение.
-   */
-  const kvFieldOriginal = window.kvField;
-  window.kvField = function(label, value, opts){
-    opts = opts || {};
-    const options = opts.options || [];
-    const complex = options.length && typeof options[0] === 'object';
-    if (opts.type !== 'select' || !complex){
-      return kvFieldOriginal(label, value, opts);
-    }
-    const esc = s => String(s === null || s === undefined ? '' : s).replace(/"/g,'&quot;');
-    const idAttr = opts.id ? 'id="' + opts.id + '"' : '';
-    // onchange прототипа раньше терялся: список грузополучателей его
-    // задаёт, чтобы перечитать адреса доставки, а обёртка собирала
-    // разметку заново и атрибут не переносила.
-    const onchangeAttr = opts.onchange ? ' onchange="' + esc(opts.onchange) + '"' : '';
-    const selected = String(value === null || value === undefined ? '' : value);
-    const placeholder = options.some(o => String(o.value) === selected)
-        ? '' : '<option value="" selected>' + T('sku.text.not_selected') + '</option>';
-    const html = options.map(o =>
-        '<option value="' + esc(o.value) + '"' +
-        (String(o.value) === selected ? ' selected' : '') + '>' + esc(o.text) + '</option>').join('');
-    // Подпись может прийти готовой русской строкой — от прототипа,
-    // который зовёт kvField напрямую; её по-прежнему переводим. Для
-    // подписей, уже разрешённых через PORTAL.fieldLabel, это пустая
-    // операция: ни ключа, ни колонки тут нет, и текст возвращается как есть.
-    const label2 = (typeof localizeColumnLabel === 'function') ? localizeColumnLabel(label) : label;
-    return '<div class="kv"><label>' + label2 + '</label>'
-         + '<select class="kv-input kv-input-editable" ' + idAttr + onchangeAttr + '>'
-         + placeholder + html + '</select></div>';
-  };
 
   /* ---------------- адреса доставки грузополучателя ---------------- */
 
@@ -229,7 +165,7 @@
    * <p>Поэтому выбранное место доставки сбрасывается, а не остаётся:
    * адрес чужой организации в документе хуже пустого поля.
    */
-  window.portalOrderConsigneeChanged = function(){
+  function consigneeChanged(){
     const consigneeId = (document.getElementById('of_consignee') || {}).value || '';
     paintAddresses('');
     // Контакт прежней организации уходит вместе с её адресом — даже
@@ -244,7 +180,7 @@
         applyContact(main ? main.addressId : '');
       })
       .catch(() => {});
-  };
+  }
 
   /* ---------------- контакт по месту доставки (V83) ---------------- */
 
@@ -272,7 +208,7 @@
   function currentContact(){
     const el = document.getElementById('of_consigneeContact');
     if (el) return (el.value || '').trim();
-    const doc = docOf('orders');
+    const doc = PORTAL.card.doc('orders');
     return doc && doc.consigneeContact ? String(doc.consigneeContact).trim() : '';
   }
 
@@ -280,7 +216,7 @@
   function setContact(value){
     const el = document.getElementById('of_consigneeContact');
     if (el) el.value = value;
-    const doc = docOf('orders');
+    const doc = PORTAL.card.doc('orders');
     if (doc) doc.consigneeContact = value;
   }
 
@@ -292,10 +228,10 @@
     autoContact = next;
   }
 
-  window.portalOrderAddressChanged = function(){
+  function addressChanged(){
     const field = document.getElementById('of_deliveryAddress');
     applyContact(field ? field.value : '');
-  };
+  }
 
   /**
    * Открыли сохранённый черновик: если в нём стоит ровно то, что
@@ -354,55 +290,11 @@
     });
   });
 
-  /**
-   * Поля, которые портал показывает, но не задаёт.
-   *
-   * <p>Дату создания ставит база при создании черновика. Количество
-   * строк, штук, грузомест и паллет, вес и объём — измеренные склада́ми
-   * факты, они приходят из WMS. Дата отгрузки перемещения — тоже склад:
-   * он ставит её, когда действительно отгружает.
-   *
-   * <p>Сервер такие поля не принимает (их нет в editableHeaderColumns),
-   * поэтому поле, в которое можно печатать, а оно не сохраняется, было бы
-   * обманом. Запираем их в самой отрисовке, а не правкой готовой разметки:
-   * карточка перерисовывается при каждом переключении вкладки, и правка
-   * «после» отваливалась бы каждый раз.
-   */
-  // Рейс и дата доставки — тоже WMS (решение заказчика от 02.11.2026, V97):
-  // сервер их больше не принимает ни в черновике, ни после отправки.
-  const READ_ONLY = {
-    common: ['date', 'lineCount', 'totalPieces', 'palletCount', 'cargoPlaces', 'weight', 'volume',
-             'trip', 'deliveryDate'],
-    transfers: ['shipDate']
-  };
+  /* ---------------- текущий документ ----------------
+     Открытый документ и его состав держит карточка (doc-card.js). */
 
-  function readOnlyField(tableKey, dbField){
-    return READ_ONLY.common.indexOf(dbField) >= 0
-        || (READ_ONLY[tableKey] || []).indexOf(dbField) >= 0;
-  }
-
-  /* ---------------- текущий документ: три типа, одни правила ----------------
-     Прототип держит открытый документ и его состав в своих переменных —
-     по паре на тип. Обращаемся к ним через эти три функции, чтобы
-     остальной код не повторял один и тот же выбор из трёх вариантов. */
-
-  function refOf(type){
-    if (type === 'receipts') return currentReceiptRef;
-    if (type === 'orders') return currentOrderRef;
-    return currentTransferRef;
-  }
-
-  function compositionOf(type){
-    if (type === 'receipts') return currentReceiptComposition;
-    if (type === 'orders') return currentOrderComposition;
-    return currentTransferComposition;
-  }
-
-  function forgetRef(type){
-    if (type === 'receipts') currentReceiptRef = null;
-    else if (type === 'orders') currentOrderRef = null;
-    else currentTransferRef = null;
-  }
+  const refOf = type => PORTAL.card.doc(type);
+  const compositionOf = type => PORTAL.card.lines(type);
 
   /** Текст подтверждения после сохранения черновика — свой на тип. */
   const SAVED = {
@@ -421,17 +313,13 @@
   /**
    * Идентификатор поля на экране → свойство документа: of_erpNo → erpNo.
    *
-   * <p>Прототип собирает идентификаторы именно так — префикс типа
+   * <p>Карточка собирает идентификаторы именно так — префикс типа
    * документа плюс имя поля, — и это единственная связь между полем
-   * на экране и объектом, из которого карточка рисуется.
+   * на экране и объектом, из которого она рисуется.
    */
   const docField = id => id.replace(/^(rf|of|tf)_/, '');
 
-  /** Документ, из которого прототип рисует карточку (его держит show). */
-  function docOf(type){
-    const list = type === 'receipts' ? receipts : (type === 'orders' ? orders : transfers);
-    return (list && list[0]) || null;
-  }
+  const docOf = refOf;
 
   /**
    * Значения шапки для сохранения.
@@ -479,8 +367,8 @@
    * работу человека.
    *
    * <p>Дата на экране в формате ISO, а в документе по-русски: пишем
-   * по-русски, иначе kvField прототипа (он ждёт русскую дату) покажет
-   * пустое поле.
+   * по-русски, иначе карточка (она ждёт русскую дату) покажет пустое
+   * поле. Вызывает карточка — перед переходом на другую вкладку.
    */
   function keepUnsaved(type){
     const doc = docOf(type);
@@ -495,12 +383,6 @@
   }
 
   /**
-   * Переключение вкладки карточки — с сохранением набранного в памяти.
-   *
-   * <p>Подменяем не отрисовку, а только момент перед ней: прототип
-   * рисует вкладки сам, и переписывать это незачем.
-   */
-  /**
    * Уход со страницы несохранённого документа — с вопросом.
    *
    * <p>Документ появляется в базе только по кнопке «Сохранить», значит
@@ -509,33 +391,16 @@
    * на пустом месте человек перестаёт читать, и тогда он не поможет
    * там, где нужен.
    */
-  function wrapLeave(){
-    const original = window.showTab;
-    if (typeof original !== 'function') return;
-    /** @this {unknown} */
-    window.showTab = function(tab){
+  function guardLeave(){
+    PORTAL.beforeTab(() => {
       const open = ['receipts', 'orders', 'transfers']
           .find(type => { const ref = refOf(type); return ref && !ref.docId; });
       if (open && hasData(open)
           && !window.confirm(T('common.message.leave_unsaved_document'))){
-        return;
+        return false;
       }
-      if (open) forgetRef(open);
-      return original.call(this, tab);
-    };
-  }
-
-  function wrapTabSwitch(){
-    const original = window.fcSwitchDocTab;
-    if (typeof original !== 'function') return;
-    /** @this {unknown} */
-    window.fcSwitchDocTab = function(docType, tabName){
-      const ref = refOf(docType);
-      if (ref && ref.statusCode === PORTAL.STATUS.DRAFT){
-        keepUnsaved(docType);
-      }
-      return original.call(this, docType, tabName);
-    };
+      if (open) PORTAL.card.forget(open);
+    });
   }
 
   /** Состав документа в том виде, в каком его ждёт API. */
@@ -548,21 +413,21 @@
       if (type === 'receipts') {
         line.expected_qty = Number(l.expected);
         // качество строки поступления (V100) — код, как в заказе
-        if (typeof orderLineQuality === 'function') line.quality = orderLineQuality(l);
+        line.quality = PORTAL.card.quality(l);
       }
       else if (type === 'orders') {
         line.ordered_qty = Number(l.ordered);
         if (l.weight) line.weight_kg = Number(l.weight);
         // Качество строки (V89) — код перечисления; сервер переведёт его
         // в quality_id, а пустое примет как «Годный».
-        if (typeof orderLineQuality === 'function') line.quality = orderLineQuality(l);
+        line.quality = PORTAL.card.quality(l);
       }
       // У перемещения одно количество и нет цены: товар не меняет
       // владельца, меняется только место хранения.
       else {
         line.qty = Number(l.qty);
         // качество строки перемещения (V101): что перемещать — годный, брак…
-        if (typeof orderLineQuality === 'function') line.quality = orderLineQuality(l);
+        line.quality = PORTAL.card.quality(l);
         return line;
       }
       if (l.price !== null && l.price !== undefined && l.price !== '') {
@@ -680,15 +545,32 @@
       quality: l.qualityCode || undefined,
       lineNumber: l.lineNumber
     }));
+    // Партии строк — для экрана «Детализация» строки. Сервер отдаёт их
+    // вместе с карточкой (lineDetails), а раскладывал по строкам card.js,
+    // путём, которым карточку давно не открывают: экран был пуст всегда
+    // (найдено 10.11.2026).
+    const batches = (card.lineDetails || []).map(d => {
+      const qty = d.acceptedQty ?? d.pickedQty ?? d.qty;
+      return {q: dash(d.quality), batch: dash(d.batchNumber), series: dash(d.seriesNumber),
+              exp: ruDate(d.expiryDate), stock: qty === null || qty === undefined ? 0 : Number(qty),
+              lineNumber: d.lineNumber};
+    });
+    totalCount.lines.forEach(line => {
+      line.batches = batches.filter(b => b.lineNumber === line.lineNumber);
+    });
     totalCount.items = totalCount.lines.length;
     return totalCount;
   }
 
-  async function openFromApi(type, docId){
+  /**
+   * Прочитать документ и показать. keepTab — тот же документ после
+   * сохранения: человек остаётся на открытой вкладке.
+   */
+  async function openFromApi(type, docId, keepTab){
     await loadDirectories();
     const card = await api('GET', '/api/' + type + '/' + docId);
     const doc = toDocument(type, card);
-    show(type, doc);
+    show(type, doc, keepTab);
     clearReasons(type);
     // Адреса грузополучателя читаются после отрисовки: ждать их значит
     // задержать всю карточку из-за одного выпадающего списка. Выбранное
@@ -705,25 +587,9 @@
     return doc;
   }
 
-  /**
-   * Подкладывает документ прототипу и открывает его карточку.
-   *
-   * <p>Прототип рисует карточку из своего массива документов, поэтому
-   * массив заменяется одним настоящим документом. Так было сделано
-   * для поступлений и заказов; перемещения устроены так же.
-   */
-  function show(type, doc){
-    // Открытую вкладку сохраняем. Прототип сбрасывает её на первую,
-    // когда меняется номер документа, — а номер меняется ровно при
-    // первом сохранении: человек, заполнявший «Доп. информацию»,
-    // оказывался на «Общей» без всякой причины.
-    try {
-      const state = fcActiveDocTab[type];
-      if (state) state.no = doc.no;
-    } catch (e){ /* прототип ещё не загрузился — вкладку хранить негде */ }
-    if (type === 'receipts'){ receipts.length = 0; receipts.push(doc); openReceipt(doc.no); }
-    else if (type === 'orders'){ orders.length = 0; orders.push(doc); openOrder(doc.no); }
-    else { transfers.length = 0; transfers.push(doc); openTransfer(doc.no); }
+  /** Показать документ в карточке (doc-card.js); keepTab — остаться на вкладке. */
+  function show(type, doc, keepTab){
+    PORTAL.card.show(type, doc, keepTab);
   }
 
   /**
@@ -764,101 +630,6 @@
       + ' padding:10px 14px; border-radius:6px; color:#8a2b2b;">' + safe + '</div>';
   }
 
-  /* ---------------- поля шапки: выпадающие списки из API ---------------- */
-
-  function wrapHeaderFields(){
-    // В правилах лежат КЛЮЧИ текстов, а не готовые подписи: готовая
-    // вычислялась бы при загрузке файла, до входа — то есть до того, как
-    // известен язык учётной записи и переименования полей клиентом.
-    const wrap = (functionName, tableKey, rules) => {
-      const original = globals[functionName];
-      if (typeof original !== 'function') return;
-      globals[functionName] = function(dbField, doc, editable){
-        if (editable && readOnlyField(tableKey, dbField)){
-          return original(dbField, doc, false);
-        }
-        const rule = rules[dbField];
-        // Подпись поля — общим правилом портала: имя клиента, если он
-        // поле переименовал, иначе перевод. Эти же поля в режиме
-        // просмотра рисует прототип, и зваться они должны одинаково.
-        const label = rule ? PORTAL.fieldLabel(tableKey, dbField, rule.key) : null;
-        if (!rule){
-          return original(dbField, doc, editable);
-        }
-        // Поля дат сюда не заводим нарочно. Соблазн был: <input type="date">
-        // понимает только ISO, а в карточке лежит русская дата. Но kvField
-        // прототипа приводит её сам (toISODate), причём ИМЕННО из русской —
-        // ISO он возвращает пустым. Подсунуть ему ISO «чтобы наверняка»
-        // значит обнулить поле, а следующее сохранение затрёт и дату
-        // в базе. Проверено на себе: так и вышло.
-        if (editable){
-          return kvField(label, doc[rule.value],
-              {id: rule.id, editable: true, type: 'select', options: rule.options(doc),
-               onchange: rule.onchange});
-        }
-        return kvField(label, dash(doc[rule.name]), {id: rule.id});
-      };
-    };
-
-    // Тип транспорта — перечисление (V97): выбирается списком, хранится код.
-    // Список и после отправки, если статус разрешает править транспорт.
-    function transportTypeRule(prefix, table){
-      return {id: prefix + '_transportType', key: 'col.' + table + '.transportType',
-              value: 'transportType', name: 'transportTypeName',
-              options: () => refs.transportTypes || []};
-    }
-
-    wrap('fcReceiptSpecialFieldHtml', 'receipts', {
-      warehouse: {id:'rf_warehouse', key:'sku.label.warehouse', value:'warehouse', name:'warehouseName',
-                  options:() => refs.warehouses},
-      supplier:  {id:'rf_supplier', key:'col.receipts.supplier', value:'supplier', name:'supplierName',
-                  options:() => refs.suppliers},
-      docType:   {id:'rf_docType', key:'col.receipts.docType', value:'docType', name:'docTypeName',
-                  options:() => refs.docTypes},
-      transportType: transportTypeRule('rf', 'receipts')
-    });
-    // У перемещения два склада, и получателем не предлагаем тот,
-    // который уже выбран отправителем: сервер такой документ всё равно
-    // не подтвердит, а подсовывать заведомо неверное — неуважение
-    // к человеку. Запрет держит сервер (причина error.ready.same_warehouse),
-    // список лишь не мешает.
-    const otherWarehouses = (fieldId, keep) => {
-      const chosen = (document.getElementById(fieldId) || {}).value || '';
-      // Выбранное в ЭТОМ поле значение остаётся в списке всегда, даже если
-      // оно совпало с соседним: список, из которого пропало сохранённое
-      // значение, молча подменил бы его первым попавшимся складом.
-      return refs.warehouses.filter(w => String(w.value) === String(keep || '')
-          || String(w.value) !== String(chosen));
-    };
-
-    wrap('fcTransferSpecialFieldHtml', 'transfers', {
-      fromWarehouse: {id:'tf_fromWarehouse', key:'col.transfers.fromWarehouse',
-                      value:'fromWarehouse', name:'fromWarehouseName',
-                      options:doc => otherWarehouses('tf_toWarehouse', doc.fromWarehouse)},
-      toWarehouse:   {id:'tf_toWarehouse', key:'col.transfers.toWarehouse',
-                      value:'toWarehouse', name:'toWarehouseName',
-                      options:doc => otherWarehouses('tf_fromWarehouse', doc.toWarehouse)},
-      transportType: transportTypeRule('tf', 'transfers')
-    });
-    wrap('fcOrderSpecialFieldHtml', 'orders', {
-      warehouse: {id:'of_warehouse', key:'sku.label.warehouse', value:'warehouse', name:'warehouseName',
-                  options:() => refs.warehouses},
-      consignee: {id:'of_consignee', key:'partners.title.consignee', value:'consignee', name:'consigneeName',
-                  options:() => refs.consignees,
-                  onchange:'portalOrderConsigneeChanged()'},
-      // Место доставки — адреса ВЫБРАННОГО грузополучателя. Раньше список
-      // брался из демо-массива по НАИМЕНОВАНИЮ организации, поэтому
-      // в настоящем портале был пуст: выбрать было нечего.
-      deliveryAddress: {id:'of_deliveryAddress', key:'col.orders.deliveryAddress',
-                        value:'deliveryAddress', name:'deliveryAddressName',
-                        options:doc => addressOptions(doc.consignee),
-                        onchange:'portalOrderAddressChanged()'},
-      orderType: {id:'of_orderType', key:'col.orders.orderType', value:'orderType', name:'orderTypeName',
-                  options:() => refs.orderTypes},
-      transportType: transportTypeRule('of', 'orders')
-    });
-  }
-
   /* ---------------- действия с черновиком ---------------- */
 
   function tell(e){
@@ -888,7 +659,7 @@
       await api('PUT', '/api/' + type + '/' + docId, collectHeader(type));
     }
     await api('PUT', '/api/' + type + '/' + docId + '/lines', collectLines(type));
-    const doc = await openFromApi(type, docId);
+    const doc = await openFromApi(type, docId, true);
     // Список документов показывает номер, дату, контрагента и число
     // строк — всё это только что изменилось. Без обновления человек,
     // нажав «Назад», видел бы прежнюю строку и решил бы, что сохранение
@@ -910,19 +681,15 @@
    * а записи ещё нет. Бронировать номер заранее нельзя — закрытая
    * без сохранения карточка оставила бы дыру в нумерации.
    *
-   * <p>Поля заданы все, какие рисует карточка: прототип дорисовывает
-   * себе отсутствующее демо-данными, и пропущенное поле обернулось бы
-   * выдуманным значением на экране.
+   * <p>Поля заданы все, какие рисует карточка: пропущенное показалось бы
+   * пустым там, где человек ждёт прочерк.
    */
   function emptyDocument(type){
     const doc = {
       docId: null, no: '', erpNo: '', wmsNumber: '—',
       status: 'draft', statusCode: PORTAL.STATUS.DRAFT, statusLabel: T('receipts.option.draft'),
       date: PORTAL.dateTimeText(new Date().toISOString()),
-      // currentUser — let прототипа, свойства window у него нет: через
-      // window.currentUser автор нового черновика всегда выходил пустым
-      // (нашла проверка типов).
-      author: (currentUser && currentUser.full_name) || '',
+      author: (PORTAL.uiUser && PORTAL.uiUser.full_name) || '',
       comment: '', trip: '', lineCount: 0, totalPieces: 0,
       weight: '', volume: '', palletCount: '', cargoPlaces: '',
       carrier: '', transportType: '', transportBrand: '', carNumber: '', trailerNumber: '',
@@ -987,13 +754,7 @@
     showHint(type, T('common.text.number_assigned_on_save'));
   }
 
-  window.createNewReceiptDraft = () => createNew('receipts').catch(tell);
-  window.createNewOrderDraft = () => createNew('orders').catch(tell);
-  window.createNewTransferDraft = () => createNew('transfers').catch(tell);
 
-  window.saveReceiptDraft = () => save('receipts').catch(tell);
-  window.saveOrderDraft = () => save('orders').catch(tell);
-  window.saveTransferDraft = () => save('transfers').catch(tell);
 
   async function confirm(type){
     const ref = refOf(type);
@@ -1006,7 +767,7 @@
       if (!saved || !saved.docId) return;
       const card = await api('POST', '/api/' + type + '/' + saved.docId + '/confirm');
       const doc = toDocument(type, card);
-      show(type, doc);
+      show(type, doc, true);
       clearReasons(type);
       if (typeof notify === 'function'){
         notify(doc.statusCode === PORTAL.STATUS.SENDING_FAILED
@@ -1022,87 +783,42 @@
     }
   }
 
-  window.confirmReceiptDraft = () => confirm('receipts');
-  window.confirmOrderDraft = () => confirm('orders');
-  window.confirmTransferDraft = () => confirm('transfers');
 
   async function remove(type){
     const ref = refOf(type);
     if (!ref) return;
     // Документа в базе нет — удалять нечего, карточку просто закрываем.
     if (!ref.docId){
-      const closeConfirm = {receipts: 'closeDeleteReceiptDraftConfirm',
-                            orders: 'closeDeleteOrderDraftConfirm',
-                            transfers: 'closeDeleteTransferDraftConfirm'}[type];
-      if (typeof globals[closeConfirm] === 'function') globals[closeConfirm]();
-      forgetRef(type);
+      PORTAL.card.closeAskDelete(type);
+      PORTAL.card.forget(type);
       showTab(type);
       return;
     }
     try {
       await api('DELETE', '/api/' + type + '/' + ref.docId);
-      const closeConfirm = {receipts: 'closeDeleteReceiptDraftConfirm',
-                            orders: 'closeDeleteOrderDraftConfirm',
-                            transfers: 'closeDeleteTransferDraftConfirm'}[type];
-      if (typeof globals[closeConfirm] === 'function') globals[closeConfirm]();
-      forgetRef(type);
+      PORTAL.card.closeAskDelete(type);
+      PORTAL.card.forget(type);
       showTab(type);
       if (typeof portalReloadDocuments === 'function') portalReloadDocuments();
       if (typeof notify === 'function') notify(T('common.message.draft_deleted', {no: ref.no}));
     } catch (e){ tell(e); }
   }
 
-  window.deleteReceiptDraft = () => remove('receipts');
-  window.deleteOrderDraft = () => remove('orders');
-  window.deleteTransferDraft = () => remove('transfers');
 
   /* ---------------- строки состава ---------------- */
 
-  // Окно ввода строки остаётся демонстрационным: поиск товара, упаковка,
-  // пересчёт, цена, объединение дублей. Мы подключаемся после сохранения
-  // и отправляем получившийся состав целиком.
-  function afterLinesChanged(functionName, type){
-    const original = globals[functionName];
-    if (typeof original !== 'function') return;
-    /** @this {unknown} */
-    globals[functionName] = function(...args){
-      const result = original.apply(this, args);
-      const ref = refOf(type);
-      // Несохранённый документ строкой состава в базу не проваливается:
-      // пока человек не нажал «Сохранить», его там нет. Строки живут
-      // в памяти карточки и уйдут вместе с остальным.
-      if (ref && ref.docId && ref.statusCode === PORTAL.STATUS.DRAFT){
-        save(type, true).catch(tell);
-      }
-      return result;
-    };
-  }
-
-  /* ---------------- состав: позиции, неизвестные WMS ---------------- */
-
-  function markUnknownRows(){
-    ['receipt','order','transfer'].forEach(prefix => {
-      const original = window['render' + prefix.charAt(0).toUpperCase() + prefix.slice(1) + 'Composition'];
-      if (typeof original !== 'function') return;
-      window['render' + prefix.charAt(0).toUpperCase() + prefix.slice(1) + 'Composition'] = function(){
-        const result = original.apply(this, arguments);
-        const composition = compositionOf(prefix + 's');
-        const rows = /** @type {NodeListOf<HTMLTableRowElement>} */ (document.querySelectorAll('#' + prefix + 'DetailRows tr'));
-        (composition || []).forEach((l, i) => {
-          const row = rows[i];
-          if (!row || l.skuInWms !== false) return;
-          row.style.background = '#fff6e6';
-          const cells = Array.from(row.querySelectorAll('td'));
-          const cell = cells.find(td => (td.textContent || '').trim() === String(l.code)) || cells[0];
-          if (cell && !cell.querySelector('.pd-chip')){
-            cell.insertAdjacentHTML('beforeend',
-              '<span class="pd-chip" style="margin-left:8px; padding:1px 8px; border-radius:10px;'
-              + ' background:#f6c343; color:#4a3500; font-size:11px;">' + T('sku.text.not_in_wms') + '</span>');
-          }
-        });
-        return result;
-      };
-    });
+  /**
+   * Состав изменился в карточке (окно строки, удаление строк).
+   *
+   * <p>Сохранённый черновик сохраняется сразу, целиком. Несохранённый
+   * в базу не проваливается: пока человек не нажал «Сохранить», его там
+   * нет — строки живут в памяти карточки и уйдут вместе с остальным.
+   */
+  function linesChanged(type){
+    const ref = PORTAL.card.doc(type);
+    if (ref && ref.docId && ref.statusCode === PORTAL.STATUS.DRAFT){
+      save(type, true).catch(tell);
+    }
   }
 
   /* ---------------- транспортный раздел (решение Р5) ---------------- */
@@ -1119,29 +835,29 @@
     return !!doc && doc.statusCode === PORTAL.STATUS.DRAFT;
   }
 
-  window.isTransportEditable = function(doc){
+  function transportEditable(doc){
     return !!(doc && me.canEditTransport && (isDraftDoc(doc) || doc.allowsTransportEdit));
-  };
+  }
 
   /**
    * Нужна ли отдельная кнопка «Сохранить транспортную информацию».
    * В черновике — нет: поля уходят общей кнопкой «Сохранить», а две
    * кнопки, делающие одно и то же, только путают.
    */
-  window.isTransportSavedSeparately = function(doc){
+  function transportSavedSeparately(doc){
     return !!(doc && !isDraftDoc(doc) && doc.allowsTransportEdit && me.canEditTransport);
-  };
+  }
 
   /**
    * Строка под транспортным разделом: когда он уйдёт или чем кончилась
    * передача. «Не передан» — с причиной и кнопкой повтора (V84).
    */
-  window.fcTransportStateHtml = function(docType, doc){
+  function transportStateHtml(docType, doc){
     if (!doc) return '';
     const box = (color, html) => '<div style="margin-top:16px;font-size:13px;color:' + color + ';">'
         + html + '</div>';
     if (isDraftDoc(doc)){
-      return window.isTransportEditable(doc)
+      return transportEditable(doc)
         ? box('var(--muted)', PORTAL.t('common.hint.transport_goes_with_document')) : '';
     }
     const html = s => String(s === null || s === undefined ? '' : s)
@@ -1152,32 +868,32 @@
     }
     if (doc.transportState === PORTAL.TRANSPORT.NOT_SENT){
       const again = me.canEditTransport
-        ? ' <button class="btn ghost" style="margin-left:8px;" onclick="portalResendTransport(\'' + docType + '\')">'
+        ? ' <button class="btn ghost" style="margin-left:8px;" onclick="PORTAL.draft.resendTransport(\'' + docType + '\')">'
           + html(T('common.button.resend_transport')) + '</button>'
         : '';
       return box('#991b1b', html(T('common.text.transport_not_sent', {error: doc.transportError || '—'})) + again);
     }
     return '';
-  };
+  }
 
-  window.portalResendTransport = async function(type){
-    const ref = refOf(type);
+  async function resendTransport(type){
+    const ref = PORTAL.card.doc(type);
     if (!ref || !ref.docId) return;
     try {
       await api('POST', '/api/' + type + '/' + ref.docId + '/transport/resend');
-      const doc = await openFromApi(type, ref.docId);
+      const doc = await openFromApi(type, ref.docId, true);
       if (typeof notify === 'function'){
         notify(doc && doc.transportState === PORTAL.TRANSPORT.SENT
           ? T('sku.text.transport_details_sent_to_wms')
           : T('common.text.transport_not_sent', {error: (doc && doc.transportError) || '—'}));
       }
     } catch (e){ tell(e); }
-  };
+  }
 
   /** После отправки транспорт уходит в WMS отдельным запросом — поэтому и кнопка отдельная. */
   async function saveTransport(type){
-    const ref = refOf(type);
-    if (!ref) return;
+    const ref = PORTAL.card.doc(type);
+    if (!ref || !ref.docId) return;
     const fields = ['carrier','transportType','transportBrand','carNumber','trailerNumber',
                   'techPassportNumber','containerNumber','sealNumber',
                   'driverName','driverPhone','driverIdNumber','driverInn'];
@@ -1191,7 +907,7 @@
     });
     try {
       await api('PUT', '/api/' + type + '/' + ref.docId + '/transport', store);
-      const doc = await openFromApi(type, ref.docId);
+      const doc = await openFromApi(type, ref.docId, true);
       // Сохранено в портале всегда; дошло ли до WMS — по состоянию передачи
       if (typeof notify === 'function'){
         notify(doc && doc.transportState === PORTAL.TRANSPORT.NOT_SENT
@@ -1200,286 +916,10 @@
       }
     } catch (e){ tell(e); }
   }
-  window.portalSaveTransport = saveTransport;
-  /** Открыть документ по идентификатору — используется проверками и ссылками. */
-  window.portalOpenDocumentById = (type, docId) => openFromApi(type, docId).catch(tell);
 
-  /**
-   * Кнопка «Сохранить транспортную информацию» в прототипе уже есть —
-   * подменяем только то, что происходит по нажатию.
-   */
-  window.fcSaveTransportSection = function(docType){
-    if (SCREEN[docType]){
-      saveTransport(docType);
-      return;
-    }
-    if (typeof notify === 'function') notify(T('sku.message.transport_details_are_not_availabl'));
-  };
-
-  /* ---------------- остатки в окне ввода строки ---------------- */
-
-  /**
-   * Числа «Остаток», «Доступно» и «К получению» в окне ввода строки.
-   *
-   * <p>Раньше их там не было ни у одного документа, кроме перемещения.
-   * Номенклатура попадала в окно с нулями (`stock: 0, reserved: 0`),
-   * а «К получению» прототип считал псевдослучайно от хэша кода товара —
-   * то есть показывал выдуманное число. Выдуманное хуже нуля: ноль видно,
-   * что заглушка, а 37 выглядит как данные.
-   *
-   * <p>Числа берутся ПО СКЛАДУ ДОКУМЕНТА, а не по всем складам клиента:
-   * со склада можно забрать только то, что на нём лежит, и ровно это
-   * решение уже принято для перемещения. Для перемещения склад — это
-   * склад-отправитель.
-   *
-   * <p>Превышение доступного количества не запрещается, а предупреждается:
-   * портал владеет копией остатков, а не оригиналом (решение Р4, §8.3.2),
-   * и последнее слово остаётся за WMS.
-   */
-
-  // Какое поле шапки задаёт склад для каждого типа документа.
-  const STOCK_WAREHOUSE_FIELD = {
-    lineEdit: 'rf_warehouse',
-    orderLineEdit: 'of_warehouse',
-    transferLineEdit: 'tf_fromWarehouse'
-  };
-
-  // Прочитанные остатки: склад → код товара → строка (или null, если
-  // товара на складе нет). Спрашиваем по одному товару, а не склад
-  // целиком: запасы отдаются страницами (V79), и «прочитать весь
-  // склад» теперь значит «прочитать первые двести строк» — на двести
-  // первой позиции окно молча показало бы ноль вместо остатка.
-  const stockByWarehouse = {};
-
-  async function stockFor(warehouseId, code){
-    if (!warehouseId || !code) return null;
-    const byCode = stockByWarehouse[warehouseId]
-        || (stockByWarehouse[warehouseId] = {});
-    if (Object.prototype.hasOwnProperty.call(byCode, code)) return byCode[code];
-
-    const answer = await api('GET', '/api/stock'
-        + '?filter.warehouse=' + encodeURIComponent(warehouseId)
-        + '&filter.code=' + encodeURIComponent(code)
-        + '&pageSize=50');
-    // Текстовый фильтр ищет ВХОЖДЕНИЕ: «RK-1» находит и «RK-10».
-    // Поэтому нужную строку выбираем сами — и по коду, и по складу.
-    //
-    // Склад сверяется второй раз нарочно. Он уже стоял в запросе,
-    // но если его значение окажется не тем, чем мы его считаем
-    // (например именем склада вместо идентификатора), сервер вернёт
-    // строки другого склада, а окно покажет их как свои. Лучше
-    // показать ноль, чем чужое число.
-    const same = (a, b) => String(a === null || a === undefined ? '' : a).trim().toUpperCase()
-        === String(b === null || b === undefined ? '' : b).trim().toUpperCase();
-    const rows = answer.rows || [];
-    const row = rows.find(r => same(r.skuCode, code) && same(r.warehouseId, warehouseId))
-        || null;
-    if (!row && rows.length){
-      // Строки пришли, а нужной среди них нет — это не «нет остатка»,
-      // это непонимание между экраном и сервером, и молчать о нём
-      // нельзя: в окне появится ноль, похожий на ответ.
-      console.warn(`остатки: ${code}/${warehouseId} — среди ${rows.length} строк нужной нет`);
-    }
-    byCode[code] = row;
-    return row;
-  }
-
-  /** Дочитать остаток выбранного товара и перерисовать числа окна. */
-  function refreshStock(prefix){
-    const product = selectedProduct(prefix);
-    const warehouseId = warehouseForModal(prefix);
-    const code = product && product.code;
-    // Перерисовываем СРАЗУ, ещё до ответа. Прототип при выборе товара
-    // уже вписал в поля свои числа — из нашего же списка товаров, где
-    // stock: 0, — и до ответа сервера окно показывало «0 шт». Ноль
-    // выглядит как ответ, а не как ожидание: человек читал «остатка
-    // нет» там, где портал ещё спрашивал. Отсюда же и плавающий
-    // LineModalTest: он ждал, пока «—» сменится числом, и дожидался
-    // этого нуля, а не настоящего ответа.
-    //
-    // paintStock сам различает случаи: про товар ещё не спрашивали —
-    // «—», ответ уже есть в памяти — сразу настоящие числа.
-    paintStock(prefix);
-    return stockFor(warehouseId, code)
-        .then(() => paintStock(prefix))
-        .catch(() => {
-          // Запрос не удался — числа НЕИЗВЕСТНЫ, и сказать об этом
-          // обязательно. Прежде ошибку просто глотали, а в полях
-          // оставались нули, нарисованные демо-вёрсткой до нашего
-          // ответа. Ноль выглядит как ответ: человек прочтёт
-          // «остатка нет» там, где портал просто не смог спросить.
-          const byCode = stockByWarehouse[warehouseId];
-          if (byCode) delete byCode[code];
-          paintStock(prefix);
-        });
-  }
-
-  /** Склад, по которому считаются остатки для этого окна. */
-  function warehouseForModal(prefix){
-    const field = document.getElementById(STOCK_WAREHOUSE_FIELD[prefix]);
-    if (field && field.value) return field.value;
-    // Поля на экране может не быть: карточка уже не черновик и шапка
-    // нарисована текстом. Тогда склад берётся из самого документа.
-    const ref = prefix === 'lineEdit' ? currentReceiptRef
-              : (prefix === 'orderLineEdit' ? currentOrderRef : currentTransferRef);
-    if (!ref) return null;
-    return prefix === 'transferLineEdit' ? ref.fromWarehouse : ref.warehouse;
-  }
-
-  /**
-   * Товар, выбранный в окне строки.
-   *
-   * <p>Прототип объявил эти переменные через let на верхнем уровне. Такие
-   * объявления не создают свойства у window, поэтому читаем их по голому
-   * имени, прикрывшись typeof, — как это уже делает columns.js. Обращение
-   * через window здесь однажды уже стоило работающего предупреждения
-   * о превышении остатка: оно молча не срабатывало никогда.
-   */
-  function selectedProduct(prefix){
-    const name = prefix + 'SelectedProduct';
-    try {
-      return eval('typeof ' + name) !== 'undefined' ? eval(name) : null;
-    } catch (e){ return null; }
-  }
-
-  /**
-   * Пишет три числа в окно — и только их.
-   *
-   * <p>Отрисовка окна целиком здесь не годится: она заодно сбрасывает
-   * выбранную упаковку и количество, и если ответ с остатками приходит
-   * после того, как человек уже набрал число, число пропадает.
-   *
-   * <p>Товара нет в прочитанных остатках — это ноль, а не «неизвестно»:
-   * склад выбран, остатки по нему прочитаны, позиции в них нет. А вот
-   * когда склад ещё не выбран, числа неизвестны — и тогда «—».
-   */
-  /**
-   * Качество в строке заказа (V89): «Остаток» и «Доступно» в окне
-   * показываются по выбранному качеству — по quality_qty из запасов
-   * (V89, v_stock_available). Для остальных окон качества нет, числа
-   * общие.
-   */
-  function lineQuality(prefix){
-    if (prefix !== 'orderLineEdit') return null;
-    const box = document.getElementById('orderLineEditQuality');
-    return (box && box.value) || '01';
-  }
-
-  /** Остаток и доступное одного качества из строки запасов. */
-  function qualityStock(row, code){
-    let parsed;
-    try { parsed = row && row.qualityQty ? JSON.parse(row.qualityQty) : {}; } catch (e){ parsed = {}; }
-    const q = parsed[code] || {};
-    return {quantity: Number(q.quantity) || 0, available: Number(q.available) || 0};
-  }
-
-  window.onOrderLineEditQualityChange = function(){
-    paintStock('orderLineEdit');
-  };
-
-  function paintStock(prefix){
-    const fields = ['StockTotal', 'StockAvail', 'StockIncoming']
-      .map(name => document.getElementById(prefix + name));
-    const product = selectedProduct(prefix);
-    const byCode = stockByWarehouse[warehouseForModal(prefix)];
-    const row = product && byCode ? byCode[product.code] : undefined;
-    // Три разных случая, и путать их нельзя:
-    //   товара не выбрано или про него ещё не спрашивали — «—»;
-    //   спросили, на складе нет                          — ноль;
-    //   спросили, есть                                   — числа.
-    // Прежде первые два были одним: окно показывало ноль, пока летел
-    // ответ, и ноль же оставался, если остатка нет. Ноль выглядит
-    // как ответ, и человек верит ему раньше, чем он стал правдой.
-    if (!product || row === undefined){
-      fields.forEach(el => { if (el) el.textContent = '—'; });
-      return;
-    }
-    const unit = product.unit || '';
-    const code = lineQuality(prefix);
-    const byQuality = row && code ? qualityStock(row, code) : null;
-    const values = !row ? [0, 0, 0]
-        : byQuality ? [byQuality.quantity, byQuality.available, row.incomingQty]
-        : [row.quantity, row.availableQty, row.incomingQty];
-    fields.forEach((el, i) => {
-      if (el) el.textContent = (values[i] === undefined ? 0 : values[i]) + ' ' + unit;
-    });
-  }
-
-  /** После штатной отрисовки окна переписываем числа настоящими. */
-  function stockFields(prefix){
-    const name = 'fill' + prefix.charAt(0).toUpperCase() + prefix.slice(1) + 'ProductInfo';
-    const original = window[name];
-    if (typeof original !== 'function') return;
-    window[name] = function(){
-      const result = original.apply(this, arguments);
-      // Товар выбран — спрашиваем остаток именно по нему. До ответа
-      // в полях стоит «—», а не ноль.
-      refreshStock(prefix);
-      return result;
-    };
-  }
-
-  /** Предупреждение о превышении доступного количества. */
-  function stockWarning(prefix, qtyFieldId, textKey){
-    const name = 'save' + prefix.charAt(0).toUpperCase() + prefix.slice(1) + 'Modal';
-    const original = window[name];
-    if (typeof original !== 'function') return;
-    window[name] = function(){
-      const product = selectedProduct(prefix);
-      const field = document.getElementById(qtyFieldId);
-      const count = field ? Number(field.value) : null;
-      const byCode = stockByWarehouse[warehouseForModal(prefix)];
-      const row = product && byCode ? byCode[product.code] : null;
-      // читаем до вызова: прототип закрывает окно, и выбора качества уже не будет
-      const code = lineQuality(prefix);
-      const available = !row ? null
-          : code ? qualityStock(row, code).available : Number(row.availableQty);
-      const result = original.apply(this, arguments);
-      if (row && count && available !== null && count > available && typeof notify === 'function'){
-        notify(T(textKey, {count: count + ' ' + (product.unit || ''),
-                           available: available + ' ' + (product.unit || '')}));
-      }
-      return result;
-    };
-  }
-
-  /* ---------------- упаковки: пересчёт количества ---------------- */
-
-  /**
-   * Окно строки умеет считать количество по упаковке: «5 паллет × 100 =
-   * 500 кг». Список упаковок оно берёт из массива PRODUCT_PACKAGING
-   * прототипа, а там лежали демо-данные с демо-идентификаторами клиентов.
-   * Совпадений в настоящем портале нет, а при пустом списке окно прячет
-   * оба поля — значит пересчёт не просто не работал, его не было видно.
-   *
-   * <p>Наполняем массив настоящими упаковками клиента по тому же правилу,
-   * что и products: заменяется содержимое, а не переменная — PRODUCT_PACKAGING
-   * объявлен через const, присвоить ему нельзя.
-   *
-   * <p>Поле depositorId проставляем текущим значением прототипа: окно
-   * фильтрует по нему список, а /api/packaging/options и так отдаёт упаковки
-   * только того клиента, с которым работают, — RLS не отдаст чужих.
-   */
-  function fillPackagings(){
-    if (typeof PRODUCT_PACKAGING === 'undefined' || !refs.packagings) return;
-    let depositorId = null;
-    // let прототипа виден из любого классического скрипта по имени —
-    // eval для этого не нужен.
-    try { depositorId = typeof currentDepositorId !== 'undefined' ? currentDepositorId : null; }
-    catch (e){ depositorId = null; }
-    PRODUCT_PACKAGING.length = 0;
-    refs.packagings.forEach(p => PRODUCT_PACKAGING.push({
-      productCode: p.skuCode, depositorId: depositorId,
-      packagingCode: p.packagingCode, barcode: p.barcode || '',
-      type: p.packagingTypeName || p.packagingCode,
-      coefficient: Number(p.coefficient) || 1,
-      length: p.lengthCm, width: p.widthCm, height: p.heightCm,
-      volume: p.volumeM3, weightGross: p.grossWeightKg
-    }));
-  }
   /* ---------------- открытие документа из списка ---------------- */
 
-  const demoView = window.portalOpenDocument;
+  /** Щелчок по строке списка: тип — по тому, в каком списке документ. */
   window.portalOpenDocument = function(no){
     const type = (PORTAL.docs.receipts || []).some(r => r.no === no) ? 'receipts'
                : ((PORTAL.docs.orders || []).some(r => r.no === no) ? 'orders' : 'transfers');
@@ -1488,104 +928,37 @@
       openFromApi(type, row.docId).catch(tell);
       return;
     }
-    if (typeof demoView === 'function') demoView(no);
+    if (typeof notify === 'function') notify(T('common.message.document_not_in_list', {no: no}));
   };
 
-  /**
-   * Перед открытием окна ввода строки подкладываем настоящие справочники
-   * и дочитываем остатки по складу документа.
-   *
-   * <p>Остатки читаются именно здесь, а не при входе: склад выбирают
-   * в шапке, и до открытия окна он мог быть ещё не выбран или смениться.
-   * Прочитанное запоминается по складу, так что второе и последующие
-   * открытия окна запроса не делают.
-   */
-  function wrapLineModal(){
-    const PREFIX = {Line: 'lineEdit', OrderLine: 'orderLineEdit', TransferLine: 'transferLineEdit'};
-    Object.keys(PREFIX).forEach(part => {
-      ['open' + part + 'AddModal', 'open' + part + 'EditModal'].forEach(fieldName => {
-        const original = window[fieldName];
-        if (typeof original !== 'function') return;
-        window[fieldName] = function(){
-          fillProducts();
-          fillPackagings();
-          const prefix = PREFIX[part];
-          const result = original.apply(this, arguments);
-          // Запрос уходит после открытия окна: ждать его значит показать
-          // человеку пустое окно на время ответа. Числа дорисуются сами.
-          refreshStock(prefix);
-          // Правка строки приходит с её номером, добавление — без него.
-          applyPriceSetting(prefix, fieldName.indexOf('Edit') >= 0 ? arguments[0] : null);
-          return result;
-        };
-      });
-    });
-  }
-
-  /* ---------------- цена и сумма: настройка поклажедателя ---------------- */
+  /* ---------------- наружу ---------------- */
 
   /**
-   * Нужны ли этому клиенту цена и сумма в окне ввода строки (V61).
-   *
-   * <p>Большинству клиентов цена в документе не нужна: портал ведёт склад,
-   * а не торговлю. Настройка отдельная по типу документа — цена бывает
-   * осмысленна в поступлении и бессмысленна в заказе у одного и того же
-   * клиента. У перемещения цены нет вовсе, и окно перемещения этих полей
-   * не имеет.
-   *
-   * <p>Это удобство, а не право: сервер по-прежнему принимает цену, и уже
-   * введённые цены скрытое поле не стирает (§6.3 про то же самое —
-   * спрятанное поле защитой не считается).
+   * Черновик документа — для карточки (doc-card.js), окна строки
+   * (line-modal.js), кнопок разметки и проверок.
    */
-  function priceAllowed(prefix){
-    if (prefix === 'lineEdit') return me.priceInReceipts === true;
-    if (prefix === 'orderLineEdit') return me.priceInOrders === true;
-    return false;
-  }
-
-  function applyPriceSetting(prefix, lineIndex){
-    if (prefix === 'transferLineEdit') return;
-    const show = priceAllowed(prefix);
-    ['Price', 'Sum'].forEach(name => {
-      const field = document.getElementById(prefix + name);
-      const row = field && field.closest ? field.closest('.kv') : null;
-      if (row) row.style.display = show ? '' : 'none';
-    });
-    if (show) return;
-
-    // Поле спрятали, но окно уже подставило в него цену из карточки
-    // товара, а сохранение состава перезаписывает строки целиком. Если
-    // ничего не делать, выключенная настройка молча проставила бы цены
-    // всем строкам, которые человек открыл. Поэтому в спрятанном поле
-    // остаётся ровно то, что в строке и было: у новой — ничего.
-    const field = document.getElementById(prefix + 'Price');
-    if (!field) return;
-    const type = prefix === 'lineEdit' ? 'receipts' : 'orders';
-    const line = lineIndex === null || lineIndex === undefined
-        ? null : (compositionOf(type) || [])[lineIndex];
-    field.value = line && line.price !== null && line.price !== undefined ? line.price : '';
-    const sum = document.getElementById(prefix + 'Sum');
-    if (sum) sum.textContent = '—';
-  }
+  PORTAL.draft = {
+    refs, me, loadDirectories,
+    /** Открыть документ по идентификатору — из загрузки Excel, ссылок и проверок. */
+    open: (type, docId) => openFromApi(type, docId).catch(tell),
+    create: type => createNew(type).catch(tell),
+    save: type => save(type).catch(tell),
+    confirm,
+    remove,
+    saveTransport,
+    resendTransport,
+    transportEditable,
+    transportSavedSeparately,
+    transportStateHtml,
+    keepUnsaved,
+    linesChanged,
+    addressOptions,
+    consigneeChanged,
+    addressChanged
+  };
 
   function install(){
-    wrapHeaderFields();
-    wrapLeave();
-    wrapTabSwitch();
-    wrapLineModal();
-    // Числа остатков — во всех трёх окнах. Предупреждение о превышении —
-    // только там, где товар со склада забирают: поступление его привозит,
-    // и превышать там нечего.
-    ['lineEdit', 'orderLineEdit', 'transferLineEdit'].forEach(stockFields);
-    stockWarning('orderLineEdit', 'orderLineEditQty', 'common.message.over_available_stock');
-    stockWarning('transferLineEdit', 'transferLineEditQty', 'common.message.over_available_stock');
-    markUnknownRows();
-    afterLinesChanged('saveLineEditModal', 'receipts');
-    afterLinesChanged('saveOrderLineEditModal', 'orders');
-    afterLinesChanged('deleteSelectedReceiptLines', 'receipts');
-    afterLinesChanged('deleteSelectedOrderLines', 'orders');
-    afterLinesChanged('saveTransferLineEditModal', 'transfers');
-    afterLinesChanged('deleteSelectedTransferLines', 'transfers');
+    guardLeave();
     // Перечитать справочники окна строки: товары, упаковки, склады.
     //
     // Окно читает их один раз за вход и держит у себя (refs). Пока
@@ -1606,7 +979,7 @@
     // справочники зависят от поклажедателя — перечитываем их при каждом входе
     PORTAL.onLogin(() => {
       refs.loaded = false;
-      Object.keys(stockByWarehouse).forEach(id => delete stockByWarehouse[id]);
+      if (PORTAL.lineModal) PORTAL.lineModal.forgetStock();
       Object.keys(addresses).forEach(id => delete addresses[id]);
       loadDirectories().catch(() => {});
     });

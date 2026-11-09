@@ -39,10 +39,7 @@
   const PORTAL = window.PORTAL;
   if (!PORTAL) return;
 
-  // Разработчику раздел открыт для разбора, как и прежде: он смотрит,
-  // но не правит — это решают сами экраны, а не ряд вкладок.
-  const isAdmin = () => ['admin', 'developer']
-      .includes(PORTAL.session ? PORTAL.session.roleCode : '');
+  const isAdmin = () => PORTAL.isAdmin();
 
   /** Группы и их состав; порядок списка — порядок на экране. */
   const GROUPS = [
@@ -92,9 +89,6 @@
    *         openers: Record<string, Function>, last: Record<string, string>}}
    */
   const state = {group: null, sub: null, chosen: false, openers: {}, last: {}};
-
-  /** Прототипное переключение панелей — подменяется ниже обёрткой. */
-  let base = null;
 
   /* ---------------------------- состав ---------------------------- */
 
@@ -174,10 +168,15 @@
 
   /** Открыть вкладку, не считая это выбором человека. */
   function apply(sub){
+    PORTAL.showAdminPane(sub);
+    opened(sub);
+  }
+
+  /** Панель уже показана: запомнить, перерисовать ряды вкладок, наполнить. */
+  function opened(sub){
     const group = groupOf(sub);
     if (group) state.group = group.id;
     state.sub = sub;
-    if (typeof base === 'function') base(sub);
     build();
     runOpener(sub);
   }
@@ -217,18 +216,14 @@
   };
 
   function install(){
-    if (typeof window.showAdminSub !== 'function' || window.showAdminSub.__groups){
-      return;
-    }
-    base = window.showAdminSub;
-    const wrapper = function(sub){
+    // Человек открыл вкладку сам (showAdminSub, core.js): это выбор —
+    // группа его запоминает, и первая вкладка больше не навязывается.
+    PORTAL.onAdminSub(sub => {
       const group = groupOf(sub);
       if (group) state.last[group.id] = sub;
       state.chosen = true;
-      apply(sub);
-    };
-    wrapper.__groups = true;
-    window.showAdminSub = wrapper;
+      opened(sub);
+    });
     window.showAdminGroup = openGroup;
 
     PORTAL.onSession(() => {

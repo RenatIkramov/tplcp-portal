@@ -115,7 +115,7 @@ class StockPanelTest extends BrowserTestBase {
         assertTrue(asked.getLast().contains("filter.defect=true"),
                 "флажок не дошёл до сервера: " + asked.getLast());
 
-        page.evaluate("() => onSortColumnClick('stock', 'code')");
+        page.evaluate("() => PORTAL.tables.sort('stock', 'code')");
         page.waitForLoadState(LoadState.NETWORKIDLE);
         assertTrue(asked.getLast().contains("sort=code"),
                 "щелчок по заголовку не стал запросом: " + asked.getLast());

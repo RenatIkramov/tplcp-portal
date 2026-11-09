@@ -185,7 +185,7 @@ public abstract class BrowserTestBase extends PortalTestBase {
     }
 
     /**
-     * Список отказов рядом со снимком.
+     * Список отказов и ошибок страницы рядом со снимком.
      *
      * <p>Отказ сам по себе не ошибка, но полезно видеть, чего экран
      * просил и чего ему не дали: лишний запрос к разделу, который этому
@@ -195,9 +195,12 @@ public abstract class BrowserTestBase extends PortalTestBase {
         try {
             Path file = Paths.get(shotPath(info).toString().replace(".png", ".http.txt"));
             Files.createDirectories(file.getParent());
-            Files.writeString(file, refused.isEmpty()
+            Files.writeString(file, (refused.isEmpty()
                     ? "отказов не было\n"
-                    : String.join("\n", refused) + "\n");
+                    : String.join("\n", refused) + "\n")
+                    // ошибки страницы — тут же: тест, упавший по таймауту,
+                    // иначе не говорит, что сломалось в браузере
+                    + (jsErrors.isEmpty() ? "" : "\nошибки страницы:\n" + String.join("\n", jsErrors) + "\n"));
         } catch (IOException | RuntimeException e) {
             // ведение списка — удобство, проверку оно ронять не должно
         }

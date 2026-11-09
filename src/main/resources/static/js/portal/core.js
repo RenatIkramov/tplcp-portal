@@ -129,26 +129,6 @@
     };
   }
 
-  /** Колонки экрана «Запасы» начинают читать значения прямо из строки API. */
-  function patchColumns(){
-    if (typeof stockColumnDefs === 'undefined') return;
-    const set = (id, render) => {
-      const c = stockColumnDefs.find(c => c.id === id);
-      if (c) c.render = render;
-    };
-    set('warehouse', p => p.warehouseName || p.warehouse);
-    set('code',      p => '<strong>' + p.code + '</strong>');
-    set('name',      p => p.name);
-    set('group',     p => p.group);
-    set('unit',      p => p.unit);
-    set('stock',     p => p.stock);
-    set('available', p => p.available);
-    set('reserved',  p => p.reserved);
-    set('blocked',   p => p.blocked);
-    set('defect',    p => p.defect);
-    set('incoming',  p => p.incoming);
-  }
-
   /** Строка состояния: «данные на 14:32 · Обновить» (решение Р4 — кэш WMS). */
   function renderStatusBar(){
     const host = document.getElementById('stockBody');
@@ -194,9 +174,7 @@
       PORTAL.rowsTotal = data.total || 0;
       // Номер страницы из ответа: сервер мог вернуть первую вместо
       // запрошенной пятой, если отбор сузился и пятой больше нет.
-      if (typeof paginationState !== 'undefined' && paginationState.stock && data.page){
-        paginationState.stock.page = data.page;
-      }
+      PORTAL.tables.setPage('stock', data.page);
       PORTAL.loadedAt = new Date();
     } catch (e){
       PORTAL.rows = [];
@@ -205,7 +183,7 @@
     } finally {
       PORTAL.loading = false;
       renderStatusBar();
-      if (typeof renderStock === 'function') renderStock();
+      renderStock();
     }
   }
   window.portalReloadStock = loadStock;
@@ -268,15 +246,13 @@
   /**
    * Видит ли вошедший разделы администрирования.
    *
-   * <p>Право решает сервер (AdminUserService.requireAdmin — admin
-   * и developer). Здесь это нужно для другого: не ходить за данными,
+   * <p>Право решает сервер (AdminUserService.requireAdmin). Здесь это нужно для другого: не ходить за данными,
    * которых всё равно не дадут. Раньше экраны администрирования
    * грузились у всех, и сеанс обычного клиента начинался с девяти
    * отказов 403 — они ничего не ломали, но каждый был лишним походом
    * на сервер и строкой отказа в журнале.
    */
-  PORTAL.isAdmin = () => ['admin', 'developer'].includes(
-      (PORTAL.session && PORTAL.session.roleCode) || '');
+  PORTAL.isAdmin = () => !!PORTAL.session && PORTAL.session.roleCode === 'admin';
 
   /**
    * Предложить браузеру запомнить пароль.
@@ -460,59 +436,155 @@
         if (!store) return;
         Object.keys(store).forEach(k => { store[k] = Array.isArray(store[k]) ? [] : null; });
       });
-    ['renderStock','renderReceipts','renderOrders','renderTransfers','renderSku',
-     'renderPackaging',
-     'renderBillingServices','renderBillingInvoices','renderSuppliers','renderConsignees']
+    if (PORTAL.tables) PORTAL.tables.redrawAll();
+    ['renderBillingServices','renderBillingInvoices','renderSuppliers','renderConsignees']
       .forEach(fn => { if (typeof window[fn] === 'function'){ try { window[fn](); } catch (e) {} } });
   };
 
-  // portalOpenStockRow здесь был заглушкой с текстом «карточка появится,
-  // когда будет эндпоинт». Эндпоинт есть, карточку открывает sku.js —
-  // и он грузится позже, то есть заглушка не вызывалась уже давно.
-  // Удалена, а не переведена: переводить обещание, которое портал
-  // не исполняет, — тратить работу дважды.
+  /* ================= Навигация, плашка, даты =================
+     Перенесено из prototype.js (11.11.2026). Имена остались прежними
+     и глобальными: их зовут модули, onclick разметки и проверки
+     (HandlerNamesTest сверяет, что всё названное в onclick есть). */
+
+  /** Какой раздел открыт последним — к нему ведут кнопки «Назад». */
+  PORTAL.lastView = 'orders';
+
+  /** Показать экран (section.view) по имени, без смены вкладки. */
+  window.showView = function(name){
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    document.getElementById('view-' + name)?.classList.add('active');
+    window.scrollTo({top: 0, behavior: 'instant'});
+  };
+
+  /*
+   * Крючки переключения. Модулю, которому надо вмешаться в переход,
+   * — подписка, а не подмена функции: подмены ставились друг на друга
+   * цепочкой, и порядок подключения файлов молча решал, кто чью
+   * обёртку обернёт.
+   */
+  /** @type {Array<(tab: string) => boolean | void>} */
+  const beforeTabHooks = [];
+  /** @type {Array<(sub: string) => void>} */
+  const adminSubHooks = [];
+
+  /** Перед переходом в раздел; вернула false — переход отменён (draft.js: несохранённый документ). */
+  PORTAL.beforeTab = fn => { beforeTabHooks.push(fn); };
+  /** После того как человек открыл подвкладку администрирования (admin-tabs.js, import-log.js). */
+  PORTAL.onAdminSub = fn => { adminSubHooks.push(fn); };
+
+  /** Открыть раздел верхнего меню. */
+  window.showTab = function(tab){
+    if (beforeTabHooks.some(fn => fn(tab) === false)) return;
+    if (tab === 'admin' && !PORTAL.isAdmin()) tab = 'orders';
+    /** @type {NodeListOf<HTMLButtonElement>} */ (document.querySelectorAll('nav.tabs button'))
+        .forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+    PORTAL.lastView = tab;
+    window.showView(tab);
+    if (tab === 'admin'){
+      ['renderAdminAccess', 'renderAdminDepositorAccess', 'renderAdminStaffAccess',
+       'populateReportsConfigDepositorFilter', 'renderReportsConfigTable']
+        .forEach(fn => { if (typeof window[fn] === 'function') window[fn](); });
+    }
+    if (tab === 'references') window.showReferencesSub(referencesSub);
+    setTimeout(() => PORTAL.tables.updateScroll(tab), 0);
+  };
+
+  /*
+   * В «Справочниках» — справочники ПОКЛАЖЕДАТЕЛЯ: товары, упаковки,
+   * поставщики, грузополучатели. Справочники всего портала живут
+   * в «Администрирование → Общие справочники».
+   */
+  let referencesSub = 'sku';
+  window.showReferencesSub = function(sub){
+    referencesSub = sub;
+    /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('[data-refsub]'))
+        .forEach(b => b.classList.toggle('active', b.dataset.refsub === sub));
+    ['sku', 'packaging', 'suppliers', 'consignees'].forEach(s => {
+      document.getElementById('ref-sub-' + s)?.classList.toggle('active', s === sub);
+    });
+    if (sub === 'sku' || sub === 'packaging') PORTAL.tables.redraw(sub);
+    if (sub === 'suppliers' && typeof window.renderSuppliers === 'function') window.renderSuppliers();
+    if (sub === 'consignees' && typeof window.renderConsignees === 'function') window.renderConsignees();
+  };
 
   /**
-   * Замена штатного renderStock: источник — PORTAL.rows, то есть
-   * страница, которую отдал сервер.
-   *
-   * <p>Отбор, порядок и страница считаются на сервере (V79), и здесь
-   * не осталось ничего, кроме отрисовки. Прежде экран отбирал сам,
-   * по четырём полям, вписанным в разметку: список групп в одном
-   * из них был наследством демо («Сырьё», «Мясная продукция»…),
-   * а группа товара с V38 — свободный текст поклажедателя, так что
-   * совпадение было случайным.
+   * Показать панель подвкладки администрирования — и только. Так её
+   * открывает admin-tabs.js сам, когда человек ещё ничего не выбирал.
    */
-  function renderStockFromApi(){
-    const body = document.getElementById('stockBody');
-    if (!body) return;
+  PORTAL.showAdminPane = function(sub){
+    /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('.admin-subtab-btn[data-sub]'))
+        .forEach(b => b.classList.toggle('active', b.dataset.sub === sub));
+    document.querySelectorAll('.admin-sub[id^="admin-sub-"]')
+        .forEach(s => s.classList.toggle('active', s.id === 'admin-sub-' + sub));
+    if (sub === 'reports-config' && typeof window.renderReportsConfigTable === 'function'){
+      window.renderReportsConfigTable();
+    }
+  };
 
-    const items = PORTAL.rows;
-    const total = PORTAL.rowsTotal || 0;
-    const size = (typeof paginationState !== 'undefined' && paginationState.stock)
-        ? paginationState.stock.pageSize : items.length;
-    const totalPages = Math.max(1, Math.ceil(total / (size || 1)));
+  /** Человек открыл подвкладку администрирования. */
+  window.showAdminSub = function(sub){
+    PORTAL.showAdminPane(sub);
+    adminSubHooks.forEach(fn => fn(sub));
+  };
 
-    const counter = document.getElementById('stockCount');
-    if (counter) counter.textContent = '(' + total + ')';
+  window.openProfile = () => window.showView('profile');
+  window.openAbout = () => window.showView('about');
+  // «Контакты» — contacts.js: открывает экран и читает данные
 
-    if (typeof renderTableHead === 'function') renderTableHead('stock');
-    body.innerHTML = items.length
-      ? items.map(p => renderTableRow('stock', p, 'portalOpenStockRow')).join('')
-      : '<tr><td colspan="20" style="color:var(--muted);">'
-        + (PORTAL.error ? T('partners.text.data_unavailable') : T('stock.text.nothing_found')) + '</td></tr>';
+  /** Плашка вверху экрана — ответ портала на действие. */
+  window.notify = function(msg){
+    const toast = document.createElement('div');
+    toast.textContent = msg;
+    toast.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);'
+      + 'background:#1b2430;color:#fff;padding:10px 18px;border-radius:6px;font-size:13px;'
+      + 'z-index:100;box-shadow:0 4px 14px rgba(0,0,0,.2);opacity:0;transition:opacity .2s;';
+    document.body.appendChild(toast);
+    requestAnimationFrame(() => { toast.style.opacity = '1'; });
+    setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 250); }, 2200);
+  };
 
-    if (typeof renderPaginationBar === 'function') renderPaginationBar('stock', totalPages, total);
-    if (typeof updateTopScrollWidth === 'function') setTimeout(() => updateTopScrollWidth('stock'), 0);
+  /**
+   * Цветная плашка статуса. Подпись приходит готовой — из перечисления
+   * на языке человека или из каталога текстов.
+   */
+  window.badge = function(status, label){
+    return '<span class="badge ' + status + '"><span class="dot"></span>' + label + '</span>';
+  };
+
+  /*
+   * Даты: русская запись ↔ ISO. Карточка документа держит дату
+   * по-русски, а поле <input type="date"> понимает только ISO.
+   */
+  window.toISODate = function(str){
+    if (!str || str === '—') return '';
+    const parts = String(str).split('.');
+    if (parts.length !== 3) return '';
+    const [d, m, y] = parts;
+    return y + '-' + m.padStart(2, '0') + '-' + d.padStart(2, '0');
+  };
+  window.fromISODate = function(iso){
+    if (!iso) return '—';
+    const [y, m, d] = String(iso).split('-');
+    return d + '.' + m + '.' + y;
+  };
+
+  function wireTabs(){
+    /** @type {NodeListOf<HTMLButtonElement>} */ (document.querySelectorAll('nav.tabs button'))
+        .forEach(btn => btn.addEventListener('click', () => window.showTab(btn.dataset.tab || '')));
+  }
+  // Сразу, а не по DOMContentLoaded: вёрстка меню уже разобрана —
+  // core.js подключён после неё, — и щелчок не должен ждать.
+  wireTabs();
+
+  /** «Запасы» — страница, которую отдал сервер (отбор, порядок, страница — там, V79). */
+  function renderStock(){
+    PORTAL.tables.renderList('stock', {rows: PORTAL.rows || [], total: PORTAL.rowsTotal || 0,
+                                       error: PORTAL.error, open: 'portalOpenStockRow'});
     renderStatusBar();
   }
 
   function install(){
-    patchColumns();
-    window.renderStock = renderStockFromApi;
-    // Ряд страниц ведёт за данными, а не перерисовывает имеющиеся:
-    // страницу и порядок решает сервер.
-    if (typeof TABLE_RENDER_FN !== 'undefined') TABLE_RENDER_FN.stock = loadStock;
+    PORTAL.tables.register('stock', {load: loadStock, render: renderStock});
     PORTAL.onLogin(loadStock);
   }
 

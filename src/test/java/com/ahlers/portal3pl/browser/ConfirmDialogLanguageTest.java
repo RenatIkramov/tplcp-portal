@@ -39,7 +39,7 @@ class ConfirmDialogLanguageTest extends BrowserTestBase {
         openSkuList();
         String skuCode = anySkuCode();
         page.evaluate("code => portalOpenSku(code)", skuCode);
-        page.click("[onclick^='portalSkuDelete']");
+        page.click("[onclick^='PORTAL.skuCard.remove']");
 
         assertFalse(asked.isEmpty(), "портал не спросил подтверждения перед удалением товара");
         // Вопрос состоит из двух строк: сам вопрос и пояснение про архив.

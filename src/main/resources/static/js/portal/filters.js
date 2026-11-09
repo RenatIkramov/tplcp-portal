@@ -328,9 +328,9 @@
   /**
    * Весь запрос списка: отбор, страница и порядок.
    *
-   * <p>Страница и сортировка берутся из состояния самого экрана
-   * ({@code paginationState}, {@code sortState}) — того, которым
-   * управляют ряд страниц и щелчки по заголовкам. Заводить рядом
+   * <p>Страница и сортировка берутся из состояния таблицы
+   * (PORTAL.tables) — того, которым управляют ряд страниц и щелчки
+   * по заголовкам. Заводить рядом
    * второе состояние значило бы дважды хранить одно и то же:
    * ровно так расходятся номер страницы на кнопке и номер страницы
    * в запросе.
@@ -345,13 +345,11 @@
     const query = PORTAL.filterQuery(table);
     if (query) parts.push(query.slice(1));
 
-    const page = typeof paginationState !== 'undefined' ? paginationState[table] : null;
-    if (page){
-      parts.push('page=' + Math.max(1, page.page || 1));
-      parts.push('pageSize=' + (page.pageSize || 20));
-    }
-    const sort = typeof sortState !== 'undefined' ? sortState[table] : null;
-    if (sort && sort.col){
+    const page = PORTAL.tables.pageOf(table);
+    parts.push('page=' + Math.max(1, page.page || 1));
+    parts.push('pageSize=' + (page.pageSize || 20));
+    const sort = PORTAL.tables.sortOf(table);
+    if (sort.col){
       parts.push('sort=' + encodeURIComponent(sort.col));
       parts.push('dir=' + (sort.dir < 0 ? 'desc' : 'asc'));
     }
@@ -369,9 +367,7 @@
    * пуста: экран показал бы «ничего не найдено» там, где найдено.
    */
   function apply(table){
-    if (typeof paginationState !== 'undefined' && paginationState[table]){
-      paginationState[table].page = 1;
-    }
+    PORTAL.tables.firstPage(table);
     reload(table);
   }
 
@@ -388,43 +384,6 @@
     } else if (typeof PORTAL.reloadDocs === 'function'){
       PORTAL.reloadDocs(table);
     }
-  }
-
-  /** Списки, за страницы и порядок которых отвечает сервер. */
-  const SERVER_PAGED = ['receipts', 'orders', 'transfers', 'stock', 'sku', 'packaging'];
-
-  /**
-   * Щелчок по заголовку колонки идёт на сервер.
-   *
-   * <p>Прототип на такой щелчок перерисовывал таблицу: сортировать
-   * было что — весь список лежал на странице. Теперь на странице
-   * лежат двадцать строк из ста тридцати, и перерисовка упорядочила
-   * бы ровно их. Выглядит это как работающая сортировка — и это
-   * худший вид поломки: человек видит порядок и верит ему.
-   *
-   * <p>Списки без страниц на сервере (поставщики, грузополучатели)
-   * сортируются по-прежнему в браузере: они лежат на странице целиком,
-   * и сортировать там действительно есть что.
-   */
-  function interceptSort(){
-    if (typeof window.onSortColumnClick !== 'function' || window.onSortColumnClick.__server){
-      return;
-    }
-    const previous = window.onSortColumnClick;
-    const wrapper = function(table, columnId){
-      if (SERVER_PAGED.indexOf(table) < 0) return previous(table, columnId);
-      const st = typeof sortState !== 'undefined' ? sortState[table] : null;
-      if (!st) return previous(table, columnId);
-      if (st.col === columnId){ st.dir = -st.dir; } else { st.col = columnId; st.dir = 1; }
-      // Порядок сменился — начинаем с первой страницы: остаться
-      // на пятой означало бы показать середину нового порядка.
-      // Стрелку в заголовке рисует renderTableHead при перерисовке
-      // списка — она читает тот же sortState.
-      apply(table);
-      return undefined;
-    };
-    wrapper.__server = true;
-    window.onSortColumnClick = wrapper;
   }
 
   /**
@@ -674,11 +633,11 @@
     window.clearPackagingFilters = () => clear('packaging');
     window.openFilterPicker = openPicker;
     window.closeFilterPicker = closePicker;
-    interceptSort();
 
     // При смене языка панель собирается заново: подписи фильтров —
-    // это подписи колонок, и приходят они с сервера.
-    PORTAL.rebuildFilters = loadAll;
+    // это подписи колонок, и приходят они с сервера. До входа собирать
+    // нечего: справочник колонок отдают только вошедшему (401).
+    PORTAL.rebuildFilters = () => PORTAL.session ? loadAll() : undefined;
 
     PORTAL.onLogin(loadAll);
   }

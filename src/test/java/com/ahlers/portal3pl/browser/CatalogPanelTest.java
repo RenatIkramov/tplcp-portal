@@ -116,7 +116,7 @@ class CatalogPanelTest extends BrowserTestBase {
         assertTrue(askedSku.getLast().contains("filter.name="),
                 "поле панели не дошло до сервера: " + askedSku.getLast());
 
-        page.evaluate("() => onSortColumnClick('sku', 'name')");
+        page.evaluate("() => PORTAL.tables.sort('sku', 'name')");
         page.waitForLoadState(LoadState.NETWORKIDLE);
         assertTrue(askedSku.getLast().contains("sort=name"),
                 "щелчок по заголовку не стал запросом: " + askedSku.getLast());

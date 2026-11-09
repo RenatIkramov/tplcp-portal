@@ -44,7 +44,7 @@ class ServerRefusalLanguageTest extends BrowserTestBase {
                 + " window.notify = m => { window.__said.push(String(m)); show(m); }; }");
 
         page.evaluate("c => portalOpenSku(c)", code);
-        page.click("[onclick^='portalSkuDelete']");
+        page.click("[onclick^='PORTAL.skuCard.remove']");
         page.waitForFunction("() => (window.__said || []).length > 0");
 
         @SuppressWarnings("unchecked")

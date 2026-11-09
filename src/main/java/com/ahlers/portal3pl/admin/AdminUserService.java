@@ -292,7 +292,7 @@ public class AdminUserService {
                 .query(String.class)
                 .optional()
                 .orElse("");
-        if (!"admin".equals(role) && !"developer".equals(role)) {
+        if (!"admin".equals(role)) {
             throw Fail.forbidden("error.access.admin_only");
         }
     }

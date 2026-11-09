@@ -78,7 +78,7 @@ class DocumentPagingPanelTest extends BrowserTestBase {
         page.waitForLoadState(LoadState.NETWORKIDLE);
 
         int before = asked.size();
-        page.evaluate("() => onSortColumnClick('receipts', 'lineCount')");
+        page.evaluate("() => PORTAL.tables.sort('receipts', 'lineCount')");
         page.waitForLoadState(LoadState.NETWORKIDLE);
         assertTrue(asked.size() > before,
                 "щелчок по заголовку не стал запросом — список отсортирован в браузере");
@@ -88,12 +88,12 @@ class DocumentPagingPanelTest extends BrowserTestBase {
                 "первый щелчок сортирует по возрастанию: " + asked.getLast());
 
         // Второй щелчок по той же колонке переворачивает порядок.
-        page.evaluate("() => onSortColumnClick('receipts', 'lineCount')");
+        page.evaluate("() => PORTAL.tables.sort('receipts', 'lineCount')");
         page.waitForLoadState(LoadState.NETWORKIDLE);
         assertTrue(asked.getLast().contains("dir=desc"),
                 "второй щелчок не перевернул порядок: " + asked.getLast());
 
-        page.evaluate("() => changePageSize('receipts', 10)");
+        page.evaluate("() => PORTAL.tables.pageSize('receipts', 10)");
         page.waitForLoadState(LoadState.NETWORKIDLE);
         assertTrue(asked.getLast().contains("pageSize=10"),
                 "смена размера страницы не дошла до сервера: " + asked.getLast());
