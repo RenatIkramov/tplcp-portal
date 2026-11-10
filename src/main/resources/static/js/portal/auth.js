@@ -120,7 +120,6 @@
     if (divider) divider.remove();
     const list = field('demoUserList');
     if (list) list.remove();
-    document.querySelectorAll('.demo-flag').forEach(el => el.remove());
 
     if (!field('portalLoginError')){
       const err = document.createElement('div');

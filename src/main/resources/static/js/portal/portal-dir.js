@@ -166,13 +166,13 @@
     // в одну строку ввода они не помещаются.
     if (field.long){
       return '<div class="kv" style="grid-column:1/-1;"><label>' + PORTAL.t(field.labelKey)
-        + '</label><div><textarea class="kv-input" rows="6"'
+        + '</label><div><textarea class="kv-input kv-input-editable" rows="6"'
         + ' style="width:100%; resize:vertical; font-family:inherit;"'
         + ' data-col="' + field.col + '" oninput="portalDirField(this)">'
         + esc(v === null || v === undefined ? '' : v) + '</textarea></div></div>';
     }
     return '<div class="kv"><label>' + PORTAL.t(field.labelKey) + (field.required ? ' *' : '')
-      + '</label><div style="min-width:320px;"><input class="kv-input" type="'
+      + '</label><div style="min-width:320px;"><input class="kv-input kv-input-editable" type="'
       + (field.date ? 'date' : 'text') + '" value="'
       + esc(v === null || v === undefined ? '' : (field.date ? String(v).slice(0, 10) : v))
       + '" data-col="' + field.col + '" oninput="portalDirField(this)"/></div></div>';

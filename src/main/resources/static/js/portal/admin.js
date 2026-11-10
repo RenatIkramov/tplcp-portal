@@ -394,6 +394,25 @@
     };
   }
 
+  /**
+   * Доступ по умолчанию для роли — им карточка перезаполняется при выборе
+   * роли (решение заказчика, 11.11.2026). Только экран: сохранённое
+   * сервер не подгоняет, человек может поправить образец перед сохранением.
+   *   поклажедатель — все склады, поклажедатель не выбран (выбрать одного);
+   *   менеджер, администратор — все склады и все поклажедатели;
+   *   сотрудник склада — все поклажедатели, склад не выбран.
+   */
+  function accessForRole(/** @type {string} */ role){
+    const staff = role === 'staff';
+    return {
+      role: role,
+      allDepositors: role !== 'depositor',
+      depositorIds: /** @type {string[]} */ ([]),
+      allWarehouses: !staff,
+      warehouseIds: /** @type {string[]} */ ([])
+    };
+  }
+
   /** Блоки доступа в #auAccess и их поведение. */
   function drawAccess(/** @type {ReturnType<typeof accessOnScreen>} */ a){
     const host = byId('auAccess');
@@ -536,11 +555,13 @@
       // роль своей учётной записи не меняем — иначе можно потерять доступ
       if (isSelf) byId('auRole').disabled = true;
     }
-    drawAccess({role: roleCode, depositorIds: granted, warehouseIds: grantedWarehouses,
-                allDepositors: !isNew && u.allDepositors === true,
-                allWarehouses: isNew || u.allWarehouses !== false});
-    // Роль решает вид блока поклажедателей — перерисовываем сразу, с тем, что отмечено
-    byId('auRole').onchange = () => drawAccess(accessOnScreen());
+    // Новый — с образцом своей роли; существующий — как сохранён
+    drawAccess(isNew ? accessForRole(roleCode)
+      : {role: roleCode, depositorIds: granted, warehouseIds: grantedWarehouses,
+         allDepositors: u.allDepositors === true, allWarehouses: u.allWarehouses !== false});
+    // Новая роль — доступ по её образцу; отмеченное прежде не переносится
+    byId('auRole').onchange = () =>
+      drawAccess(accessForRole(/** @type {HTMLSelectElement} */ (byId('auRole')).value));
     byId('adminGenPassword').onclick = () => { byId('adminNewPassword').value = generate(); };
     byId('adminSaveUser').onclick = () => isNew ? createUser() : saveCard(u);
     byId('adminCancelUser').onclick = () => { showTab('admin'); showAdminSub('users'); };
@@ -676,9 +697,12 @@
     } catch (e){
       showMessage(e.message, false);
     } finally {
-      if (byId('adminSaveUser')){
-        byId('adminSaveUser').disabled = false;
-        byId('adminSaveUser').textContent = label;
+      // Возвращаем подпись той же кнопке, что нажимали. После создания
+      // карточка открывается заново — у её новой кнопки своя подпись
+      // («Сохранить»), и прежде она получала чужую («Создать пользователя»).
+      if (button.isConnected){
+        button.disabled = false;
+        button.textContent = label;
       }
     }
   }
@@ -718,9 +742,12 @@
       showMessage(e.message, false);
       if (typeof notify === 'function') notify(T('common.message.save_failed', {error: e.message}));
     } finally {
-      if (byId('adminSaveUser')){
-        byId('adminSaveUser').disabled = false;
-        byId('adminSaveUser').textContent = label;
+      // Возвращаем подпись той же кнопке, что нажимали. После создания
+      // карточка открывается заново — у её новой кнопки своя подпись
+      // («Сохранить»), и прежде она получала чужую («Создать пользователя»).
+      if (button.isConnected){
+        button.disabled = false;
+        button.textContent = label;
       }
     }
   }

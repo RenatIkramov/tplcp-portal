@@ -78,12 +78,9 @@ class AdminTabsTest extends BrowserTestBase {
 
         // Группа из одной вкладки второго ряда не рисует: ряд из одной
         // кнопки, повторяющей название группы, ничего не сообщает.
-        // Тексты интерфейса и переводы перечислений — одна группа (V86).
-        openGroup("uitexts");
-        assertEquals(List.of(text("admin.button.interface_texts"), text("admin.button.enums")),
-                labels("#adminSubTabs"), "в группе текстов не те вкладки");
-
-        for (String single : List.of("reports", "enumValues")) {
+        // Переводы перечислений ведутся в окне значения (группа
+        // «Перечисления», V95) — в «Текстах интерфейса» их вкладки нет (V112).
+        for (String single : List.of("reports", "enumValues", "uitexts")) {
             openGroup(single);
             assertEquals("none", page.evaluate(
                             "() => getComputedStyle(document.getElementById('adminSubTabs')).display"),

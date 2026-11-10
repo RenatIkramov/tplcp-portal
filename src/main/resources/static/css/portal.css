@@ -339,11 +339,7 @@
   .about-list li b{color:var(--ink);}
   .about-contact-card{background:var(--white);border:1px solid var(--line);border-radius:var(--radius);padding:22px 24px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:24px;}
   footer{text-align:center;color:var(--muted);font-size:12px;padding:20px;}
-  .demo-flag{
-    position:fixed;bottom:14px;right:14px;background:var(--amber);color:#1b2430;
-    padding:7px 14px;border-radius:20px;font-size:12px;font-weight:700;box-shadow:0 3px 10px rgba(0,0,0,.15);
-    z-index:50;
-  }
+  footer:empty{display:none;}
 
   /* ===== Column picker ===== */
   .col-overlay{

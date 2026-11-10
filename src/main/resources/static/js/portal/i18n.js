@@ -511,7 +511,7 @@
       ? rows.map(r => '<tr><td><strong>' + esc(r.textKey) + '</strong></td>'
           + '<td>' + esc(r.scope) + '</td><td>' + esc(r.element) + '</td>'
           + '<td>' + esc(r.owner || '—') + '</td>'
-          + codes.map(c => '<td><input class="kv-input" style="min-width:220px;" value="'
+          + codes.map(c => '<td><input class="kv-input kv-input-editable" style="min-width:220px;" value="'
               + esc(r.values[c] || '') + '" data-key="' + esc(r.textKey) + '" data-locale="' + esc(c)
               + '" onchange="portalUiTextSave(this)"/></td>').join('')
           + '</tr>').join('')

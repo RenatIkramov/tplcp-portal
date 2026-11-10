@@ -104,7 +104,7 @@
     const rows = FIELDS.map(f => {
       const v = value(f);
       const body = editing
-        ? '<input class="kv-input" type="text" value="' + esc(v === null || v === undefined ? '' : v)
+        ? '<input class="kv-input kv-input-editable" type="text" value="' + esc(v === null || v === undefined ? '' : v)
           + '" data-col="' + f.col + '" oninput="portalPartnerField(this)"/>'
         : esc(dash(v));
       return '<div class="kv"><label>' + PORTAL.t(f.labelKey)
@@ -151,15 +151,15 @@
         + '<div class="section-title">'
         + (state.addressForm.addressId ? T('partners.text.edit_address') : T('partners.text.new_address')) + '</div>'
         + '<div class="kv-grid">'
-        + '<div class="kv"><label>' + T('partners.text.delivery_address2') + '</label><div><input class="kv-input" type="text"'
+        + '<div class="kv"><label>' + T('partners.text.delivery_address2') + '</label><div><input class="kv-input kv-input-editable" type="text"'
           + ' style="min-width:420px;" value="' + esc(f.address || '') + '" data-addr="address"'
           + ' oninput="portalAddressField(this)"/></div></div>'
-        + '<div class="kv"><label>' + T('partners.column.address_contact') + '</label><div><input class="kv-input" type="text"'
+        + '<div class="kv"><label>' + T('partners.column.address_contact') + '</label><div><input class="kv-input kv-input-editable" type="text"'
           + ' style="min-width:420px;" maxlength="255" value="' + esc(f.contact || '') + '" data-addr="contact"'
           + ' oninput="portalAddressField(this)"/>'
           + '<div style="max-width:420px;margin-top:4px;font-size:11.5px;line-height:1.3;color:var(--muted);">'
           + PORTAL.t('partners.hint.address_contact') + '</div></div></div>'
-        + '<div class="kv"><label>' + T('partners.text.order') + '</label><div><input class="kv-input" type="number"'
+        + '<div class="kv"><label>' + T('partners.text.order') + '</label><div><input class="kv-input kv-input-editable" type="number"'
           + ' value="' + esc(f.sortOrder === null || f.sortOrder === undefined ? '' : f.sortOrder)
           + '" data-addr="sortOrder" oninput="portalAddressField(this)"/></div></div>'
         + '</div><div style="margin-top:12px;">'

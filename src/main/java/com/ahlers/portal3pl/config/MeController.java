@@ -24,10 +24,12 @@ public class MeController {
 
     private final CurrentUser currentUser;
     private final SessionUser session;
+    private final ProfileService profiles;
 
-    public MeController(CurrentUser currentUser, SessionUser session) {
+    public MeController(CurrentUser currentUser, SessionUser session, ProfileService profiles) {
         this.currentUser = currentUser;
         this.session = session;
+        this.profiles = profiles;
     }
 
     @GetMapping
@@ -43,5 +45,11 @@ public class MeController {
         response.put("depositorId", session.depositorId(request));
         response.putAll(currentUser.settings());
         return response;
+    }
+
+    /** Личный кабинет: роль, зона доступа, организация, менеджеры (ProfileService). */
+    @GetMapping("/profile")
+    public Map<String, Object> profile(HttpServletRequest request) {
+        return profiles.profile(session.requireUser(request));
     }
 }

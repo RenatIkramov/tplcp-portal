@@ -35,6 +35,39 @@
       return;
     }
     render();
+    footer(state.data);
+  }
+
+  /* ================= Подвал ================= */
+
+  /*
+    Подвал страницы — организация оператора (11.11.2026, вместо строки
+    демо «все данные вымышленные» и адреса склада в разметке). Данные —
+    те же, что в «Контактах»: клиент видит оператора по своему договору,
+    менеджер и администратор — все организации оператора. Правится
+    в «Администрирование → Организация оператора», без разработчика.
+  */
+
+  /** @param {ContactsAnswer | null} data */
+  function footer(data){
+    const el = document.getElementById('portalFooter');
+    if (!el) return;
+    const rows = (data && data.operators) || [];
+    const year = new Date().getFullYear();
+    el.textContent = rows.length
+      ? '© ' + year + ' ' + rows.map(o => [o.name, o.phone, o.email]
+          .filter(v => v !== null && v !== undefined && v !== '').join(' · ')).join(' | ')
+      : '';
+  }
+
+  /** Подвал после входа и после смены клиента: оператор у клиентов может быть разный. */
+  async function loadFooter(){
+    try {
+      footer(await PORTAL.fetchJson('/api/contacts'));
+    } catch (e){
+      // Подвал — не повод для сообщения об ошибке: остаётся пустым.
+      footer(null);
+    }
   }
 
   /* ================= Отрисовка ================= */
@@ -163,6 +196,8 @@
     // но блоки собраны из данных, поэтому после смены языка
     // перерисовываем страницу целиком, если она открыта.
     PORTAL.onSession(() => { state.loaded = false; state.data = null; });
+    PORTAL.onSession(loadFooter);
+    PORTAL.onLogin(loadFooter);
   }
 
   if (document.readyState === 'loading'){

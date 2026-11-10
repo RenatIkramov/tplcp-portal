@@ -655,29 +655,14 @@
 <div class="table-card">
 <table>
 <thead><tr><th data-i18n="admin.column.date_and_time">Дата/время</th><th data-i18n="admin.column.direction">Направление</th><th data-i18n="admin.column.document">Документ</th><th data-i18n="admin.column.error">Ошибка</th><th data-i18n="col.receipts.status">Статус</th></tr></thead>
-<tbody>
-<tr><td>31.07.2026 09:41</td><td data-i18n="common.text.portal_wms">Портал → WMS</td><td>ПР-000118</td><td>Timeout при обращении к /wms/receipts (5000 мс)</td><td><span class="badge err" data-i18n="common.text.span_class_dot_span_not_processed"><span class="dot"></span>Не обработано</span></td></tr>
-<tr><td>30.07.2026 18:12</td><td data-i18n="common.text.wms_portal">WMS → Портал</td><td>ЗК-000090</td><td>Некорректный формат даты в поле ship_date</td><td><span class="badge err" data-i18n="common.text.span_class_dot_span_not_processed2"><span class="dot"></span>Не обработано</span></td></tr>
-<tr><td>30.07.2026 14:03</td><td data-i18n="common.text.portal_wms2">Портал → WMS</td><td>BG-6001</td><td data-i18n="common.text.warehouse_code_not_found_in_mappin">Код склада не найден в схеме назначения</td><td><span class="badge warn" data-i18n="common.text.span_class_dot_span_retry_schedul"><span class="dot"></span>Повтор запланирован</span></td></tr>
-<tr><td>29.07.2026 11:27</td><td data-i18n="common.text.wms_portal2">WMS → Портал</td><td>ПР-000217</td><td>Дубликат webhook-события (проигнорировано)</td><td><span class="badge ok" data-i18n="common.text.span_class_dot_span_processed"><span class="dot"></span>Обработано</span></td></tr>
+<tbody id="integrationLogBody">
+<tr><td colspan="5" style="color:var(--muted);" data-i18n="admin.text.integration_log_empty">Обмена с WMS ещё не было: журнал появится, когда будет подключена интеграция</td></tr>
 </tbody>
 </table>
 </div>
 </div>
-<!-- Ошибки загрузки Excel -->
-<div class="admin-sub" id="admin-sub-excel">
-<div class="section-title" data-i18n="admin.title.excel_import_errors" style="margin-top:0;">Ошибки загрузки данных из Excel</div>
-<div class="table-card">
-<table>
-<thead><tr><th data-i18n="admin.column.date_and_time">Дата/время</th><th data-i18n="admin.column.user">Пользователь</th><th data-i18n="admin.column.file">Файл</th><th data-i18n="admin.column.line">Строка</th><th data-i18n="admin.column.error">Ошибка</th></tr></thead>
-<tbody>
-<tr><td>31.07.2026 08:55</td><td>a.serikova</td><td data-i18n="common.text.receipt_request_29_07_xlsx">Заявка_приход_29.07.xlsx</td><td>14</td><td data-i18n="common.text.field_expected_date_is_not_filled">Не заполнено поле «Ожидаемая дата»</td></tr>
-<tr><td>30.07.2026 17:20</td><td>i.polovtseva</td><td data-i18n="common.text.flooring_products_xlsx">Номенклатура_пол_покрытия.xlsx</td><td>8</td><td data-i18n="common.text.duplicate_sap_code_00944450040">Дублирующийся коммерческий код товара 00944450040</td></tr>
-<tr><td>29.07.2026 10:05</td><td>a.tulegenov</td><td data-i18n="common.text.shipment_order_28_07_xlsx">Заказ_отгрузка_28.07.xlsx</td><td>3</td><td data-i18n="common.text.invalid_number_format_in_column_we">Некорректный формат числа в столбце «Вес, кг»</td></tr>
-</tbody>
-</table>
-</div>
-</div>
+<!-- Ошибки загрузки Excel: разметку рисует js/portal/import-log.js -->
+<div class="admin-sub" id="admin-sub-excel"></div>
 <div class="admin-sub" id="admin-sub-reports-config">
 <div class="panel-head" style="margin-bottom:0;">
 <div data-i18n="admin.button.report_settings" class="section-title" style="margin:0;">Настройка отчётов</div>
@@ -925,8 +910,8 @@
 <div id="profileContent"></div>
 </section>
 </main>
-<footer data-i18n="common.text.demonstration_ui_prototype_all_dat">Демонстрационный прототип интерфейса — все данные вымышленные · Склад с. Байсерке, ул. Султана Бейбарыса, 1</footer>
-<div class="demo-flag" data-i18n="common.text.demo_fictional_data">ДЕМО — фиктивные данные</div>
+<!-- Подвал: организация оператора из справочника (js/portal/contacts.js). -->
+<footer id="portalFooter"></footer>
 </div><!-- /appShell -->
 <div id="loginScreen">
 <div class="login-card">
@@ -1192,7 +1177,7 @@
 </div>
 <!-- Код портала: core.js — общее (сеанс, запросы, навигация, плашка),
      дальше модули экранов. Демо, которое ещё не переехало на сервер
-     (отчёты, личный кабинет), — js/demo/, перед i18n.js. -->
+     (отчёты), — js/demo/, перед i18n.js. -->
 <script src="js/portal/core.js"></script>
 <script src="js/portal/table-columns.js"></script>
 <script src="js/portal/tables.js"></script>
@@ -1381,10 +1366,9 @@
 ========================================================================= -->
 <script src="js/portal/contacts.js"></script>
 <script src="js/portal/languages.js"></script>
-<script src="js/portal/enums.js"></script>
 <script src="js/portal/enum-values.js"></script>
 <script src="js/demo/reports.js"></script>
-<script src="js/demo/profile.js"></script>
+<script src="js/portal/profile.js"></script>
 <script src="js/portal/i18n.js"></script>
 
 

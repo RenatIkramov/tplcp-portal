@@ -54,7 +54,7 @@
     {id: 'reports', labelKey: 'admin.button.report_settings',
      subs: ['reports-config']},
     {id: 'uitexts', labelKey: 'admin.button.interface_texts',
-     subs: ['uitexts', 'enums']}
+     subs: ['uitexts']}
   ];
 
   /**
@@ -75,7 +75,6 @@
     'excel':            'admin.button.excel_import_errors',
     'reports-config':   'admin.button.report_settings',
     'uitexts':          'admin.button.interface_texts',
-    'enums':            'admin.button.enums',
     'enumValues':       'admin.button.enums'
   };
 

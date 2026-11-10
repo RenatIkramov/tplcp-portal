@@ -526,9 +526,9 @@
     adminSubHooks.forEach(fn => fn(sub));
   };
 
-  window.openProfile = () => window.showView('profile');
   window.openAbout = () => window.showView('about');
-  // «Контакты» — contacts.js: открывает экран и читает данные
+  // «Контакты» — contacts.js, «Личный кабинет» — profile.js: открывают
+  // экран и читают данные
 
   /** Плашка вверху экрана — ответ портала на действие. */
   window.notify = function(msg){
