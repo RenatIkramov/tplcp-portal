@@ -336,6 +336,23 @@ public abstract class BrowserTestBase extends PortalTestBase {
                 java.util.List.of(prefix + "_erpNo", uniqueErp()));
     }
 
+    /**
+     * Дождаться нового запроса из перехваченных (их больше, чем {@code before})
+     * и вернуть адрес последнего.
+     *
+     * <p>Не {@code waitForLoadState(NETWORKIDLE)}: это состояние загрузки
+     * страницы, оно достигается один раз после открытия, и дальше ожидание
+     * возвращается сразу, ничего не дождавшись. Проверки, которые им
+     * ждали запрос списка, проходили, пока запрос уходил быстрее их; когда
+     * вход стал посылать ещё один запрос (подвал, V114), у заказчика
+     * список оказался пуст — {@code NoSuchElementException} на
+     * {@code getLast()} в {@code CatalogPanelTest} (11.11.2026).
+     */
+    protected String nextRequest(List<String> asked, int before) {
+        page.waitForCondition(() -> asked.size() > before);
+        return asked.getLast();
+    }
+
     protected void assertNoJsErrors() {
         assertTrue(jsErrors.isEmpty(), "страница написала в консоль ошибки:\n"
                 + String.join("\n", jsErrors));

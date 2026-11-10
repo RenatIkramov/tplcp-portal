@@ -102,36 +102,32 @@ class CatalogPanelTest extends BrowserTestBase {
         signInUiAsClient();
         openReferences("sku");
         page.waitForSelector("#filter-sku-code");
-        page.waitForLoadState(LoadState.NETWORKIDLE);
 
-        assertFalse(askedSku.isEmpty(), "экран не сходил за товарами");
-        assertTrue(askedSku.getLast().contains("page=1"),
-                "в запросе товаров нет номера страницы: " + askedSku.getLast());
+        String url = nextRequest(askedSku, 0);
+        assertTrue(url.contains("page=1"), "в запросе товаров нет номера страницы: " + url);
 
+        int before = askedSku.size();
         page.evaluate("""
                 () => { document.getElementById('filter-sku-name').value = 'о';
                         onSkuFilterChange(); }
                 """);
-        page.waitForLoadState(LoadState.NETWORKIDLE);
-        assertTrue(askedSku.getLast().contains("filter.name="),
-                "поле панели не дошло до сервера: " + askedSku.getLast());
+        url = nextRequest(askedSku, before);
+        assertTrue(url.contains("filter.name="), "поле панели не дошло до сервера: " + url);
 
+        before = askedSku.size();
         page.evaluate("() => PORTAL.tables.sort('sku', 'name')");
-        page.waitForLoadState(LoadState.NETWORKIDLE);
-        assertTrue(askedSku.getLast().contains("sort=name"),
-                "щелчок по заголовку не стал запросом: " + askedSku.getLast());
+        url = nextRequest(askedSku, before);
+        assertTrue(url.contains("sort=name"), "щелчок по заголовку не стал запросом: " + url);
 
+        before = askedSku.size();
         page.evaluate("() => clearSkuFilters()");
-        page.waitForLoadState(LoadState.NETWORKIDLE);
-        assertFalse(askedSku.getLast().contains("filter.name="),
-                "после очистки отбор всё ещё уходит на сервер: " + askedSku.getLast());
+        url = nextRequest(askedSku, before);
+        assertFalse(url.contains("filter.name="), "после очистки отбор всё ещё уходит на сервер: " + url);
 
         openReferences("packaging");
         page.waitForSelector("#filter-packaging-skuCode");
-        page.waitForLoadState(LoadState.NETWORKIDLE);
-        assertFalse(askedPackaging.isEmpty(), "экран не сходил за упаковками");
-        assertTrue(askedPackaging.getLast().contains("page=1"),
-                "в запросе упаковок нет номера страницы: " + askedPackaging.getLast());
+        url = nextRequest(askedPackaging, 0);
+        assertTrue(url.contains("page=1"), "в запросе упаковок нет номера страницы: " + url);
         assertNoJsErrors();
     }
 
@@ -151,25 +147,24 @@ class CatalogPanelTest extends BrowserTestBase {
         signInUiAsClient();
         openReferences("sku");
         page.waitForSelector("#filter-sku-archived");
-        page.waitForLoadState(LoadState.NETWORKIDLE);
 
-        assertFalse(askedSku.getLast().contains("withArchived"),
-                "архив просят без спроса: " + askedSku.getLast());
+        String url = nextRequest(askedSku, 0);
+        assertFalse(url.contains("withArchived"), "архив просят без спроса: " + url);
 
+        int before = askedSku.size();
         page.evaluate("""
                 () => { document.getElementById('filter-sku-archived').checked = true;
                         onSkuFilterChange(); }
                 """);
-        page.waitForLoadState(LoadState.NETWORKIDLE);
-        assertTrue(askedSku.getLast().contains("withArchived=true"),
-                "галочка архива не дошла до сервера: " + askedSku.getLast());
+        url = nextRequest(askedSku, before);
+        assertTrue(url.contains("withArchived=true"), "галочка архива не дошла до сервера: " + url);
 
         // Смена языка пересобирает панель: подписи приходят с сервера.
         // Галочка обязана пережить сборку — иначе архив станет
         // недостижим, а вернуть позицию в работу можно только
         // открыв её карточку.
+        // portalSetLanguage — async: evaluate дожидается пересборки панели
         page.evaluate("() => portalSetLanguage('ru')");
-        page.waitForLoadState(LoadState.NETWORKIDLE);
         assertFalse(page.querySelectorAll("#filter-sku-archived").isEmpty(),
                 "после смены языка галочка архива исчезла с панели");
 

@@ -49,10 +49,8 @@ class DocumentPagingPanelTest extends BrowserTestBase {
         signInUiAsClient();
         page.evaluate("() => showTab('receipts')");
         waitForColumns("receipts");
-        page.waitForLoadState(LoadState.NETWORKIDLE);
 
-        assertFalse(asked.isEmpty(), "экран не сходил за списком поступлений");
-        String first = asked.getLast();
+        String first = nextRequest(asked, 0);
         assertTrue(first.contains("page=1"), "в запросе списка нет номера страницы: " + first);
         assertTrue(first.contains("pageSize="), "в запросе списка нет размера страницы: " + first);
 
@@ -60,6 +58,7 @@ class DocumentPagingPanelTest extends BrowserTestBase {
         // строк на экране. Сверяется с базой: по-другому эти числа
         // разойтись и не могут — либо сервер посчитал, либо экран.
         String total = singleValue("SELECT count(*)::text FROM dbo.v_receipts");
+        page.waitForFunction("t => document.getElementById('receiptsPagination').innerText.includes(t)", total);
         String bar = page.innerText("#receiptsPagination");
         assertTrue(bar.contains(total),
                 "в ряду страниц нет общего числа документов (" + total + "): " + bar);
@@ -75,30 +74,28 @@ class DocumentPagingPanelTest extends BrowserTestBase {
         signInUiAsClient();
         page.evaluate("() => showTab('receipts')");
         waitForColumns("receipts");
-        page.waitForLoadState(LoadState.NETWORKIDLE);
+        nextRequest(asked, 0);
 
+        // Не дождавшись нового запроса, ожидание кончается ошибкой по таймауту:
+        // это и есть «щелчок по заголовку не стал запросом».
         int before = asked.size();
         page.evaluate("() => PORTAL.tables.sort('receipts', 'lineCount')");
-        page.waitForLoadState(LoadState.NETWORKIDLE);
-        assertTrue(asked.size() > before,
-                "щелчок по заголовку не стал запросом — список отсортирован в браузере");
-        assertTrue(asked.getLast().contains("sort=lineCount"),
-                "в запросе нет колонки сортировки: " + asked.getLast());
-        assertTrue(asked.getLast().contains("dir=asc"),
-                "первый щелчок сортирует по возрастанию: " + asked.getLast());
+        String url = nextRequest(asked, before);
+        assertTrue(url.contains("sort=lineCount"), "в запросе нет колонки сортировки: " + url);
+        assertTrue(url.contains("dir=asc"), "первый щелчок сортирует по возрастанию: " + url);
 
         // Второй щелчок по той же колонке переворачивает порядок.
+        before = asked.size();
         page.evaluate("() => PORTAL.tables.sort('receipts', 'lineCount')");
-        page.waitForLoadState(LoadState.NETWORKIDLE);
-        assertTrue(asked.getLast().contains("dir=desc"),
-                "второй щелчок не перевернул порядок: " + asked.getLast());
+        url = nextRequest(asked, before);
+        assertTrue(url.contains("dir=desc"), "второй щелчок не перевернул порядок: " + url);
 
+        before = asked.size();
         page.evaluate("() => PORTAL.tables.pageSize('receipts', 10)");
-        page.waitForLoadState(LoadState.NETWORKIDLE);
-        assertTrue(asked.getLast().contains("pageSize=10"),
-                "смена размера страницы не дошла до сервера: " + asked.getLast());
-        assertTrue(asked.getLast().contains("page=1"),
-                "после смены размера страницы человек остался не на первой: " + asked.getLast());
+        url = nextRequest(asked, before);
+        assertTrue(url.contains("pageSize=10"), "смена размера страницы не дошла до сервера: " + url);
+        assertTrue(url.contains("page=1"),
+                "после смены размера страницы человек остался не на первой: " + url);
         assertNoJsErrors();
     }
 

@@ -101,35 +101,33 @@ class StockPanelTest extends BrowserTestBase {
         signInUiAsClient();
         page.evaluate("() => showTab('stock')");
         page.waitForSelector("#filter-stock-defect");
-        page.waitForLoadState(LoadState.NETWORKIDLE);
 
-        assertFalse(asked.isEmpty(), "экран не сходил за запасами");
-        assertTrue(asked.getLast().contains("page=1"),
-                "в запросе запасов нет номера страницы: " + asked.getLast());
+        String url = nextRequest(asked, 0);
+        assertTrue(url.contains("page=1"), "в запросе запасов нет номера страницы: " + url);
 
+        int before = asked.size();
         page.evaluate("""
                 () => { document.getElementById('filter-stock-defect').checked = true;
                         onStockFilterChange(); }
                 """);
-        page.waitForLoadState(LoadState.NETWORKIDLE);
-        assertTrue(asked.getLast().contains("filter.defect=true"),
-                "флажок не дошёл до сервера: " + asked.getLast());
+        url = nextRequest(asked, before);
+        assertTrue(url.contains("filter.defect=true"), "флажок не дошёл до сервера: " + url);
 
+        before = asked.size();
         page.evaluate("() => PORTAL.tables.sort('stock', 'code')");
-        page.waitForLoadState(LoadState.NETWORKIDLE);
-        assertTrue(asked.getLast().contains("sort=code"),
-                "щелчок по заголовку не стал запросом: " + asked.getLast());
+        url = nextRequest(asked, before);
+        assertTrue(url.contains("sort=code"), "щелчок по заголовку не стал запросом: " + url);
 
         // «Очистить» снимает и отметку флажка. Пустое значение её
         // не снимает: у checkbox value — это то, что уйдёт при
         // отметке, и список оставался бы коротким без видимой причины.
+        before = asked.size();
         page.evaluate("() => clearStockFilters()");
-        page.waitForLoadState(LoadState.NETWORKIDLE);
+        url = nextRequest(asked, before);
         assertEquals(false, page.evaluate(
                         "() => document.getElementById('filter-stock-defect').checked"),
                 "«Очистить» оставила флажок отмеченным");
-        assertFalse(asked.getLast().contains("filter.defect"),
-                "после очистки флажок всё ещё уходит на сервер: " + asked.getLast());
+        assertFalse(url.contains("filter.defect"), "после очистки флажок всё ещё уходит на сервер: " + url);
         assertNoJsErrors();
     }
 
