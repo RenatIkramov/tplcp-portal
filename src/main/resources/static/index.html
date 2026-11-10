@@ -920,15 +920,15 @@
 <p class="login-sub" data-i18n="common.text.enter_your_email_and_password_to_s">Введите логин (email) и пароль для входа</p>
 <!-- Настоящая форма с name и autocomplete: менеджер паролей Chrome
      распознаёт вход именно по ней, а не по паре полей рядом. -->
+<!-- Поля и кнопка заблокированы, пока auth.js не повесил обработчик
+     отправки: иначе ранний Enter отправил бы форму браузером, GET-запросом
+     с паролем в адресе. -->
 <form id="loginForm" autocomplete="on">
 <div class="login-field"><label for="loginEmail" data-i18n="common.label.email_login">Email / логин</label><input disabled="" id="loginEmail" name="username" autocomplete="username" data-i18n-placeholder="auth.placeholder.user_ahlers_com" placeholder="user@ahlers.com" type="text"/></div>
 <div class="login-field"><label for="loginPassword" data-i18n="common.label.password">Пароль</label><input disabled="" id="loginPassword" name="password" autocomplete="current-password" placeholder="••••••••" type="password"/></div>
 <label class="login-remember" for="loginRemember" data-i18n-title="auth.hint.remember_me" title="Портал не будет спрашивать пароль, пока вы заходите хотя бы раз в 15 дней. Не включайте на чужом компьютере."><input type="checkbox" id="loginRemember" name="remember"/> <span data-i18n="auth.label.remember_me">Запомнить меня</span></label>
-<button class="btn primary" type="submit" data-i18n="common.button.sign_in" disabled="" style="width:100%;justify-content:center;margin-top:6px;opacity:.5;cursor:not-allowed;" title="Ручной вход отключён в демо-версии — выберите пользователя ниже">Войти</button>
+<button class="btn primary" type="submit" data-i18n="common.button.sign_in" disabled="" style="width:100%;justify-content:center;margin-top:6px;opacity:.5;cursor:not-allowed;">Войти</button>
 </form>
-<div class="hint" style="text-align:center;margin-top:8px;">Ручной ввод отключён в демо-версии — выберите пользователя ниже</div>
-<div class="login-divider" data-i18n="common.text.demo_access_select_a_user">Демо-доступ — выберите пользователя</div>
-<div class="demo-user-groups" id="demoUserList"></div>
 </div>
 </div>
 <script src="js/login-logo.js"></script>

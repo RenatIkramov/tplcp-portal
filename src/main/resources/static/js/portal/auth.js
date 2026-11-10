@@ -5,23 +5,8 @@
   const PORTAL = window.PORTAL;
   if (!PORTAL) return;
 
-  async function api(method, path, body){
-    const resp = await fetch(path, {
-      method: method,
-      headers: {'Content-Type':'application/json', 'Accept':'application/json'},
-      body: body === undefined ? undefined : JSON.stringify(body)
-    });
-    if (resp.status === 204) return null;
-    const text = await resp.text();
-    const data = text ? JSON.parse(text) : null;
-    if (!resp.ok){
-      /** @type {PortalHttpError} */
-      const e = new Error(PORTAL.errorText(resp.status, data));
-      e.status = resp.status;
-      throw e;
-    }
-    return data;
-  }
+  // общий помощник core.js (прежде — четыре одинаковые копии здесь)
+  const api = PORTAL.api;
 
   /* --------------------------------------------------------------------------
      1. Сеанс кончился посреди работы
@@ -81,7 +66,10 @@
     el.style.display = msg ? '' : 'none';
   }
 
-  /** Включает штатную форму демо (в прототипе она была заблокирована). */
+  /**
+   * Включает форму входа: в разметке поля и кнопка заблокированы, пока
+   * не повешен обработчик отправки (см. комментарий в index.html).
+   */
   function enableLoginForm(){
     const card = document.querySelector('#loginScreen .login-card');
     if (!card) return;
@@ -91,8 +79,6 @@
       if (!el) return;
       el.disabled = false;
     });
-    const email = field('loginEmail');
-    if (email) email.placeholder = 'client@roga-kopyta.kz';
 
     const btn = /** @type {HTMLButtonElement | null} */ (card.querySelector('button.btn.primary'));
     if (btn){
@@ -113,13 +99,6 @@
       form.addEventListener('submit', e => { e.preventDefault(); window.doLogin(); });
       form.dataset.wired = '1';
     }
-
-    // убираем всё, что относилось к демо-доступу
-    card.querySelectorAll('.hint').forEach(el => el.remove());
-    const divider = card.querySelector('.login-divider');
-    if (divider) divider.remove();
-    const list = field('demoUserList');
-    if (list) list.remove();
 
     if (!field('portalLoginError')){
       const err = document.createElement('div');
@@ -167,10 +146,6 @@
       error(e.message || T('auth.text.sign_in_failed'));
     }
   };
-
-  // Демо-вход выбором пользователя из списка больше не существует.
-  window.quickLogin = function(){};
-  window.renderDemoUsers = function(){};
 
   window.logout = async function(){
     try { await api('POST', '/api/auth/logout'); } catch (e) {}
@@ -398,9 +373,6 @@
       if (typeof notify === 'function') notify(T('auth.message.depositor_switch_failed', {error: e.message}));
     }
   };
-  // в прототипе у кладовщика был свой переключатель — теперь он общий
-  window.selectDepositor = window.portalSelectDepositor;
-  window.setStaffDepositorFilter = window.portalSelectDepositor;
 
   /* --------------------------------------------------------------------------
      5. Старт страницы

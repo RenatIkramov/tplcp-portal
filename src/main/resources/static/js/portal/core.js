@@ -186,7 +186,6 @@
       renderStock();
     }
   }
-  window.portalReloadStock = loadStock;
   // Этим же вызовом за списком ходит панель фильтров: отбор изменился —
   // надо идти к серверу, перерисовкой имеющихся строк тут не обойтись.
   PORTAL.reloadStock = loadStock;
@@ -241,6 +240,32 @@
       throw new Error(await PORTAL.responseMessage(resp));
     }
     return resp.status === 204 ? null : resp.json();
+  };
+
+  /**
+   * Запрос с телом JSON: отказ — исключение с текстом для человека и кодом
+   * ответа в `status` (по нему отличают 401/403). До 11.11.2026 жил четырьмя
+   * одинаковыми копиями в admin.js, auth.js, dep-visibility.js, draft.js.
+   * @param {string} method
+   * @param {string} path
+   * @param {unknown} [body]
+   * @returns {Promise<any>}
+   */
+  PORTAL.api = async (method, path, body) => {
+    const resp = await fetch(path, {
+      method: method,
+      headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+      body: body === undefined ? undefined : JSON.stringify(body)
+    });
+    if (resp.status === 204) return null;
+    const text = await resp.text();
+    const data = text ? JSON.parse(text) : null;
+    if (!resp.ok){
+      const e = /** @type {PortalHttpError} */ (new Error(PORTAL.errorText(resp.status, data)));
+      e.status = resp.status;
+      throw e;
+    }
+    return data;
   };
 
   /**

@@ -499,7 +499,8 @@
     window.renderDepositorsDir = () => renderDir('depositorsDir');
     PORTAL.tables.dirRegister('warehousesDir', () => renderDir('warehousesDir'));
     PORTAL.tables.dirRegister('depositorsDir', () => renderDir('depositorsDir'));
-    window.renderOperatorsDir = () => renderDir('operatorsDir');
+    // организации оператора — тоже: подписи строк на языке человека
+    PORTAL.tables.dirRegister('operatorsDir', () => renderDir('operatorsDir'));
 
     // onSession, а не onLogin: склады, поклажедатели и организации
     // оператора — справочники ВСЕГО портала,

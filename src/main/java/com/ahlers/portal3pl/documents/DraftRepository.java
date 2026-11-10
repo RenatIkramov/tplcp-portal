@@ -189,10 +189,6 @@ public class DraftRepository {
     }
 
     /**
-     * Заполнен ли транспорт хоть одним полем. «Рейс» не в счёт: он живёт
-     * и в шапке, и сам по себе транспортной сущности WMS не делает.
-     */
-    /**
      * Номер портала документа того же типа и поклажедателя с тем же
      * номером ERP (без регистра и пробелов по краям), кроме {@code exceptDocId};
      * нет такого — null.
@@ -243,6 +239,10 @@ public class DraftRepository {
                 .list());
     }
 
+    /**
+     * Заполнен ли транспорт хоть одним полем. «Рейс» не в счёт: он живёт
+     * и в шапке, и сам по себе транспортной сущности WMS не делает.
+     */
     public boolean hasTransport(DocumentType type, String docId) {
         String columns = DocumentType.transportColumns().stream()
                 .sorted()

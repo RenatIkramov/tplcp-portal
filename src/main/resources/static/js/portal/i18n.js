@@ -456,14 +456,6 @@
     portalUiTextsRender();
   }
 
-  window.portalOpenUiTexts = function(){
-    ensureScreen();
-    showView('admin');
-    // Наполнит вкладку admin-tabs.js — тем же вызовом, каким
-    // наполняет её при щелчке по кнопке.
-    showAdminSub('uitexts');
-  };
-
   /** Заполняет выпадающий список значениями, которые реально встречаются. */
   function fillFilter(id, values){
     const el = document.getElementById(id);
@@ -549,10 +541,6 @@
 
   function install(){
     watchNewNodes();
-    // Демо отказывалось переключаться на казахский заглушкой — теперь
-    // язык выбирается из того, что есть в базе, и заглушка не нужна.
-    window.setLanguage = code => window.portalSetLanguage(code);
-
     buildSwitch().then(() => {
       // Если человек успел войти, пока грузился список языков, язык его
       // учётной записи уже применён — портальный по умолчанию его

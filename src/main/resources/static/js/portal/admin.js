@@ -5,23 +5,8 @@
   const PORTAL = window.PORTAL;
   if (!PORTAL) return;
 
-  async function api(method, path, body){
-    const resp = await fetch(path, {
-      method: method,
-      headers: {'Content-Type':'application/json', 'Accept':'application/json'},
-      body: body === undefined ? undefined : JSON.stringify(body)
-    });
-    if (resp.status === 204) return null;
-    const text = await resp.text();
-    const data = text ? JSON.parse(text) : null;
-    if (!resp.ok){
-      /** @type {PortalHttpError} */
-      const e = new Error(PORTAL.errorText(resp.status, data));
-      e.status = resp.status;
-      throw e;
-    }
-    return data;
-  }
+  // общий помощник core.js (прежде — четыре одинаковые копии здесь)
+  const api = PORTAL.api;
 
   const byId = id => document.getElementById(id);
   const esc = v => String(v === null || v === undefined ? '' : v)
@@ -765,11 +750,6 @@
     // до выбора поклажедателя, и администратор, которому выбор обязателен,
     // видел пустой список.
     PORTAL.onSession(() => {
-      // Кнопку «Создать пользователя» разработчику не показываем: раздел
-      // ему открыт для разбора, а не для ведения. Прежде это правило
-      // жило в переключателе подвкладок справочников — вкладка оттуда
-      // переехала, и правило переехало вместе с ней.
-      const actions = document.getElementById('usersRefActions');
       if (PORTAL.adminTabs) PORTAL.adminTabs.onOpen('users', drawList);
       return loadUsers();
     });

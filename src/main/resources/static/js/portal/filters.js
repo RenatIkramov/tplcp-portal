@@ -632,7 +632,6 @@
     window.clearSkuFilters = () => clear('sku');
     window.clearPackagingFilters = () => clear('packaging');
     window.openFilterPicker = openPicker;
-    window.closeFilterPicker = closePicker;
 
     // При смене языка панель собирается заново: подписи фильтров —
     // это подписи колонок, и приходят они с сервера. До входа собирать

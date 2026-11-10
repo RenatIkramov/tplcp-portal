@@ -5,23 +5,8 @@
   const PORTAL = window.PORTAL;
   if (!PORTAL) return;
 
-  async function api(method, path, body){
-    const resp = await fetch(path, {
-      method: method,
-      headers: {'Content-Type':'application/json', 'Accept':'application/json'},
-      body: body === undefined ? undefined : JSON.stringify(body)
-    });
-    if (resp.status === 204) return null;
-    const text = await resp.text();
-    const data = text ? JSON.parse(text) : null;
-    if (!resp.ok){
-      /** @type {PortalHttpError} */
-      const e = new Error(PORTAL.errorText(resp.status, data));
-      e.status = resp.status;
-      throw e;
-    }
-    return data;
-  }
+  // общий помощник core.js (прежде — четыре одинаковые копии здесь)
+  const api = PORTAL.api;
 
   const esc = v => String(v === null || v === undefined ? '' : v)
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');

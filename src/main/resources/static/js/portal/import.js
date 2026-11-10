@@ -487,8 +487,6 @@
     document.getElementById('skuImportOverlay').classList.add('active');
   }
 
-  window.portalOpenSkuImport = open;
-
   /* ================= Выбор файла ================= */
 
   /**

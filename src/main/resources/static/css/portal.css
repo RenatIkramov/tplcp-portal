@@ -87,12 +87,12 @@
     display:flex;align-items:center;
   }
   .brand .logo-chip svg{display:block;height:58px;width:auto;}
-  #adminTabBtn, #devSettingsTabBtn{
+  #adminTabBtn{
     background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.25);color:#fff;
     padding:9px 16px;border-radius:6px;font-size:13.5px;font-weight:600;cursor:pointer;
     margin-left:18px;transition:.15s;
   }
-  #adminTabBtn:hover, #devSettingsTabBtn:hover{background:rgba(255,255,255,.2);}
+  #adminTabBtn:hover{background:rgba(255,255,255,.2);}
   .depositor-box{
     text-align:right;font-size:13px;color:rgba(255,255,255,.85);
   }
@@ -406,28 +406,6 @@
     width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:6px;font-size:13.5px;
   }
   .login-field input:focus{outline:none;border-color:var(--blue);}
-  .login-divider{
-    text-align:center;font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;
-    margin:22px 0 14px;position:relative;
-  }
-  .login-divider::before, .login-divider::after{
-    content:"";position:absolute;top:50%;width:30%;height:1px;background:var(--line);
-  }
-  .login-divider::before{left:0;} .login-divider::after{right:0;}
-  .demo-user-groups{display:flex;flex-direction:column;gap:14px;}
-  .demo-group-title{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;}
-  .demo-user{
-    display:flex;align-items:center;gap:10px;padding:9px 10px;border:1px solid var(--line);
-    border-radius:6px;cursor:pointer;transition:.12s;margin-bottom:6px;
-  }
-  .demo-user:hover{border-color:var(--blue);background:var(--blue-light);}
-  .demo-user .avatar{
-    width:32px;height:32px;border-radius:50%;background:var(--navy);color:#fff;
-    display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0;
-  }
-  .demo-user .info{flex:1;min-width:0;}
-  .demo-user .info .n{font-size:13px;font-weight:600;color:var(--ink);}
-  .demo-user .info .r{font-size:11.5px;color:var(--muted);}
 
   /* ===== Администрирование → Перечисления (V95) =====
      Слева список перечислений, справа значения выбранного; окно

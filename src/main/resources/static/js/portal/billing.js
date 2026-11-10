@@ -98,11 +98,6 @@
     });
   }
 
-  window.showBillingSub = function(id){
-    if (TABS.some(tab => tab.id === id)) active = id;
-    draw();
-  };
-
   function install(){
     spread();
     // подписи вкладок приходят вместе с переводами
