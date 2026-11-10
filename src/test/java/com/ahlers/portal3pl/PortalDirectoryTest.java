@@ -37,7 +37,7 @@ class PortalDirectoryTest extends PortalTestBase {
 
     @AfterEach
     void removeTestRows() {
-        inContext("DELETE FROM dbo.depositor_warehouse WHERE warehouse_id LIKE 'QA-%'");
+        jdbc.sql("DELETE FROM dbo.user_warehouse_access WHERE warehouse_id LIKE 'QA-%'").update();
         inContext("DELETE FROM dbo.warehouse WHERE warehouse_id LIKE 'QA-%'");
         // Поклажедатели под RLS: обычным запросом чужие строки не удалить,
         // убираем тем же способом, каким их заводит портал
@@ -65,17 +65,24 @@ class PortalDirectoryTest extends PortalTestBase {
         assertEquals("Склад проверки 2", card.get("name"));
         assertEquals(WAREHOUSE, card.get("warehouseId"));
 
-        // Поклажедателю выдан список складов (V20), поэтому новый склад
-        // появится у него в документах только после выдачи доступа —
-        // проверяем именно это, а не «виден всем подряд».
+        // Склады выдаются человеку (V110). С «все склады» новый склад
+        // доступен сам; со списком — только после выдачи. Проверяем оба,
+        // а не «виден всем подряд». Как было, вернёт PersonalSettings.
+        assertTrue(warehouseCodes().contains(WAREHOUSE), "«все склады» — новый склад доступен сам");
+        String user = userId(USER);
+        jdbc.sql("UPDATE dbo.app_user SET all_warehouses = false WHERE user_id = :id::uuid")
+                .param("id", user).update();
         assertFalse(warehouseCodes().contains(WAREHOUSE), "без выданного доступа склада не видно");
-        inContext("INSERT INTO dbo.depositor_warehouse (depositor_id, warehouse_id)"
-                + " SELECT dbo.current_depositor_id(), '" + WAREHOUSE + "'");
+        jdbc.sql("INSERT INTO dbo.user_warehouse_access (user_id, warehouse_id) VALUES (:id::uuid, :w)")
+                .param("id", user).param("w", WAREHOUSE).update();
         assertTrue(warehouseCodes().contains(WAREHOUSE));
         directory.setWarehouseActive(admin, WAREHOUSE, false);
         assertFalse(warehouseCodes().contains(WAREHOUSE), "архивный склад в документах не предлагается");
 
-        inContext("DELETE FROM dbo.depositor_warehouse WHERE warehouse_id = '" + WAREHOUSE + "'");
+        // выданный людям склад удалить нельзя — сперва забрать доступ
+        expectRejection(409, () -> directory.deleteWarehouse(admin, WAREHOUSE));
+        jdbc.sql("DELETE FROM dbo.user_warehouse_access WHERE warehouse_id = :w")
+                .param("w", WAREHOUSE).update();
         directory.deleteWarehouse(admin, WAREHOUSE);
         assertTrue(directory.warehouses(admin).stream()
                 .noneMatch(w -> WAREHOUSE.equals(w.get("warehouseId"))));

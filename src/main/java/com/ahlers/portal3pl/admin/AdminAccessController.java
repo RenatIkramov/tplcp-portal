@@ -29,45 +29,17 @@ public class AdminAccessController {
         this.session = session;
     }
 
-    public record Warehouses(List<String> warehouseIds) {
-    }
-
     /** Все склады портала — для галочек. */
     @GetMapping("/warehouses")
     public List<Map<String, Object>> warehouses(HttpServletRequest request) {
         return access.warehouses(actor(request));
     }
 
-    /* ---- склады кладовщика ---- */
+    /* ---- склады пользователя (сохраняет карточка — PUT /users/{id}/profile) ---- */
 
     @GetMapping("/users/{userId}/warehouses")
     public List<String> ofUser(@PathVariable String userId, HttpServletRequest request) {
         return access.warehousesOfUser(actor(request), userId);
-    }
-
-    @PutMapping("/users/{userId}/warehouses")
-    public List<String> saveOfUser(@PathVariable String userId, @RequestBody Warehouses body,
-                                    HttpServletRequest request) {
-        return access.saveWarehousesOfUser(actor(request), userId, body.warehouseIds());
-    }
-
-    /* ---- склады поклажедателя ---- */
-
-    @GetMapping("/depositor-access")
-    public List<Map<String, Object>> depositorAccess(HttpServletRequest request) {
-        return access.depositorAccess(actor(request));
-    }
-
-    @GetMapping("/depositors/{depositorId}/warehouses")
-    public List<String> ofDepositor(@PathVariable String depositorId, HttpServletRequest request) {
-        return access.warehousesOfDepositor(actor(request), depositorId);
-    }
-
-    @PutMapping("/depositors/{depositorId}/warehouses")
-    public List<Map<String, Object>> saveOfDepositor(@PathVariable String depositorId,
-                                                      @RequestBody Warehouses body,
-                                                      HttpServletRequest request) {
-        return access.saveWarehousesOfDepositor(actor(request), depositorId, body.warehouseIds());
     }
 
     /* ---- настройки поклажедателя ---- */

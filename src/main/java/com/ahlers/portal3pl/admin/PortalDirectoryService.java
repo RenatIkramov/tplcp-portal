@@ -170,7 +170,6 @@ public class PortalDirectoryService {
         addUsage(where, usage.get("orders"), "error.usage.orders");
         addUsage(where, usage.get("transfers"), "error.usage.transfers");
         addUsage(where, usage.get("stockRows"), "error.usage.stock");
-        addUsage(where, usage.get("depositors"), "error.usage.depositor_access");
         addUsage(where, usage.get("staff"), "error.usage.staff_access");
         requireUnused(where, "error.warehouse.in_use");
 

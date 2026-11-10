@@ -649,36 +649,6 @@
      загрузки файлов — часть кнопок добавляют модули. -->
 <div class="admin-subtabs" id="adminGroupTabs"></div>
 <div class="admin-subtabs admin-subtabs-2" id="adminSubTabs"></div>
-<!-- Доступы менеджеров -->
-<div class="admin-sub active" id="admin-sub-access">
-<div data-i18n="admin.title.assigning_depositors_to_managers" class="section-title" style="margin-top:0;">Назначение поклажедателей менеджерам</div>
-<div class="table-card">
-<table>
-<thead><tr><th data-i18n="admin.column.manager">Менеджер</th><th data-i18n="admin.column.accessible_depositors">Доступные поклажедатели</th></tr></thead>
-<tbody id="adminAccessBody"></tbody>
-</table>
-</div>
-</div>
-<!-- Доступы поклажедателей -->
-<div class="admin-sub" id="admin-sub-depositor-access">
-<div data-i18n="admin.title.warehouses_available_to_depositors" class="section-title" style="margin-top:0;">Доступные склады для поклажедателей</div>
-<div class="table-card">
-<table>
-<thead><tr><th data-i18n="admin.column.depositor">Поклажедатель</th><th data-i18n="admin.column.accessible_warehouses">Доступные склады</th><th></th></tr></thead>
-<tbody id="adminDepositorAccessBody"></tbody>
-</table>
-</div>
-</div>
-<!-- Доступы сотрудников склада -->
-<div class="admin-sub" id="admin-sub-staff-access">
-<div data-i18n="admin.title.warehouses_and_depositors_availabl" class="section-title" style="margin-top:0;">Доступные склады и поклажедатели для складских сотрудников</div>
-<div class="table-card">
-<table>
-<thead><tr><th data-i18n="admin.column.employee">Сотрудник</th><th data-i18n="admin.column.accessible_warehouses">Доступные склады</th><th data-i18n="admin.column.accessible_depositors">Доступные поклажедатели</th></tr></thead>
-<tbody id="adminStaffAccessBody"></tbody>
-</table>
-</div>
-</div>
 <!-- Ошибки интеграции -->
 <div class="admin-sub" id="admin-sub-integration">
 <div class="section-title" data-i18n="admin.title.integration_message_errors_portal" style="margin-top:0;">Ошибки интеграционных сообщений (портал ↔ ArtWMS)</div>
@@ -1282,14 +1252,9 @@
 ================================================================================ -->
 <script src="js/portal/admin.js"></script>
 
-<!-- ============== ЭТАП 5в: экраны доступов режима администрирования ==============
-     Три экрана прототипа начинают работать от базы портала:
-       «Доступы»              — какие поклажедатели доступны менеджеру,
-       «Доступы сотрудников»  — на каких складах работает кладовщик,
-       «Склады поклажедателей»— где поклажедатель хранит товар.
-     Все три открываются на том же экране карточки, что и пользователь.
-================================================================================ -->
-<script src="js/portal/access.js"></script>
+<!-- Доступ человека — поклажедатели и склады — ведёт карточка пользователя
+     (admin.js, V110). Экраны «Доступы менеджеров» и «Доступы сотрудников
+     склада» убраны, склады у поклажедателя больше не выдаются. -->
 
 <!-- ===== Списки «Товары» и «Упаковки» =====
      Страница упаковок с сервера, отметка архивных товаров, кнопка

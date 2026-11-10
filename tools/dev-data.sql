@@ -81,13 +81,6 @@ INSERT INTO dbo.warehouse (warehouse_id, code, name, address, responsible, phone
 INSERT INTO dbo.warehouse (warehouse_id, code, name, address, responsible, phone, email, is_active, area_m2, work_hours) VALUES ('WH-KGD', 'WH-KGD', 'Склад Караганда', 'г. Караганда, ул. Складская, 14', 'Ахметова С.Т.', '8 701 442 17 63', 's.akhmetova@ahlers.com', 'true', NULL, NULL) ON CONFLICT DO NOTHING;
 
 -- ---------------------------------------------------------------------
--- depositor_warehouse — склады поклажедателей
--- ---------------------------------------------------------------------
-INSERT INTO dbo.depositor_warehouse (depositor_id, warehouse_id) VALUES ('fb2f8613-8a9a-461e-aa56-92d8d25ec5b5', 'WH-ALA') ON CONFLICT DO NOTHING;
-INSERT INTO dbo.depositor_warehouse (depositor_id, warehouse_id) VALUES ('a57ede5e-edea-4615-bd2c-da30642d82fb', 'WH-ALA') ON CONFLICT DO NOTHING;
-INSERT INTO dbo.depositor_warehouse (depositor_id, warehouse_id) VALUES ('a57ede5e-edea-4615-bd2c-da30642d82fb', 'WH-KGD') ON CONFLICT DO NOTHING;
-
--- ---------------------------------------------------------------------
 -- depositor_settings — настройки поклажедателей
 -- ---------------------------------------------------------------------
 INSERT INTO dbo.depositor_settings (depositor_id, hide_transfers_tab) VALUES ('a57ede5e-edea-4615-bd2c-da30642d82fb', 'false') ON CONFLICT DO NOTHING;
@@ -164,6 +157,25 @@ INSERT INTO dbo.user_depositor_access (id, user_id, depositor_id) VALUES ('101',
 -- user_warehouse_access — доступы к складам
 -- ---------------------------------------------------------------------
 INSERT INTO dbo.user_warehouse_access (id, user_id, warehouse_id) VALUES ('509', '84062747-661c-446f-aaf7-d6efa18e59bd', 'WH-ALA') ON CONFLICT DO NOTHING;
+
+-- ---------------------------------------------------------------------
+-- склады и «все» у людей (V110): склады выдаются человеку, а не
+-- поклажедателю. Клиенты видят склады своего поклажедателя — как было
+-- до V110: «Рога и Копыта» — оба, «Мол-реки» — Алматы.
+-- ---------------------------------------------------------------------
+INSERT INTO dbo.user_warehouse_access (user_id, warehouse_id)
+SELECT u.user_id, w.warehouse_id
+  FROM dbo.app_user u
+  JOIN (VALUES ('client@roga-kopyta.kz', 'WH-ALA'), ('client@roga-kopyta.kz', 'WH-KGD'),
+               ('blocked@roga-kopyta.kz', 'WH-ALA'), ('blocked@roga-kopyta.kz', 'WH-KGD'),
+               ('client@mol-reki.kz', 'WH-ALA')) AS w(login, warehouse_id) ON w.login = u.login
+ON CONFLICT (user_id, warehouse_id) DO NOTHING;
+UPDATE dbo.app_user SET all_warehouses = false
+ WHERE login IN ('client@roga-kopyta.kz', 'blocked@roga-kopyta.kz', 'client@mol-reki.kz',
+                 'warehouse@ahlers.com');
+UPDATE dbo.app_user u SET all_depositors = true
+  FROM dbo.enum_user_role r
+ WHERE r.id = u.role_id AND r.code IN ('admin', 'staff');
 
 -- ---------------------------------------------------------------------
 -- supplier — поставщики

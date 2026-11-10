@@ -159,7 +159,6 @@
     safely('таблицы', () => PORTAL.tables.redrawAll());
     ['renderSuppliers', 'renderConsignees', 'renderReports',
      'renderBillingServices', 'renderBillingInvoices', 'renderAdminUsers',
-     'renderAdminAccess', 'renderAdminDepositorAccess', 'renderAdminStaffAccess',
      'renderEnumValues', 'renderDepositorsDir', 'renderWarehousesDir',
      'renderReportsConfigTable', 'renderReportRows',
      'populateReportsConfigDepositorFilter'

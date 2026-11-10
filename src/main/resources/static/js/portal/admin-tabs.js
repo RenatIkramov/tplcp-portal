@@ -49,8 +49,6 @@
     // и поступлений переехали сюда из «Общих справочников».
     {id: 'enumValues', labelKey: 'admin.button.enums',
      subs: ['enumValues']},
-    {id: 'accesses', labelKey: 'admin.button.accesses',
-     subs: ['access', 'depositor-access', 'staff-access']},
     {id: 'errors', labelKey: 'admin.button.errors',
      subs: ['integration', 'excel']},
     {id: 'reports', labelKey: 'admin.button.report_settings',
@@ -73,9 +71,6 @@
     'users':            'references.button.users',
     'depositorsDir':    'references.button.depositors',
     'languages':        'references.button.languages',
-    'access':           'admin.button.manager_access',
-    'depositor-access': 'admin.button.depositor_access',
-    'staff-access':     'admin.button.warehouse_staff_access',
     'integration':      'admin.button.integration_errors',
     'excel':            'admin.button.excel_import_errors',
     'reports-config':   'admin.button.report_settings',

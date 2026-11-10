@@ -143,14 +143,16 @@ class PasswordTest extends PortalTestBase {
                 .filter(u -> USER.equals(u.get("login")))
                 .findFirst()
                 .orElseThrow();
+        // Зону доступа складывает экран из этих полей (V110), база отдаёт данные
         assertEquals("depositor", client.get("roleCode"));
-        assertEquals("ТОО «Рога и Копыта»", client.get("scope"));
+        assertEquals(depositorOrgName(USER, DEPOSITOR), client.get("depositorNames"));
+        assertEquals(Boolean.FALSE, client.get("allDepositors"), "у поклажедателя «все» не бывает");
 
         Map<String, Object> manager = items.stream()
                 .filter(u -> "n.nazarbayev@ahlers.com".equals(u.get("login")))
                 .findFirst()
                 .orElseThrow();
-        assertTrue(String.valueOf(manager.get("scope")).contains(","),
+        assertTrue(String.valueOf(manager.get("depositorNames")).contains(","),
                 "у менеджера в зоне два поклажедателя");
     }
 

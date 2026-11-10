@@ -32,17 +32,16 @@
   // подвкладка перерисовывается целиком, и снятые на другой подвкладке
   // галочки иначе потерялись бы при переключении.
   /**
-   * @type {{depositorId: string | null, depositor: DepositorAccessRow | null, tab: string,
-   *         object: string, group: string | null, warehouses: string[], settings: DepositorSettings,
+   * @type {{depositorId: string | null, tab: string,
+   *         object: string, group: string | null, settings: DepositorSettings,
    *         columns: DepositorColumnRow[], draft: Record<string, boolean>,
    *         defaults: Record<string, boolean>}}
    */
   const state = {
-    depositorId: null, depositor: null,
+    depositorId: null,
     tab: 'sections',          // sections | fields | labels
     object: 'sku',            // объект на вкладке полей
     group: null,              // подвкладка карточки товара
-    warehouses: [],           // выданные склады
     settings: {hideTransfersTab: false, priceInReceipts: false, priceInOrders: false},
     columns: [],              // строки admin_depositor_columns по ВСЕМ таблицам
     // Правки до сохранения. Ключ — «таблица.колонка»: одно имя колонки
@@ -73,35 +72,9 @@
 
   /* ================== Вкладки карточки ================== */
 
-  function tabs(){
-    const button = (id, textKey) =>
-      '<button class="admin-subtab-btn' + (state.tab === id ? ' active' : '') + '"'
-      + ' type="button" data-dep-tab="' + id + '">' + esc(T_(textKey)) + '</button>';
-    return '<div class="admin-subtabs" id="depVisTabs">'
-      + button('sections', 'admin.tab.sections_and_warehouses')
-      + button('fields', 'admin.tab.fields')
-      // Переименование полей переехало сюда из отдельного раздела
-      // администрирования: настройка одного клиента должна лежать
-      // в одном месте.
-      + button('labels', 'admin.button.custom_field_names')
-      + '</div>';
-  }
+  /* ================== Вкладка «Разделы» ================== */
 
-  /* ================== Вкладка «Разделы и склады» ================== */
-
-  function warehousesAndSections(){
-    const warehouseList = (DEPVIS.warehouseList || []).map(w => ({
-      id: w.warehouseId, name: w.name, address: w.address
-    }));
-    const issued = new Set(state.warehouses || []);
-    const warehouseRow = x =>
-      '<label style="display:flex;align-items:center;gap:8px;font-size:13.5px;'
-      + 'padding:9px 0;border-bottom:1px solid var(--line);">'
-      + '<input type="checkbox" data-warehouse-id="' + esc(x.id) + '"'
-      + (issued.has(x.id) ? ' checked' : '') + '> ' + esc(x.name)
-      + (x.address ? ' <span style="color:var(--muted);">· ' + esc(x.address) + '</span>' : '')
-      + '</label>';
-
+  function sections(){
     return ''
       + '<div class="section-title" style="margin-top:0;">' + esc(T_('admin.title.sections'))
       + '</div>'
@@ -132,16 +105,6 @@
       + '    <input type="checkbox" id="depVisPriceOrders"'
       + (state.settings.priceInOrders ? ' checked' : '') + '> '
       + esc(T_('admin.label.price_in_orders')) + '</label>'
-      + '</div>'
-      + '<div class="section-title">'
-      + esc(T_('admin.title.warehouses_available_to_depositors')) + '</div>'
-      + '<div class="table-card" style="padding:18px 20px;">'
-      + '  <div class="hint" style="margin:-4px 0 10px;">'
-      + esc(T_('admin.hint.depositor_warehouses')) + '</div>'
-      + (warehouseList.length
-          ? warehouseList.map(warehouseRow).join('')
-          : '<div style="color:var(--muted);font-size:13.5px;">'
-            + esc(T_('common.text.list_is_empty')) + '</div>')
       + '</div>';
   }
 
@@ -342,29 +305,21 @@
     + '  <button class="btn ghost" type="button" data-dep-cancel></button>'
     + '</div>';
 
+  /** Куда рисовать: тело карточки поклажедателя (portal-dir.js). */
+  /** @type {HTMLElement | null} */
+  let host = null;
+
   function render(){
-    const el = document.getElementById('adminUserEditContent');
+    const el = host;
     if (!el) return;
-    const d = state.depositor;
     // Вкладка наименований полей сохраняет каждую правку сразу, своим
     // окном: общая кнопка «Сохранить» на ней сохраняла бы пустоту,
     // а человек решил бы, что она сохранила названия.
     const labels = state.tab === 'labels';
     const body = labels
       ? (PORTAL.fieldLabels ? PORTAL.fieldLabels.html() : '')
-      : (state.tab === 'fields' ? fields() : warehousesAndSections());
-    el.innerHTML = ''
-      + '<div class="detail-head"><div>'
-      + '  <h2>' + esc((d && d.orgName) || '') + '</h2>'
-      + '  <div class="meta">' + esc(T_('admin.column.depositor')) + ': '
-      + esc((d && d.code) || '') + '</div></div></div>'
-      + tabs()
-      + body
-      + (labels ? '' : actions);
-
-    el.querySelectorAll('[data-dep-tab]').forEach(b => {
-      b.onclick = () => { remember(); state.tab = b.getAttribute('data-dep-tab'); render(); };
-    });
+      : (state.tab === 'fields' ? fields() : sections());
+    el.innerHTML = body + (labels ? '' : actions);
     el.querySelectorAll('[data-dep-group]').forEach(b => {
       b.onclick = () => { remember(); state.group = b.getAttribute('data-dep-group'); render(); };
     });
@@ -398,7 +353,8 @@
     save.onclick = send;
     const cancel = el.querySelector('[data-dep-cancel]');
     cancel.textContent = T_('common.button.cancel');
-    cancel.onclick = () => { showView('admin'); showAdminSub('depositor-access'); };
+    // «Отмена» — вернуть как сохранено, оставаясь на вкладке
+    cancel.onclick = () => reread();
 
   }
 
@@ -410,7 +366,7 @@
    * при переходе на другую — человек бы решил, что сохранил.
    */
   function remember(){
-    const el = document.getElementById('adminUserEditContent');
+    const el = host;
     if (!el) return;
     el.querySelectorAll('input[data-column-id]').forEach(cb => {
       if (cb.disabled) return;          // обязательные не трогаем
@@ -418,10 +374,6 @@
       if (cb.getAttribute('data-field') === 'default') state.defaults[key] = cb.checked;
       else state.draft[key] = cb.checked;
     });
-    /** @type {HTMLInputElement[]} */
-    const warehouseList = [...el.querySelectorAll('input[data-warehouse-id]')];
-    if (warehouseList.length) state.warehouses = warehouseList.filter(c => c.checked)
-      .map(c => c.getAttribute('data-warehouse-id') || '');
     const transfers = el.querySelector('#depVisTransfers');
     if (transfers) state.settings.hideTransfersTab = !transfers.checked;
     const priceReceipts = el.querySelector('#depVisPriceReceipts');
@@ -433,11 +385,8 @@
   async function send(){
     remember();
     try {
-      // Склады и настройку разделов отправляем всегда: их видно на одной
-      // вкладке, и человек вправе рассчитывать, что кнопка сохраняет всё.
-      DEPVIS.access = await api('PUT', '/api/admin/depositors/'
-        + encodeURIComponent(state.depositorId || '') + '/warehouses',
-        {warehouseIds: state.warehouses});
+      // Настройку разделов отправляем всегда: её видно на первой вкладке,
+      // и человек вправе рассчитывать, что кнопка сохраняет всё.
       await api('PUT', '/api/admin/depositors/'
         + encodeURIComponent(state.depositorId || '') + '/settings',
         {hideTransfersTab: state.settings.hideTransfersTab,
@@ -475,90 +424,96 @@
         ? T_('admin.message.fields_updated')
         : T_('admin.message.settings_updated'));
 
-      if (typeof renderAdminDepositorAccess === 'function') renderAdminDepositorAccess();
       // правили текущего клиента — перечитываем раскладку и меню
       if (PORTAL.session && PORTAL.session.depositorId === state.depositorId){
         PORTAL.reloadAll();
       }
-      showView('admin');
-      showAdminSub('depositor-access');
+      await reread();
     } catch (e){
       say(e.message);
     }
   }
 
-  /* ================== Открытие ================== */
-
-  /** @type {{warehouseList: AdminWarehouse[], access: DepositorAccessRow[]}} */
-  const DEPVIS = {warehouseList: [], access: []};
-
-  window.portalOpenDepositorSettings = async function(depositorId){
-    const d = (DEPVIS.access || []).find(x => x.depositorId === depositorId);
-    state.depositorId = depositorId;
-    state.depositor = d || null;
-    state.tab = 'sections';
-    state.object = 'sku';
-    state.group = null;
-    state.draft = {};
-    state.defaults = {};
+  /** Перечитать сохранённое и нарисовать открытую вкладку заново. */
+  async function reread(){
+    const id = state.depositorId;
+    if (!id) return;
     try {
-      const [warehouseList, issued, prefs, columnList] = await Promise.all([
-        DEPVIS.warehouseList.length ? Promise.resolve(DEPVIS.warehouseList)
-                             : api('GET', '/api/admin/warehouses'),
-        api('GET', '/api/admin/depositors/' + encodeURIComponent(depositorId) + '/warehouses'),
-        api('GET', '/api/admin/depositors/' + encodeURIComponent(depositorId) + '/settings'),
-        // Без table — вся раскладка клиента разом, по всем двенадцати
-        // таблицам: вкладка настраивает не только товар.
-        api('GET', '/api/admin/depositor-columns?depositorId='
-            + encodeURIComponent(depositorId)),
-        // наименования полей — третья вкладка этой же карточки
-        PORTAL.fieldLabels ? PORTAL.fieldLabels.load(depositorId) : Promise.resolve()
-      ]);
-      DEPVIS.warehouseList = warehouseList || [];
-      state.warehouses = issued || [];
-      state.settings = prefs
-          || {hideTransfersTab: false, priceInReceipts: false, priceInOrders: false};
-      state.columns = columnList || [];
+      await load(id);
     } catch (e){
       say(e.message);
       return;
     }
     render();
-    PORTAL.setBack('adminUserEditBack', 'admin.button.back_to_depositor_access',
-        () => { showView('admin'); showAdminSub('depositor-access'); });
-    showView('admin-user-edit');
+  }
+
+  /* ================== Вкладки карточки поклажедателя ================== */
+
+  /*
+   * Настройки клиента — вкладки его карточки в «Общих справочниках»
+   * (portal-dir.js, 11.11.2026). Прежде это был отдельный экран из
+   * списка администрирования; список и группа вкладок убраны.
+   * Ряд вкладок рисует карточка, здесь — только содержимое.
+   */
+  const TABS = [
+    {id: 'sections', key: 'admin.tab.sections'},
+    {id: 'fields', key: 'admin.tab.fields'},
+    // переименование полей — тоже настройка одного клиента
+    {id: 'labels', key: 'admin.button.custom_field_names'}
+  ];
+
+  /** Прочитать настройки клиента заново — при открытии и после «Отмена» / «Сохранить». */
+  async function load(depositorId){
+    const [prefs, columnList] = await Promise.all([
+      api('GET', '/api/admin/depositors/' + encodeURIComponent(depositorId) + '/settings'),
+      // Без table — вся раскладка клиента разом, по всем двенадцати
+      // таблицам: вкладка настраивает не только товар.
+      api('GET', '/api/admin/depositor-columns?depositorId=' + encodeURIComponent(depositorId)),
+      PORTAL.fieldLabels ? PORTAL.fieldLabels.load(depositorId) : Promise.resolve()
+    ]);
+    state.depositorId = depositorId;
+    state.settings = prefs || {hideTransfersTab: false, priceInReceipts: false, priceInOrders: false};
+    state.columns = columnList || [];
+    state.draft = {};
+    state.defaults = {};
+  }
+
+  PORTAL.depositorSettings = {
+    TABS,
+
+    /**
+     * Показать вкладку настроек клиента в host. Тот же клиент — правки
+     * других вкладок сохраняются (remember), новый — читается с сервера.
+     */
+    async show(depositorId, tab, hostEl){
+      if (host && state.depositorId === depositorId) remember();
+      host = hostEl;
+      if (state.depositorId !== depositorId){
+        state.object = 'sku';
+        state.group = null;
+        try {
+          await load(depositorId);
+        } catch (e){
+          state.depositorId = null;
+          say(e.message);
+          return;
+        }
+      }
+      state.tab = tab;
+      render();
+    },
+
+    /** Уход на вкладку реквизитов: отмеченное не теряем. */
+    leave(){
+      if (host) remember();
+      host = null;
+    },
+
+    /** Открыли другую карточку — прежние правки не наследуются. */
+    forget(){
+      host = null;
+      state.depositorId = null;
+    }
   };
 
-  function install(){
-    // Строку в списке открывает уже наша карточка: прежняя показывала
-    // только склады, и две карточки на один экран не нужны.
-    window.portalOpenDepositorWarehouses = window.portalOpenDepositorSettings;
-    window.openAdminDepositorAccessEdit = window.portalOpenDepositorSettings;
-
-    // Экран администрирования: склады и доступы по всем клиентам.
-    PORTAL.onSession(async () => {
-      if (!PORTAL.isAdmin()){
-        DEPVIS.warehouseList = [];
-        DEPVIS.access = [];
-        return;
-      }
-      try {
-        const [warehouseList, access] = await Promise.all([
-          api('GET', '/api/admin/warehouses'),
-          api('GET', '/api/admin/depositor-access')
-        ]);
-        DEPVIS.warehouseList = warehouseList || [];
-        DEPVIS.access = access || [];
-      } catch (e){
-        DEPVIS.warehouseList = [];
-        DEPVIS.access = [];
-      }
-    });
-  }
-
-  if (document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', install);
-  } else {
-    install();
-  }
 })();

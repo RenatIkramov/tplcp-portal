@@ -9,7 +9,6 @@ import com.ahlers.portal3pl.documents.DraftService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -127,27 +126,27 @@ class DraftTest extends PortalTestBase {
         createdOrders.add(order);
     }
 
-    /** Склад у поклажедателя один — новый черновик получает его сам. */
+    /**
+     * Склад у человека один — новый черновик получает его сам. Склады
+     * выдаются человеку (V110); как было, вернёт PersonalSettings.
+     */
     @Test
     void theOnlyWarehouseIsFilledIn() {
-        String depositor = depositorId(USER, DEPOSITOR);
-        List<String> others = new ArrayList<>(new TransactionTemplate(txManager).execute(tx -> jdbc.sql(
-                        "SELECT warehouse_id FROM dbo.depositor_warehouse WHERE depositor_id = :d::uuid"
-                                + " AND warehouse_id <> 'WH-ALA'")
-                .param("d", depositor).query(String.class).list()));
-        assertFalse(others.isEmpty(), "для проверки у поклажедателя должно быть несколько складов");
-        inContext("DELETE FROM dbo.depositor_warehouse WHERE depositor_id = '" + depositor
-                + "'::uuid AND warehouse_id <> 'WH-ALA'");
-        try {
-            signIn();
-            Map<String, Object> card = draft(Map.of());
-            assertEquals("WH-ALA", header(card).get("warehouseId"));
-        } finally {
-            for (String w : others) {
-                inContext("INSERT INTO dbo.depositor_warehouse (depositor_id, warehouse_id) VALUES ('"
-                        + depositor + "'::uuid, '" + w + "') ON CONFLICT DO NOTHING");
-            }
-        }
+        int active = jdbc.sql("SELECT count(*)::int FROM dbo.warehouse WHERE is_active")
+                .query(Integer.class).single();
+        assertTrue(active > 1, "для проверки в портале должно быть несколько складов");
+        String user = userId(USER);
+        jdbc.sql("UPDATE dbo.app_user SET all_warehouses = false WHERE user_id = :id::uuid")
+                .param("id", user).update();
+        jdbc.sql("DELETE FROM dbo.user_warehouse_access WHERE user_id = :id::uuid")
+                .param("id", user).update();
+        jdbc.sql("INSERT INTO dbo.user_warehouse_access (user_id, warehouse_id) VALUES (:id::uuid, 'WH-ALA')")
+                .param("id", user).update();
+        signIn();
+        assertEquals("WH-ALA", header(draft(Map.of())).get("warehouseId"));
+
+        jdbc.sql("UPDATE dbo.app_user SET all_warehouses = true WHERE user_id = :id::uuid")
+                .param("id", user).update();
         signIn();
         assertNull(header(draft(Map.of())).get("warehouseId"), "складов несколько — человек выбирает сам");
     }

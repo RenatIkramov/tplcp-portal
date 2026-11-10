@@ -246,8 +246,11 @@
      2. Справочник «Пользователи» из базы портала
      ====================================================================== */
 
-  /** @type {{users: AdminUser[], roles: AdminRole[], depositors: AdminDepositor[], error: string | null}} */
-  const admin = {users: [], roles: [], depositors: [], error: null};
+  /**
+   * @type {{users: AdminUser[], roles: AdminRole[], depositors: AdminDepositor[],
+   *         warehouses: AdminWarehouse[], error: string | null}}
+   */
+  const admin = {users: [], roles: [], depositors: [], warehouses: [], error: null};
 
   async function loadUsers(){
     // Справочник пользователей видит только администратор.
@@ -258,14 +261,16 @@
       return;
     }
     try {
-      const [list, roles, depositors] = await Promise.all([
+      const [list, roles, depositors, warehouses] = await Promise.all([
         api('GET', '/api/admin/users'),
         api('GET', '/api/admin/roles'),
-        api('GET', '/api/admin/depositors')
+        api('GET', '/api/admin/depositors'),
+        api('GET', '/api/admin/warehouses')
       ]);
       admin.users = list;
       admin.roles = roles;
       admin.depositors = depositors;
+      admin.warehouses = warehouses;
       admin.error = null;
     } catch (e){
       admin.users = [];
@@ -298,7 +303,7 @@
       return '<tr onclick="portalOpenAdminUser(\'' + u.userId + '\')">'
         + '<td><strong>' + esc(u.fullName) + '</strong></td>'
         + '<td>' + esc(u.roleName || u.roleCode) + '</td>'
-        + '<td>' + esc(u.scope) + '</td>'
+        + '<td>' + esc(scopeOf(u)) + '</td>'
         + '<td>' + esc(u.login) + '</td>'
         + '<td>' + esc(u.depositorCodes || '—') + '</td>'
         + '<td>' + stateBadge + '</td>'
@@ -326,30 +331,95 @@
         + (r.code === isSelected ? ' selected' : '') + '>' + esc(r.name) + '</option>').join('')
     + '</select></div></div>';
 
-  /**
-   * Галочки доступных поклажедателей. Для складского сотрудника их не
-   * показываем: ему доступ выдаётся по складам, это отдельный экран.
+  /*
+   * Доступ человека (V110): поклажедатели и склады.
+   *
+   * Роль «поклажедатель» работает за одну организацию — выбор одного
+   * варианта, флажка «все» у неё нет; правило проверяет и сервер.
+   * Остальным — флажок «все поклажедатели» и галочки. Склады — у всех:
+   * флажок «все склады» и галочки. Пока флажок «все» стоит, галочки
+   * серые, но не стираются: снял флажок — вернулся прежний выбор.
    */
-  function accessBlock(granted){
-    const chosen = new Set(granted || []);
+  const rowStyle = 'display:flex;align-items:center;gap:8px;font-size:13.5px;'
+    + 'padding:8px 0;border-bottom:1px solid var(--line);';
+
+  /** @param {{role: string, allDepositors: boolean, depositorIds: string[]}} a */
+  function depositorBlock(a){
+    const chosen = new Set(a.depositorIds || []);
+    const one = a.role === 'depositor';
+    const all = !one && a.allDepositors;
+    const list = admin.depositors.length
+      ? admin.depositors.map(d => '<label style="' + rowStyle + '">'
+          + '<input type="' + (one ? 'radio' : 'checkbox') + '" name="auDepositor" data-depositor-id="'
+          + esc(d.depositorId) + '"' + (chosen.has(d.depositorId) ? ' checked' : '')
+          + (all ? ' disabled' : '') + '> '
+          + esc(d.orgName) + ' <span style="color:var(--muted);">· ' + esc(d.code) + '</span></label>').join('')
+      : '<div style="color:var(--muted);font-size:13.5px;">' + T('admin.text.no_depositors_have_been_created_ye') + '</div>';
     return '<div class="section-title">' + T('admin.text.accessible_depositors') + '</div>'
       + '<div class="table-card" style="padding:18px 20px;" id="auDepositors">'
-      + '  <div class="hint" style="margin:-4px 0 10px;">' + T('admin.hint.depositors_of_a_user') + '</div>'
-      + (admin.depositors.length
-          ? admin.depositors.map(d =>
-              '<label style="display:flex;align-items:center;gap:8px;font-size:13.5px;'
-              + 'padding:8px 0;border-bottom:1px solid var(--line);">'
-              + '<input type="checkbox" data-depositor-id="' + d.depositorId + '"'
-              + (chosen.has(d.depositorId) ? ' checked' : '') + '> '
-              + esc(d.orgName) + ' <span style="color:var(--muted);">· '
-              + esc(d.code) + '</span></label>').join('')
-          : '<div style="color:var(--muted);font-size:13.5px;">' + T('admin.text.no_depositors_have_been_created_ye') + '</div>')
+      + '  <div class="hint" style="margin:-4px 0 10px;">'
+      + T(one ? 'admin.hint.depositor_role_one' : 'admin.hint.depositors_of_a_user') + '</div>'
+      + (one ? '' : checkbox('auAllDepositors', T('admin.label.all_depositors'), all)
+          + '<div class="hint" style="margin:-6px 0 6px;">' + T('admin.hint.all_depositors') + '</div>')
+      + list
       + '</div>';
   }
 
-  function checkedDepositors(){
-    return [...document.querySelectorAll('#auDepositors input[data-depositor-id]:checked')]
-      .map(cb => cb.getAttribute('data-depositor-id'));
+  /** @param {{allWarehouses: boolean, warehouseIds: string[]}} a */
+  function warehouseBlock(a){
+    const chosen = new Set(a.warehouseIds || []);
+    return '<div class="section-title">' + T('admin.title.available_warehouses') + '</div>'
+      + '<div class="table-card" style="padding:18px 20px;" id="auWarehouses">'
+      + '  <div class="hint" style="margin:-4px 0 10px;">' + T('admin.hint.warehouses_of_a_user') + '</div>'
+      + checkbox('auAllWarehouses', T('admin.label.all_warehouses'), a.allWarehouses)
+      + admin.warehouses.map(w => '<label style="' + rowStyle + '">'
+          + '<input type="checkbox" data-warehouse-id="' + esc(w.warehouseId) + '"'
+          + (chosen.has(w.warehouseId) ? ' checked' : '') + (a.allWarehouses ? ' disabled' : '') + '> '
+          + esc(w.name) + ' <span style="color:var(--muted);">· ' + esc(w.code) + '</span></label>').join('')
+      + '</div>';
+  }
+
+  /** Что отмечено сейчас — чтобы перерисовка при смене роли ничего не потеряла. */
+  function accessOnScreen(){
+    const checked = sel => [...document.querySelectorAll(sel)]
+      .filter(x => /** @type {HTMLInputElement} */ (x).checked);
+    return {
+      role: byId('auRole') ? /** @type {HTMLSelectElement} */ (byId('auRole')).value : 'depositor',
+      allDepositors: /** @type {HTMLInputElement | null} */ (byId('auAllDepositors'))?.checked === true,
+      depositorIds: checked('#auDepositors input[data-depositor-id]')
+        .map(cb => cb.getAttribute('data-depositor-id') || ''),
+      allWarehouses: /** @type {HTMLInputElement | null} */ (byId('auAllWarehouses'))?.checked === true,
+      warehouseIds: checked('#auWarehouses input[data-warehouse-id]')
+        .map(cb => cb.getAttribute('data-warehouse-id') || '')
+    };
+  }
+
+  /** Блоки доступа в #auAccess и их поведение. */
+  function drawAccess(/** @type {ReturnType<typeof accessOnScreen>} */ a){
+    const host = byId('auAccess');
+    if (!host) return;
+    // У поклажедателя — одна организация: из нескольких отмеченных
+    // оставляем первую, чтобы выбор одного варианта не показал пусто.
+    if (a.role === 'depositor' && a.depositorIds.length > 1) a.depositorIds = a.depositorIds.slice(0, 1);
+    host.innerHTML = depositorBlock(a) + warehouseBlock(a);
+    const all = (/** @type {string} */ flag, /** @type {string} */ boxes) => {
+      const f = /** @type {HTMLInputElement | null} */ (byId(flag));
+      if (!f) return;
+      f.onchange = () => document.querySelectorAll(boxes)
+        .forEach(x => { /** @type {HTMLInputElement} */ (x).disabled = f.checked; });
+    };
+    all('auAllDepositors', '#auDepositors input[data-depositor-id]');
+    all('auAllWarehouses', '#auWarehouses input[data-warehouse-id]');
+  }
+
+  /** Колонка «Организация / зона» списка пользователей — на языке человека. */
+  function scopeOf(/** @type {AdminUser} */ u){
+    if (u.roleCode === 'depositor') return u.depositorNames || u.organization || '—';
+    const deps = u.allDepositors ? T('admin.text.all_depositors')
+      : (u.depositorNames || T('admin.text.no_depositors_assigned'));
+    const whs = u.allWarehouses ? T('admin.text.all_warehouses')
+      : (u.warehouseNames || T('admin.text.no_warehouses_assigned'));
+    return deps + ' · ' + whs;
   }
 
   /**
@@ -365,13 +435,22 @@
     if (!el) return;
     const isSelf = !isNew && PORTAL.session && PORTAL.session.login === u.login;
 
-    // Какие поклажедатели уже выданы — спрашиваем отдельно, в списке их нет
+    // Какие поклажедатели и склады уже выданы — спрашиваем отдельно,
+    // в списке пользователей их нет. Новому: «все склады», как и в базе.
     /** @type {string[]} */
     let granted = [];
+    /** @type {string[]} */
+    let grantedWarehouses = [];
     if (!isNew){
-      try { granted = await api('GET', '/api/admin/users/' + encodeURIComponent(u.userId) + '/depositors'); }
-      catch (e){ granted = []; }
+      const id = encodeURIComponent(u.userId);
+      try {
+        [granted, grantedWarehouses] = await Promise.all([
+          api('GET', '/api/admin/users/' + id + '/depositors'),
+          api('GET', '/api/admin/users/' + id + '/warehouses')
+        ]);
+      } catch (e){ granted = []; grantedWarehouses = []; }
     }
+    const roleCode = isNew ? 'depositor' : u.roleCode;
 
     el.innerHTML = ''
       + '<div class="detail-head">'
@@ -396,7 +475,7 @@
       + input('auPosition', T('admin.text.position'), isNew ? '' : u.userPosition, T('admin.text.logistics_specialist'))
       + input('auOrganization', T('admin.text.organization'), isNew ? '' : u.organization, T('admin.placeholder.organization_example'))
       + input('auPhone', T('partners.label.phone'), isNew ? '' : u.phone, '+7 701 000 00 00')
-      + roleField(isNew ? 'depositor' : u.roleCode)
+      + roleField(roleCode)
       + (isNew ? '' : dataRow(T('admin.text.last_sign_in'),
             u.lastLoginAt ? PORTAL.dateTimeText(u.lastLoginAt) : T('common.text.never')))
       + (isNew ? '' : dataRow(T('admin.text.password_set'),
@@ -405,7 +484,7 @@
       + (isSelf ? '<div class="hint" style="margin:-6px 0 14px;">'
           + T('admin.hint.own_account') + '</div>' : '')
 
-      + accessBlock(granted)
+      + '<div id="auAccess"></div>'
 
       + '<div class="section-title">' + T('common.label.password') + '</div>'
       + '<div class="table-card" style="padding:18px 20px;">'
@@ -457,6 +536,11 @@
       // роль своей учётной записи не меняем — иначе можно потерять доступ
       if (isSelf) byId('auRole').disabled = true;
     }
+    drawAccess({role: roleCode, depositorIds: granted, warehouseIds: grantedWarehouses,
+                allDepositors: !isNew && u.allDepositors === true,
+                allWarehouses: isNew || u.allWarehouses !== false});
+    // Роль решает вид блока поклажедателей — перерисовываем сразу, с тем, что отмечено
+    byId('auRole').onchange = () => drawAccess(accessOnScreen());
     byId('adminGenPassword').onclick = () => { byId('adminNewPassword').value = generate(); };
     byId('adminSaveUser').onclick = () => isNew ? createUser() : saveCard(u);
     byId('adminCancelUser').onclick = () => { showTab('admin'); showAdminSub('users'); };
@@ -554,14 +638,18 @@
   const valueOf_ = id => (byId(id)?.value || '').trim();
 
   function card(){
+    const a = accessOnScreen();
     return {
       login: valueOf_('auLogin'),
       fullName: valueOf_('auFullName'),
-      roleCode: byId('auRole') ? byId('auRole').value : 'depositor',
+      roleCode: a.role,
       position: valueOf_('auPosition'),
       organization: valueOf_('auOrganization'),
       phone: valueOf_('auPhone'),
-      depositorIds: checkedDepositors()
+      depositorIds: a.depositorIds,
+      allDepositors: a.role !== 'depositor' && a.allDepositors,
+      allWarehouses: a.allWarehouses,
+      warehouseIds: a.warehouseIds
     };
   }
 

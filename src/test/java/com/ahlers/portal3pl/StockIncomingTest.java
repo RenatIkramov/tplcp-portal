@@ -160,14 +160,14 @@ class StockIncomingTest extends PortalTestBase {
      */
     private String[] pairWithoutStock() {
         String found = singleValue("""
-                SELECT s.code || '|' || dw.warehouse_id
+                SELECT s.code || '|' || w.warehouse_id
                   FROM dbo.sku s
-                  JOIN dbo.depositor_warehouse dw ON dw.depositor_id = s.depositor_id
+                  CROSS JOIN dbo.v_warehouses w
                  WHERE s.is_active
                    AND NOT EXISTS (SELECT 1 FROM dbo.stock st
                                     WHERE st.sku_id = s.sku_id
-                                      AND st.warehouse_id = dw.warehouse_id)
-                 ORDER BY s.code, dw.warehouse_id
+                                      AND st.warehouse_id = w.warehouse_id)
+                 ORDER BY s.code, w.warehouse_id
                  LIMIT 1
                 """);
         assertNotNull(found, "не нашлось товара, которого нет на одном из складов клиента");

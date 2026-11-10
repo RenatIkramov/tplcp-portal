@@ -92,8 +92,13 @@
     }
   };
 
-  /** @type {{dir: string | null, mode: string, id: string | null, row: CardRow | null, draft: CardRow}} */
-  const state = {dir: null, mode: 'view', id: null, row: null, draft: {}};
+  /**
+   * tab — вкладка карточки поклажедателя: «Реквизиты» (requisites) или
+   * настройки клиента из dep-visibility.js (sections, fields, labels).
+   * @type {{dir: string | null, mode: string, id: string | null, row: CardRow | null, draft: CardRow,
+   *         tab: string}}
+   */
+  const state = {dir: null, mode: 'view', id: null, row: null, draft: {}, tab: 'requisites'};
   PORTAL.portalDir = state;
 
   /**
@@ -131,6 +136,7 @@
       + '<button class="back-btn" onclick="portalDirBack()">' + T('portal.text.back_to_list') + '</button>'
       + '<div class="actions" id="portalDirActions"></div></div>'
       + '<div class="detail-head"><h2 id="portalDirTitle" style="margin:0 0 16px;"></h2></div>'
+      + '<div class="admin-subtabs" id="portalDirTabs" style="display:none;"></div>'
       + '<div id="portalDirBody" style="margin-top:16px;"></div>';
     anchor.parentNode.insertBefore(section, anchor.nextSibling);
   }
@@ -194,6 +200,28 @@
     }
     document.getElementById('portalDirActions').innerHTML = actions;
 
+    // Карточка поклажедателя — с вкладками настроек клиента. У нового
+    // (ещё не сохранён) настраивать некого; на время правки реквизитов
+    // вкладки прячутся — иначе неясно, что сохраняет какая кнопка.
+    const ds = PORTAL.depositorSettings;
+    const settings = state.dir === 'depositorsDir' && state.id && !editing && ds ? ds : null;
+    const tabsEl = /** @type {HTMLElement} */ (document.getElementById('portalDirTabs'));
+    if (!settings) state.tab = 'requisites';
+    tabsEl.style.display = settings ? '' : 'none';
+    tabsEl.innerHTML = settings
+      ? [{id: 'requisites', key: 'portal.tab.requisites'}].concat(settings.TABS)
+          .map(t => '<button class="admin-subtab-btn' + (t.id === state.tab ? ' active' : '') + '"'
+            + ' type="button" data-tab="' + t.id + '" onclick="portalDirTab(\'' + t.id + '\')">'
+            + esc(T(t.key)) + '</button>').join('')
+      : '';
+    const bodyEl = /** @type {HTMLElement} */ (document.getElementById('portalDirBody'));
+    if (settings && state.tab !== 'requisites'){
+      bodyEl.innerHTML = '';
+      showView('portaldir-detail');
+      settings.show(state.id || '', state.tab, bodyEl);
+      return;
+    }
+
     const fields = [];
     if (dir.idField){
       // идентификатор задаётся только при создании: по нему приходят
@@ -213,9 +241,16 @@
       html += '<div style="color:var(--muted); font-size:12px; margin-top:12px;">'
         + T('common.hint.required_fields_marked') + '</div>';
     }
-    document.getElementById('portalDirBody').innerHTML = html;
+    bodyEl.innerHTML = html;
     showView('portaldir-detail');
   }
+
+  /** Вкладка карточки поклажедателя. */
+  window.portalDirTab = function(tab){
+    if (state.tab !== 'requisites' && PORTAL.depositorSettings) PORTAL.depositorSettings.leave();
+    state.tab = tab;
+    render();
+  };
 
   window.portalDirBack = function(){
     // Организации оператора лежат в администрировании, остальные
@@ -224,6 +259,12 @@
     if (state.dir === 'operatorsDir'){
       showTab('admin');
       if (typeof showAdminSub === 'function') showAdminSub('operator');
+      return;
+    }
+    // Склады и поклажедатели — тоже в «Общих справочниках» администрирования
+    if (state.dir === 'warehousesDir' || state.dir === 'depositorsDir'){
+      showTab('admin');
+      showAdminSub(state.dir);
       return;
     }
     showTab('references');
@@ -235,6 +276,8 @@
       state.dir = dirName;
       state.mode = 'view';
       state.draft = {};
+      state.tab = 'requisites';
+      if (PORTAL.depositorSettings) PORTAL.depositorSettings.forget();
       state.row = await api('GET', DIRS[dirName].base + '/' + encodeURIComponent(id));
       state.id = id;
       render();
@@ -253,6 +296,8 @@
   };
 
   window.portalDirEdit = function(){
+    if (state.tab !== 'requisites' && PORTAL.depositorSettings) PORTAL.depositorSettings.leave();
+    state.tab = 'requisites';
     state.mode = 'edit';
     state.draft = {};
     render();

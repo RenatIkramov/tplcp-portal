@@ -49,17 +49,20 @@ public class AdminUserController {
     /** Создание пользователя. Пароль можно не присылать — портал придумает сам. */
     public record CreateRequest(String login, String fullName, String roleCode,
                                 String position, String organization, String phone,
-                                List<String> depositorIds, String password) {
+                                List<String> depositorIds, Boolean allDepositors,
+                                Boolean allWarehouses, List<String> warehouseIds,
+                                String password) {
     }
 
     @PostMapping
     public Map<String, Object> create(@RequestBody CreateRequest body, HttpServletRequest request) {
         return users.create(actor(request), new AdminUserService.Profile(
                 body.login(), body.fullName(), body.roleCode(), body.position(),
-                body.organization(), body.phone(), body.depositorIds()), body.password());
+                body.organization(), body.phone(), body.depositorIds(),
+                body.allDepositors(), body.allWarehouses(), body.warehouseIds()), body.password());
     }
 
-    /** Анкета, роль, логин и доступы к поклажедателям. Отдаёт список заново. */
+    /** Анкета, роль, логин и доступ — поклажедатели и склады. Отдаёт список заново. */
     @PutMapping("/{userId}/profile")
     public List<Map<String, Object>> saveProfile(@PathVariable String userId,
                                                   @RequestBody AdminUserService.Profile body,
@@ -71,17 +74,6 @@ public class AdminUserController {
     @GetMapping("/{userId}/depositors")
     public List<String> depositors(@PathVariable String userId, HttpServletRequest request) {
         return users.depositorsOfUser(actor(request), userId);
-    }
-
-    public record DepositorsRequest(List<String> depositorIds) {
-    }
-
-    /** Доступы к поклажедателям отдельно от анкеты — для экрана «Доступы». */
-    @PutMapping("/{userId}/depositors")
-    public List<String> saveDepositors(@PathVariable String userId,
-                                       @RequestBody DepositorsRequest body,
-                                       HttpServletRequest request) {
-        return users.saveDepositorsOfUser(actor(request), userId, body.depositorIds());
     }
 
     /** Пароль, заданный администратором, портал потребует сменить при входе. */

@@ -19,6 +19,10 @@ import org.springframework.stereotype.Component;
  * <p>
  * 3. Третий аргумент set_config = true означает is_local: значение живёт
  *    до конца транзакции и не остаётся в соединении, вернувшемся в пул.
+ * <p>
+ * Рядом с поклажедателем ставится логин вошедшего — app.user_login (V110):
+ * по нему база закрывает склады, не выданные человеку (запасы,
+ * документы, список складов).
  */
 @Component
 public class DepositorScope {
@@ -39,10 +43,11 @@ public class DepositorScope {
             // §6.4: пока поклажедатель не выбран, никакие данные не отдаются
             throw Fail.conflict("error.depositor.not_chosen");
         }
-        jdbc.sql("SELECT set_config('app.depositor_id', :id, true)")
+        jdbc.sql("SELECT set_config('app.depositor_id', :id, true), set_config('app.user_login', :login, true)")
                 .param("id", depositorId)
-                .query(String.class)
-                .single();
+                .param("login", login)
+                .query()
+                .listOfRows();
     }
 
     /** Поклажедатель текущего запроса. Доступен после apply(). */

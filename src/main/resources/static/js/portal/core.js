@@ -481,8 +481,7 @@
     PORTAL.lastView = tab;
     window.showView(tab);
     if (tab === 'admin'){
-      ['renderAdminAccess', 'renderAdminDepositorAccess', 'renderAdminStaffAccess',
-       'populateReportsConfigDepositorFilter', 'renderReportsConfigTable']
+      ['populateReportsConfigDepositorFilter', 'renderReportsConfigTable']
         .forEach(fn => { if (typeof window[fn] === 'function') window[fn](); });
     }
     if (tab === 'references') window.showReferencesSub(referencesSub);

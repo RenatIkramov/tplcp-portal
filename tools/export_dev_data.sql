@@ -68,7 +68,7 @@ LANGUAGE plpgsql AS $all$
 DECLARE
   v_table text;
   v_order text[] := ARRAY[
-    'operator', 'depositor', 'warehouse', 'depositor_warehouse', 'depositor_settings',
+    'operator', 'depositor', 'warehouse', 'depositor_settings',
     'app_user', 'user_settings', 'user_depositor_access', 'user_warehouse_access',
     'supplier', 'consignee', 'delivery_point',
     'sku', 'product_packaging',

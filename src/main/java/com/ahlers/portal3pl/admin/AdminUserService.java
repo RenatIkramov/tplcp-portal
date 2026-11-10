@@ -95,11 +95,26 @@ public class AdminUserService {
 
     /* ================= Анкета, роль и доступы ================= */
 
-    /** Данные пользователя из карточки. Логин меняется здесь же, но отдельно. */
+    /**
+     * Данные пользователя из карточки. Логин меняется здесь же, но отдельно.
+     * <p>
+     * Доступ человека (V110): поклажедатели и склады — списками, «все» —
+     * признаками. null в списке или признаке — экран это не присылал,
+     * трогать нечего; пустой список — сняты сознательно.
+     */
     public record Profile(
             String login, String fullName, String roleCode,
             String position, String organization, String phone,
-            List<String> depositorIds) {
+            List<String> depositorIds,
+            Boolean allDepositors, Boolean allWarehouses, List<String> warehouseIds) {
+
+        /** Анкета без признаков и складов — их не трогаем. */
+        public Profile(String login, String fullName, String roleCode,
+                       String position, String organization, String phone,
+                       List<String> depositorIds) {
+            this(login, fullName, roleCode, position, organization, phone, depositorIds,
+                    null, null, null);
+        }
     }
 
     /** Создание пользователя. Возвращает временный пароль, чтобы его передать человеку. */
@@ -135,7 +150,7 @@ public class AdminUserService {
             // гонка: логин заняли между проверкой и вставкой
             throw Fail.conflict("error.user.login_taken", "login", login);
         }
-        setDepositorAccess(userId, p.depositorIds());
+        setAccess(userId, p);
 
         return Map.of("userId", userId, "password", finalPassword,
                 "message", texts.of("info.user.created"));
@@ -179,7 +194,7 @@ public class AdminUserService {
                     .listOfRows();
         }
 
-        setDepositorAccess(userId, p.depositorIds());
+        setAccess(userId, p);
         return users(actor);
     }
 
@@ -191,15 +206,6 @@ public class AdminUserService {
                 .param("id", userId)
                 .query(String.class)
                 .list();
-    }
-
-    /** Только доступы — экран «Доступы» меняет их, не трогая анкету. */
-    @Transactional
-    public List<String> saveDepositorsOfUser(PortalUser actor, String userId, List<String> ids) {
-        requireAdmin(actor);
-        userRow(userId);
-        setDepositorAccess(userId, ids == null ? List.of() : ids);
-        return depositorsOfUser(actor, userId);
     }
 
     /** Все поклажедатели и все роли — списки для карточки. */
@@ -218,18 +224,51 @@ public class AdminUserService {
     }
 
     /**
-     * Доступы к поклажедателям. Передан null — экран их не редактировал,
-     * трогать нечего; передан пустой список — доступы сняты сознательно.
+     * Доступ человека: поклажедатели, склады и признаки «все» (V110).
+     * <p>
+     * Правило роли «поклажедатель» — ровно одна организация — проверяется
+     * по тому, что получилось в базе, а не по присланному: роль могли
+     * сменить, не трогая галочек, и тогда присланного списка нет вовсе.
+     * Нарушено — исключение, и транзакция откатывает всю карточку.
      */
-    private void setDepositorAccess(String userId, List<String> depositorIds) {
-        if (depositorIds == null) {
-            return;
+    private void setAccess(String userId, Profile p) {
+        if (p.depositorIds() != null) {
+            jdbc.sql("SELECT dbo.admin_set_depositor_access(:id::uuid, :ids::uuid[])")
+                    .param("id", userId)
+                    .param("ids", "{" + String.join(",", p.depositorIds()) + "}")
+                    .query()
+                    .listOfRows();
         }
-        jdbc.sql("SELECT dbo.admin_set_depositor_access(:id::uuid, :ids::uuid[])")
-                .param("id", userId)
-                .param("ids", "{" + String.join(",", depositorIds) + "}")
-                .query()
-                .listOfRows();
+        if (p.warehouseIds() != null) {
+            jdbc.sql("SELECT dbo.admin_set_warehouse_access(:id::uuid, :ids::text[])")
+                    .param("id", userId)
+                    .param("ids", "{" + String.join(",", p.warehouseIds()) + "}")
+                    .query()
+                    .listOfRows();
+        }
+        if (p.allDepositors() != null || p.allWarehouses() != null) {
+            // присланное — как прислали; не присланное — как было
+            Map<String, Object> was = jdbc.sql(
+                            "SELECT all_depositors, all_warehouses FROM dbo.admin_users() WHERE user_id = :id")
+                    .param("id", userId)
+                    .query()
+                    .singleRow();
+            jdbc.sql("SELECT dbo.admin_set_user_scope(:id::uuid, :deps, :whs)")
+                    .param("id", userId)
+                    .param("deps", p.allDepositors() != null ? p.allDepositors() : was.get("all_depositors"))
+                    .param("whs", p.allWarehouses() != null ? p.allWarehouses() : was.get("all_warehouses"))
+                    .query()
+                    .listOfRows();
+        }
+        if ("depositor".equals(p.roleCode())) {
+            int count = jdbc.sql("SELECT dbo.admin_user_depositor_count(:id::uuid)")
+                    .param("id", userId)
+                    .query(Integer.class)
+                    .single();
+            if (count != 1) {
+                throw Fail.badRequest("error.user.depositor_exactly_one");
+            }
+        }
     }
 
     private void requireLoginFree(String login, String exceptUserId) {
