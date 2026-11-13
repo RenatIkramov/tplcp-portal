@@ -30,7 +30,14 @@
     if (resp.status === 401 && PORTAL.session && address.indexOf('/api/') === 0
         && address.indexOf('/api/auth/') !== 0 && !sessionLost){
       sessionLost = true;
-      showLogin(T('auth.text.session_ended_please_sign_in_again'));
+      // Сеанс погашен, потому что изменились права или пароль (V121), —
+      // так и говорим, а не общим «войдите снова»
+      let text = T('auth.text.session_ended_please_sign_in_again');
+      try {
+        const body = await resp.clone().json();
+        if (body && body.key === 'error.auth.session_ended' && body.message) text = body.message;
+      } catch (e) { /* тело не JSON — общий текст */ }
+      showLogin(text);
     }
     return resp;
   };
@@ -157,20 +164,34 @@
     showLogin('');
   };
 
-  /** Собирает объект пользователя в том виде, в каком его ждёт интерфейс демо. */
+  /**
+   * Вошедший — для экрана: кто он (вход, /api/auth/session) и что ему
+   * разрешено (/api/me). Имена полей — как в ответах сервера (аудит D4:
+   * прежде объект повторял вид пользователя из демо — full_name, manager).
+   */
   function uiUser(sess, me){
-    const hidden = [];
-    if (me.hideTransfersTab) hidden.push('transfers');
-    if (me.hideBillingTab) hidden.push('billing');
-    return {
+    return Object.assign({
       role: sess.roleCode,
       login: sess.login,
-      full_name: sess.fullName,
+      fullName: sess.fullName,
       position: me.position || '—',
       organization: me.organization || '—',
       phone: me.phone || '',
       lastLogin: me.lastLogin || '',
-      manager: modeLabel(sess),
+      modeLine: modeLabel(sess)
+    }, rightsOf(me));
+  }
+
+  /**
+   * Права и скрытые разделы из /api/me — одно место и для входа, и для
+   * обновления настроек на лету (refreshSettings): прежде правило было
+   * записано дважды.
+   */
+  function rightsOf(me){
+    const hidden = [];
+    if (me.hideTransfersTab) hidden.push('transfers');
+    if (me.hideBillingTab) hidden.push('billing');
+    return {
       hiddenTabs: hidden,
       hideServicesTab: me.hideServicesTab === true,
       canCreateReceipts: me.canCreateReceipts !== false,
@@ -180,8 +201,7 @@
       // Своё право, а не право на товары: прежде здесь стояло
       // me.canUploadSkuExcel, и снятая галочка «загрузка упаковок»
       // не прятала кнопку — отказ человек получал уже после выбора файла.
-      canUploadPackagingExcel: me.canUploadPackagingExcel !== false,
-      defaultDepositor: sess.depositorId
+      canUploadPackagingExcel: me.canUploadPackagingExcel !== false
     };
   }
 
@@ -230,7 +250,7 @@
     // (кнопка adminTabBtn выше).
 
     const managerLine = field('managerLine');
-    if (managerLine) managerLine.textContent = user.manager;
+    if (managerLine) managerLine.textContent = user.modeLine;
     if (typeof renderProfile === 'function') renderProfile(user);
 
     applyDepositor();
@@ -250,7 +270,7 @@
       if (typeof notify === 'function') notify(T('auth.message.select_the_depositor_you_are_worki'));
     } else {
       PORTAL.reloadAll();
-      if (typeof notify === 'function') notify(T('auth.message.signed_in_as2') + user.full_name);
+      if (typeof notify === 'function') notify(T('auth.message.signed_in_as2') + user.fullName);
     }
   }
 
@@ -263,6 +283,13 @@
    * клиента показан, у другого скрыт. Без этого вкладка менялась только
    * после перезагрузки страницы.
    */
+  /**
+   * Скрыт ли вошедшему раздел меню. Скрытый раздел экран не грузит:
+   * сервер отвечает на него отказом (аудит S3, SectionGuard), и отказ
+   * в консоли при каждом входе был бы шумом, а не ошибкой.
+   */
+  PORTAL.sectionHidden = tab => !!(PORTAL.uiUser && (PORTAL.uiUser.hiddenTabs || []).includes(tab));
+
   PORTAL.refreshSettings = async function(){
     let me;
     try {
@@ -273,15 +300,7 @@
     PORTAL.user = me;
     const user = PORTAL.uiUser;
     if (!user) return;
-    user.hiddenTabs = [];
-    if (me.hideTransfersTab) user.hiddenTabs.push('transfers');
-    if (me.hideBillingTab) user.hiddenTabs.push('billing');
-    user.hideServicesTab = me.hideServicesTab === true;
-    user.canCreateReceipts = me.canCreateReceipts !== false;
-    user.canCreateOrders = me.canCreateOrders !== false;
-    user.canCreateTransfers = me.canCreateTransfers !== false;
-    user.canUploadSkuExcel = me.canUploadSkuExcel !== false;
-    user.canUploadPackagingExcel = me.canUploadPackagingExcel !== false;
+    Object.assign(user, rightsOf(me));
     // открытый раздел мог только что стать скрытым — applyTabs уведёт на заказы
     applyTabs(user);
     applyCreateRights(user);
@@ -346,8 +365,8 @@
     el.innerHTML = '<div class="ks-title">' + T('auth.text.switch_depositor') + '</div>'
       + ((s && s.depositors) || []).map(d =>
           '<div class="ks-item ' + (d.depositorId === selected ? 'current' : '') + '"'
-          + ' onclick="portalSelectDepositor(\'' + d.depositorId + '\')">'
-          + '<span>' + d.orgName + '</span>'
+          + PORTAL.call('portalSelectDepositor', d.depositorId) + '>'
+          + '<span>' + PORTAL.esc(d.orgName) + '</span>'
           + (d.depositorId === selected ? '<span>✓</span>' : '') + '</div>').join('');
   };
 

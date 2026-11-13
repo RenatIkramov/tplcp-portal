@@ -8,9 +8,8 @@
   // общий помощник core.js (прежде — четыре одинаковые копии здесь)
   const api = PORTAL.api;
 
-  const esc = v => String(v === null || v === undefined ? '' : v)
-    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  const say = m => { if (typeof notify === 'function') notify(m); };
+  // общие помощники — core.js (аудит A4)
+  const {esc, say} = window.PORTAL;
   const T_ = k => (typeof T === 'function' ? T(k) : k);
 
   // Состояние открытой карточки. Галочки живут здесь, а не в DOM:

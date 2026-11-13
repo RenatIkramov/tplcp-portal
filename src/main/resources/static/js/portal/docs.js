@@ -21,7 +21,8 @@
     const d = String(iso).slice(0, 10).split('-');
     return d.length === 3 ? d[2] + '.' + d[1] + '.' + d[0] : iso;
   }
-  const dash = v => (v === null || v === undefined || v === '') ? '—' : v;
+  // общие помощники — core.js (аудит A4)
+  const {dash} = window.PORTAL;
 
   function commonFields(r){
     return {

@@ -47,7 +47,7 @@ class PasswordTest extends PortalTestBase {
         String id = userId(login);
         passwords.setByAdmin(id, login, password);
         if (!forceChange) {
-            jdbc.sql("UPDATE dbo.app_user SET must_change_password = false WHERE user_id = :id::uuid")
+            owner().jdbc.sql("UPDATE dbo.app_user SET must_change_password = false WHERE user_id = :id::uuid")
                     .param("id", id).update();
         }
     }

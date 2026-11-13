@@ -5,13 +5,11 @@
   const PORTAL = window.PORTAL;
   if (!PORTAL) return;
 
-  const EDITOR_ROLES = ['depositor', 'manager', 'admin'];
+  const EDITOR_ROLES = ['depositor', 'manager', 'staff', 'admin'];   // сотрудник склада — тоже (решение 11.11.2026)
   const mayEdit = () => EDITOR_ROLES.includes(PORTAL.session ? PORTAL.session.roleCode : '');
 
-  const dash = v => (v === null || v === undefined || v === '') ? '—' : v;
-  const esc = v => String(v === null || v === undefined ? '' : v)
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-  const say = m => { if (typeof notify === 'function') notify(m); };
+  // общие помощники — core.js (аудит A4)
+  const {dash, esc, say} = window.PORTAL;
 
   async function api(method, url, body){
     const opt = {method: method, headers: {'Accept': 'application/json'}};
@@ -39,12 +37,12 @@
     suppliers: {
       path: 'suppliers', key: 'supplierId', titleKey: 'col.receipts.supplier',
       newTitleKey: 'partners.text.new_supplier', body: 'suppliersBody', count: 'suppliersCount',
-      columns: 7, addresses: false
+      columns: 7, addresses: false, auditType: 'supplier'
     },
     consignees: {
       path: 'consignees', key: 'consigneeId', titleKey: 'partners.title.consignee',
       newTitleKey: 'partners.text.new_consignee', body: 'consigneesBody', count: 'consigneesCount',
-      columns: 8, addresses: true
+      columns: 8, addresses: true, auditType: 'consignee'
     }
   };
 
@@ -69,7 +67,6 @@
     kind: null, mode: 'view', id: null, row: null, draft: {},
     addresses: [], addressForm: null, tab: 'card'
   };
-  PORTAL.partnerEdit = state;
 
   /* ================= Карточка ================= */
 
@@ -82,7 +79,7 @@
     section.id = 'view-partner-detail';
     section.innerHTML =
         '<div class="panel-head">'
-      + '<button class="back-btn" onclick="portalPartnerBack()">' + T('portal.text.back_to_list') + '</button>'
+      + '<button class="back-btn"' + PORTAL.call('portalPartnerBack') + '>' + T('portal.text.back_to_list') + '</button>'
       + '<div class="actions" id="partnerActions"></div></div>'
       + '<div class="detail-head"><h2 id="partnerTitle" style="margin:0 0 16px;"></h2>'
       + '<div class="admin-subtabs" id="partnerTabs" style="margin-bottom:0;"></div></div>'
@@ -105,7 +102,7 @@
       const v = value(f);
       const body = editing
         ? '<input class="kv-input kv-input-editable" type="text" value="' + esc(v === null || v === undefined ? '' : v)
-          + '" data-col="' + f.col + '" oninput="portalPartnerField(this)"/>'
+          + '" data-col="' + f.col + '"' + PORTAL.callOnInput('portalPartnerField', PORTAL.SELF) + '/>'
         : esc(dash(v));
       return '<div class="kv"><label>' + PORTAL.t(f.labelKey)
         + (f.required && editing ? ' *' : '')
@@ -134,12 +131,12 @@
         + rows.map(a => '<tr><td>' + esc(a.address) + '</td><td>' + contactCell(a) + '</td><td class="num">'
             + dash(a.sortOrder) + '</td><td>'
             + (a.isDefault ? '★ ' + T('partners.text.default')
-                : (canEdit ? '<button class="btn ghost" onclick="portalAddressDefault(\'' + a.addressId
-                    + '\')">' + T('partners.text.set_as_default') + '</button>' : '—'))
+                : (canEdit ? '<button class="btn ghost"' + PORTAL.call('portalAddressDefault', a.addressId)
+                    + '>' + T('partners.text.set_as_default') + '</button>' : '—'))
             + '</td>'
             + (canEdit ? '<td style="white-space:nowrap;">'
-                + '<button class="btn ghost" onclick="portalAddressEdit(\'' + a.addressId + '\')">' + T('portal.text.edit2') + '</button> '
-                + '<button class="btn ghost" onclick="portalAddressDelete(\'' + a.addressId + '\')">' + T('common.button.delete') + '</button></td>' : '')
+                + '<button class="btn ghost"' + PORTAL.call('portalAddressEdit', a.addressId) + '>' + T('portal.text.edit2') + '</button> '
+                + '<button class="btn ghost"' + PORTAL.call('portalAddressDelete', a.addressId) + '>' + T('common.button.delete') + '</button></td>' : '')
             + '</tr>').join('')
         + '</tbody></table></div>'
       : '<div style="color:var(--muted); font-size:13px;">' + T('partners.text.no_delivery_addresses_defined') + '</div>';
@@ -153,21 +150,21 @@
         + '<div class="kv-grid">'
         + '<div class="kv"><label>' + T('partners.text.delivery_address2') + '</label><div><input class="kv-input kv-input-editable" type="text"'
           + ' style="min-width:420px;" value="' + esc(f.address || '') + '" data-addr="address"'
-          + ' oninput="portalAddressField(this)"/></div></div>'
+          + PORTAL.callOnInput('portalAddressField', PORTAL.SELF) + '/></div></div>'
         + '<div class="kv"><label>' + T('partners.column.address_contact') + '</label><div><input class="kv-input kv-input-editable" type="text"'
           + ' style="min-width:420px;" maxlength="255" value="' + esc(f.contact || '') + '" data-addr="contact"'
-          + ' oninput="portalAddressField(this)"/>'
+          + PORTAL.callOnInput('portalAddressField', PORTAL.SELF) + '/>'
           + '<div style="max-width:420px;margin-top:4px;font-size:11.5px;line-height:1.3;color:var(--muted);">'
           + PORTAL.t('partners.hint.address_contact') + '</div></div></div>'
         + '<div class="kv"><label>' + T('partners.text.order') + '</label><div><input class="kv-input kv-input-editable" type="number"'
           + ' value="' + esc(f.sortOrder === null || f.sortOrder === undefined ? '' : f.sortOrder)
-          + '" data-addr="sortOrder" oninput="portalAddressField(this)"/></div></div>'
+          + '" data-addr="sortOrder"' + PORTAL.callOnInput('portalAddressField', PORTAL.SELF) + '/></div></div>'
         + '</div><div style="margin-top:12px;">'
-        + '<button class="btn primary" onclick="portalAddressSave()">' + T('partners.text.save_address') + '</button> '
-        + '<button class="btn ghost" onclick="portalAddressCancel()">' + T('common.button.cancel') + '</button></div></div>';
+        + '<button class="btn primary"' + PORTAL.call('portalAddressSave') + '>' + T('partners.text.save_address') + '</button> '
+        + '<button class="btn ghost"' + PORTAL.call('portalAddressCancel') + '>' + T('common.button.cancel') + '</button></div></div>';
     } else if (canEdit){
       form = '<div style="margin-top:12px;">'
-        + '<button class="btn" onclick="portalAddressAdd()">' + T('partners.text.add_address') + '</button></div>';
+        + '<button class="btn"' + PORTAL.call('portalAddressAdd') + '>' + T('partners.text.add_address') + '</button></div>';
     }
     return table + form;
   }
@@ -192,22 +189,23 @@
   };
 
   /** Кнопка с подписью, которая переживёт смену языка. */
+  /** @param {string} cls @param {string} call PORTAL.call(…) @param {string} textKey */
   function btn(cls, call, textKey){
     return '<button class="btn ' + cls + '" data-i18n="' + textKey + '"'
-      + ' onclick="' + call + '">' + esc(T(textKey)) + '</button>';
+      + call + '>' + esc(T(textKey)) + '</button>';
   }
 
   function actionsHtml(){
     if (state.mode !== 'view'){
-      return btn('primary', 'portalPartnerSave()', 'portal.text.save')
-        + btn('ghost', 'portalPartnerCancel()', 'common.button.cancel');
+      return btn('primary', PORTAL.call('portalPartnerSave'), 'portal.text.save')
+        + btn('ghost', PORTAL.call('portalPartnerCancel'), 'common.button.cancel');
     }
     if (!mayEdit() || !state.id) return '';
     const archived = state.row && state.row.isActive === false;
     const archiveKey = archived ? 'sku.text.restore_from_archive' : 'portal.text.archive';
-    return btn('primary', 'portalPartnerEdit()', 'sku.text.edit')
-      + btn('', 'portalPartnerArchive(' + (archived ? 'true' : 'false') + ')', archiveKey)
-      + btn('ghost', 'portalPartnerDelete()', 'common.button.delete');
+    return btn('primary', PORTAL.call('portalPartnerEdit'), 'sku.text.edit')
+      + btn('', PORTAL.call('portalPartnerArchive', archived), archiveKey)
+      + btn('ghost', PORTAL.call('portalPartnerDelete'), 'common.button.delete');
   }
 
   function render(){
@@ -222,15 +220,23 @@
 
     const tabs = [{id: 'card', titleKey: 'partners.title.card'}];
     if (kind.addresses) tabs.push({id: 'addresses', titleKey: 'partners.title.delivery_addresses'});
+    // кто и когда менял (журнал действий, V118); у новой записи истории нет
+    if (state.id && state.mode === 'view') tabs.push({id: 'history', titleKey: 'audit.tab.history'});
     if (!tabs.some(t => t.id === state.tab)) state.tab = 'card';
     document.getElementById('partnerTabs').innerHTML = tabs.map(t =>
         '<button class="admin-subtab-btn ' + (t.id === state.tab ? 'active' : '') + '"'
         + ' data-i18n="' + t.titleKey + '"'
-        + ' onclick="portalPartnerTab(\'' + t.id + '\')">' + esc(T(t.titleKey))
+        + PORTAL.call('portalPartnerTab', t.id) + '>' + esc(T(t.titleKey))
         + '</button>').join('');
 
-    document.getElementById('partnerBody').innerHTML =
-        state.tab === 'addresses' ? addressesHtml() : cardHtml();
+    const body = /** @type {HTMLElement} */ (document.getElementById('partnerBody'));
+    if (state.tab === 'history' && state.id){
+      const id = state.id;
+      PORTAL.history.show(body, PORTAL.history.url(kind.auditType, id),
+          {stillWanted: () => state.id === id && state.tab === 'history'});
+    } else {
+      body.innerHTML = state.tab === 'addresses' ? addressesHtml() : cardHtml();
+    }
     showView('partner-detail');
   }
 
@@ -439,8 +445,8 @@
           const id = r[kind.key];
           const archived = r.isActive === false
             ? ' <span class="count">' + T('portal.text.archived2') + '</span>' : '';
-          return '<tr style="cursor:pointer;" onclick="portalOpenPartner(\'' + kindName + '\',\''
-            + id + '\')"><td><strong>' + esc(dash(r.code)) + '</strong>' + archived + '</td>'
+          return '<tr style="cursor:pointer;"' + PORTAL.call('portalOpenPartner', kindName, id)
+            + '><td><strong>' + esc(dash(r.code)) + '</strong>' + archived + '</td>'
             + cell(r.name)
             + (kind.addresses
                 ? '<td>' + esc(dash(r.defaultAddress))
@@ -471,11 +477,11 @@
     actions.insertAdjacentHTML('afterbegin',
         '<label style="font-size:13px; color:var(--muted); margin-right:12px;">'
       + '<input type="checkbox" id="' + kindName + 'ShowArchived"'
-      + ' onchange="portalPartnerArchiveFilter(\'' + kindName + '\')"/> '
+      + PORTAL.callOnChange('portalPartnerArchiveFilter', kindName) + '/> '
       + PORTAL.t('portal.text.show_archived') + '</label>'
       + '<button class="btn primary" id="' + kindName + 'CreateBtn"'
       + ' data-i18n="' + labelKey + '"'
-      + ' onclick="portalPartnerCreate(\'' + kindName + '\')">' + esc(T(labelKey)) + '</button>');
+      + PORTAL.call('portalPartnerCreate', kindName) + '>' + esc(T(labelKey)) + '</button>');
   }
 
   function install(){

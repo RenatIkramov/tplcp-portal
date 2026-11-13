@@ -117,7 +117,7 @@ class DocumentFilterPanelTest extends BrowserTestBase {
                 response -> response.url().contains("/api/receipts")
                         && !response.url().contains("filter.date"),
                 () -> page.evaluate("() => onReceiptsFilterChange()"));
-        page.waitForTimeout(300);
+        waitForQuiet();
         int all = rowCount();
         assertTrue(all > 1, "в демо-данных слишком мало поступлений: " + all);
 
@@ -132,7 +132,7 @@ class DocumentFilterPanelTest extends BrowserTestBase {
         assertTrue(url.contains("filter.status=01"),
                 "в запросе нет кода статуса: " + url);
 
-        page.waitForTimeout(300);
+        waitForQuiet();
         int drafts = rowCount();
         assertTrue(drafts > 0, "отбор по статусу «черновик» не нашёл ни одного документа");
         assertTrue(drafts < all,
@@ -171,7 +171,7 @@ class DocumentFilterPanelTest extends BrowserTestBase {
                           onReceiptsFilterChange();
                         }
                         """));
-        page.waitForTimeout(300);
+        waitForQuiet();
         assertTrue(rowCount() > 0,
                 "на английском языке отбор по статусу не нашёл ничего — "
                         + "фильтр снова зависит от языка подписи");
@@ -210,7 +210,7 @@ class DocumentFilterPanelTest extends BrowserTestBase {
                   clearReceiptsFilters();
                 }
                 """);
-        page.waitForTimeout(300);
+        waitForQuiet();
         assertEquals("", page.inputValue("#filter-receipts-trip"),
                 "«Очистить фильтры» оставила текст в поле рейса");
         assertEquals("", page.inputValue("#filter-receipts-date-from"),
@@ -383,7 +383,7 @@ class DocumentFilterPanelTest extends BrowserTestBase {
 
             // «Очистить» живёт по тому же правилу: пусто — значит пусто.
             page.evaluate("() => clearReceiptsFilters()");
-            page.waitForTimeout(300);
+            waitForQuiet();
             assertEquals("", page.inputValue("#filter-receipts-date-from"),
                     "«Очистить» заполнила дату документа");
             assertEquals("", page.inputValue("#filter-receipts-eta-from"),
@@ -435,6 +435,8 @@ class DocumentFilterPanelTest extends BrowserTestBase {
                   s.dispatchEvent(new Event('change', {bubbles: true}));
                 }
                 """);
+        // Пауза здесь нарочно: проверяется, что запроса НЕ было, а «ничего
+        // не случилось» иначе как временем не дождаться (D7).
         page.waitForTimeout(700);
         assertTrue(asked.isEmpty(),
                 "список перечитался от одного выбора в списке, без нажатия «Найти»: " + asked);

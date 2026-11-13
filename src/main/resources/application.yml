@@ -35,8 +35,8 @@ spring:
     # Пароль здесь только для разработки; в эксплуатации задаётся
     # переменной окружения FLYWAY_DB_PASSWORD.
     url: jdbc:postgresql://localhost:5432/tplcp
-    user: ${FLYWAY_DB_USER:postgres}
-    password: 123 #${FLYWAY_DB_PASSWORD}
+    user: portal_owner #${FLYWAY_DB_USER:postgres}
+    password: Portal123! #${FLYWAY_DB_PASSWORD}
 
     # Схема до V20 накатана вручную. baseline говорит Flyway: «всё до
     # двадцатой версии уже есть», он заводит историю и начинает с V21.

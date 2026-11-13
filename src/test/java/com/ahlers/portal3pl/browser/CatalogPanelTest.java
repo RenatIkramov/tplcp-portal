@@ -1,7 +1,6 @@
 package com.ahlers.portal3pl.browser;
 
 import com.ahlers.portal3pl.auth.PortalUser;
-import com.microsoft.playwright.options.LoadState;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -54,7 +53,7 @@ class CatalogPanelTest extends BrowserTestBase {
         signInUiAsClient();
         openReferences("sku");
         page.waitForSelector("#filter-sku-code");
-        page.waitForLoadState(LoadState.NETWORKIDLE);
+        waitForQuiet();
 
         for (String table : List.of("sku", "packaging")) {
             List<String> expected = jdbc.sql("""
@@ -169,7 +168,7 @@ class CatalogPanelTest extends BrowserTestBase {
                 "после смены языка галочка архива исчезла с панели");
 
         page.evaluate("() => clearSkuFilters()");
-        page.waitForLoadState(LoadState.NETWORKIDLE);
+        waitForQuiet();
         assertEquals(false, page.evaluate(
                         "() => document.getElementById('filter-sku-archived').checked"),
                 "«Очистить» оставила галочку архива отмеченной");
@@ -185,7 +184,7 @@ class CatalogPanelTest extends BrowserTestBase {
         signInUiAsClient();
         openReferences("sku");
         page.waitForSelector("#skuBody tr");
-        page.waitForLoadState(LoadState.NETWORKIDLE);
+        waitForQuiet();
 
         String total = singleValue(
                 "SELECT count(*)::text FROM dbo.v_sku_full WHERE COALESCE(is_active, true)");

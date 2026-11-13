@@ -136,16 +136,16 @@ class DraftTest extends PortalTestBase {
                 .query(Integer.class).single();
         assertTrue(active > 1, "для проверки в портале должно быть несколько складов");
         String user = userId(USER);
-        jdbc.sql("UPDATE dbo.app_user SET all_warehouses = false WHERE user_id = :id::uuid")
+        owner().jdbc.sql("UPDATE dbo.app_user SET all_warehouses = false WHERE user_id = :id::uuid")
                 .param("id", user).update();
-        jdbc.sql("DELETE FROM dbo.user_warehouse_access WHERE user_id = :id::uuid")
+        owner().jdbc.sql("DELETE FROM dbo.user_warehouse_access WHERE user_id = :id::uuid")
                 .param("id", user).update();
-        jdbc.sql("INSERT INTO dbo.user_warehouse_access (user_id, warehouse_id) VALUES (:id::uuid, 'WH-ALA')")
+        owner().jdbc.sql("INSERT INTO dbo.user_warehouse_access (user_id, warehouse_id) VALUES (:id::uuid, 'WH-ALA')")
                 .param("id", user).update();
         signIn();
         assertEquals("WH-ALA", header(draft(Map.of())).get("warehouseId"));
 
-        jdbc.sql("UPDATE dbo.app_user SET all_warehouses = true WHERE user_id = :id::uuid")
+        owner().jdbc.sql("UPDATE dbo.app_user SET all_warehouses = true WHERE user_id = :id::uuid")
                 .param("id", user).update();
         signIn();
         assertNull(header(draft(Map.of())).get("warehouseId"), "складов несколько — человек выбирает сам");
@@ -471,9 +471,8 @@ class DraftTest extends PortalTestBase {
             signIn();
             assertEquals("Брак", rows(drafts.card(DocumentType.ORDERS, docId)).get(0).get("quality"));
         } finally {
-            new org.springframework.transaction.support.TransactionTemplate(txManager)
-                    .executeWithoutResult(tx -> jdbc.sql("UPDATE dbo.app_user SET locale_id = NULL"
-                            + " WHERE login = :login").param("login", USER).update());
+            owner().jdbc.sql("UPDATE dbo.app_user SET locale_id = NULL WHERE login = :login")
+                    .param("login", USER).update();
         }
     }
 

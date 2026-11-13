@@ -37,7 +37,7 @@ class PortalDirectoryTest extends PortalTestBase {
 
     @AfterEach
     void removeTestRows() {
-        jdbc.sql("DELETE FROM dbo.user_warehouse_access WHERE warehouse_id LIKE 'QA-%'").update();
+        owner().jdbc.sql("DELETE FROM dbo.user_warehouse_access WHERE warehouse_id LIKE 'QA-%'").update();
         inContext("DELETE FROM dbo.warehouse WHERE warehouse_id LIKE 'QA-%'");
         // Поклажедатели под RLS: обычным запросом чужие строки не удалить,
         // убираем тем же способом, каким их заводит портал
@@ -70,10 +70,10 @@ class PortalDirectoryTest extends PortalTestBase {
         // а не «виден всем подряд». Как было, вернёт PersonalSettings.
         assertTrue(warehouseCodes().contains(WAREHOUSE), "«все склады» — новый склад доступен сам");
         String user = userId(USER);
-        jdbc.sql("UPDATE dbo.app_user SET all_warehouses = false WHERE user_id = :id::uuid")
+        owner().jdbc.sql("UPDATE dbo.app_user SET all_warehouses = false WHERE user_id = :id::uuid")
                 .param("id", user).update();
         assertFalse(warehouseCodes().contains(WAREHOUSE), "без выданного доступа склада не видно");
-        jdbc.sql("INSERT INTO dbo.user_warehouse_access (user_id, warehouse_id) VALUES (:id::uuid, :w)")
+        owner().jdbc.sql("INSERT INTO dbo.user_warehouse_access (user_id, warehouse_id) VALUES (:id::uuid, :w)")
                 .param("id", user).param("w", WAREHOUSE).update();
         assertTrue(warehouseCodes().contains(WAREHOUSE));
         directory.setWarehouseActive(admin, WAREHOUSE, false);
@@ -81,7 +81,7 @@ class PortalDirectoryTest extends PortalTestBase {
 
         // выданный людям склад удалить нельзя — сперва забрать доступ
         expectRejection(409, () -> directory.deleteWarehouse(admin, WAREHOUSE));
-        jdbc.sql("DELETE FROM dbo.user_warehouse_access WHERE warehouse_id = :w")
+        owner().jdbc.sql("DELETE FROM dbo.user_warehouse_access WHERE warehouse_id = :w")
                 .param("w", WAREHOUSE).update();
         directory.deleteWarehouse(admin, WAREHOUSE);
         assertTrue(directory.warehouses(admin).stream()

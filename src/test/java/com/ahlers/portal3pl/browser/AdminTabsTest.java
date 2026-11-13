@@ -40,7 +40,7 @@ class AdminTabsTest extends BrowserTestBase {
 
         assertEquals(List.of(text("admin.button.shared_directories"),
                         text("admin.button.enums"),
-                        text("admin.button.errors"),
+                        text("admin.button.logs"),
                         text("admin.button.report_settings"),
                         text("admin.button.interface_texts")),
                 labels("#adminGroupTabs"),
@@ -73,8 +73,10 @@ class AdminTabsTest extends BrowserTestBase {
         page.waitForFunction(
                 "() => document.querySelectorAll('#adminGroupTabs .admin-subtab-btn').length > 0");
 
-        openGroup("errors");
-        assertEquals(2, labels("#adminSubTabs").size(), "в группе ошибок не две вкладки");
+        openGroup("logs");
+        assertEquals(List.of(text("admin.button.audit_log"), text("admin.button.integration_errors"),
+                        text("admin.button.excel_import_errors")), labels("#adminSubTabs"),
+                "в «Журналах» не те вкладки или не в том порядке");
 
         // Группа из одной вкладки второго ряда не рисует: ряд из одной
         // кнопки, повторяющей название группы, ничего не сообщает.
@@ -91,10 +93,10 @@ class AdminTabsTest extends BrowserTestBase {
 
         // Вкладку, на которой человек остановился, группа помнит:
         // вернуться к своему экрану нужно чаще, чем к первому в ряду.
-        openGroup("errors");
+        openGroup("logs");
         page.evaluate("() => showAdminSub('excel')");
         openGroup("reports");
-        openGroup("errors");
+        openGroup("logs");
         assertEquals(List.of("admin-sub-excel"), activePanes(),
                 "группа забыла, на какой вкладке её оставили");
         assertNoJsErrors();

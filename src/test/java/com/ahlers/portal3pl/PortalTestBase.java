@@ -7,6 +7,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.core.env.Environment;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -67,6 +68,18 @@ public abstract class PortalTestBase {
     @Autowired
     protected PlatformTransactionManager txManager;
 
+    @Autowired
+    private Environment environment;
+
+    /**
+     * Владелец схемы — писать в {@code app_user} и доступы, куда портал
+     * больше не пишет напрямую (V133). Не внутри транзакции портала,
+     * см. {@link OwnerDb}.
+     */
+    protected OwnerDb owner() {
+        return OwnerDb.of(environment);
+    }
+
     /**
      * Администратор портала для тестов: создаётся при первом обращении,
      * дальше просто приводится к известному состоянию — активен, пароль
@@ -96,15 +109,19 @@ public abstract class PortalTestBase {
                     .param("hash", passwordEncoder.encode(ADMIN_PASSWORD))
                     .query()
                     .listOfRows();
-            jdbc.sql("UPDATE dbo.app_user SET is_active = true WHERE user_id = :id::uuid")
-                    .param("id", id)
-                    .update();
             jdbc.sql("SELECT dbo.admin_set_depositor_access(:id::uuid,"
                             + " (SELECT array_agg(depositor_id) FROM dbo.admin_depositors()))")
                     .param("id", id)
                     .query()
                     .listOfRows();
         });
+        // «Все поклажедатели» — признаком, а не только списком: на чистой
+        // базе учётка создаётся без признака, и проверки, которые на него
+        // опираются (ProfileTest), зависели бы от того, правили ли её руками.
+        // Владельцем и после транзакции: учётку она могла только что создать.
+        owner().jdbc.sql("UPDATE dbo.app_user SET is_active = true, all_depositors = true WHERE login = :login")
+                .param("login", ADMIN)
+                .update();
         return authService.authenticate(ADMIN, ADMIN_PASSWORD);
     }
 
@@ -194,12 +211,25 @@ public abstract class PortalTestBase {
     /** Хэш тестового пароля — один на прогон: шифровать его на каждый тест долго. */
     private static String testPasswordHash;
 
+    @Autowired
+    protected com.ahlers.portal3pl.auth.LoginThrottle loginThrottle;
+
+    /**
+     * Счёт неудачных входов по адресу — с нуля (V123). Все проверки входят
+     * с одного адреса и часть из них ошибается намеренно: без этого
+     * двадцатая чужая неудача закрыла бы вход следующей проверке.
+     */
+    @BeforeEach
+    void forgetLoginFailures() {
+        loginThrottle.forgetAll();
+    }
+
     @BeforeEach
     void rememberPersonalSettings() {
         if (testPasswordHash == null) {
             testPasswordHash = passwordEncoder.encode(USER_PASSWORD);
         }
-        personal = new PersonalSettings(jdbc, txManager, List.of(USER, OTHER_USER),
+        personal = new PersonalSettings(owner(), List.of(USER, OTHER_USER),
                 testPasswordHash).remember();
         personal.startClean();
     }
@@ -209,6 +239,65 @@ public abstract class PortalTestBase {
         if (personal != null) {
             personal.restore();
         }
+    }
+
+    /** Чем вернуть раздел «Перемещения» клиентам тестов, как был до теста. */
+    private final List<Runnable> transfersSection = new java.util.ArrayList<>();
+
+    /**
+     * Раздел «Перемещения» у клиентов тестов — показан на время теста.
+     *
+     * <p>ЗАЧЕМ (аудит S3, 11.11.2026). С тех пор как скрытый раздел закрыт
+     * и на сервере (SectionGuard), галочка «скрыть перемещения», которую
+     * человек поставил «Рогам и Копытам» для живой проверки, роняла бы
+     * все проверки перемещений отказом 403. Проверка не должна зависеть
+     * от ручных настроек: раздел открывается до теста, а после — та же
+     * галочка возвращается, как была. Пишется, только если раздел скрыт.
+     */
+    @BeforeEach
+    void showTransfersSection() {
+        transfersSection.clear();
+        for (String[] who : new String[][]{{USER, DEPOSITOR}, {OTHER_USER, OTHER_DEPOSITOR}}) {
+            String id = depositorId(who[0], who[1]);
+            Map<String, Object> was = jdbc.sql("SELECT hide_transfers_tab, price_in_receipts, price_in_orders"
+                            + " FROM dbo.depositor_settings_of(:id::uuid)")
+                    .param("id", id).query().listOfRows().stream().findFirst().orElse(Map.of());
+            if (!Boolean.TRUE.equals(was.get("hide_transfers_tab"))) {
+                continue;
+            }
+            boolean receipts = Boolean.TRUE.equals(was.get("price_in_receipts"));
+            boolean orders = Boolean.TRUE.equals(was.get("price_in_orders"));
+            saveDepositorSettings(id, false, receipts, orders);
+            transfersSection.add(() -> {
+                // цены тест мог поменять сам и вернуть сам — возвращаем только галочку раздела
+                Map<String, Object> now = jdbc.sql("SELECT price_in_receipts, price_in_orders"
+                                + " FROM dbo.depositor_settings_of(:id::uuid)")
+                        .param("id", id).query().listOfRows().stream().findFirst().orElse(Map.of());
+                saveDepositorSettings(id, true, Boolean.TRUE.equals(now.get("price_in_receipts")),
+                        Boolean.TRUE.equals(now.get("price_in_orders")));
+            });
+        }
+    }
+
+    @AfterEach
+    void restoreTransfersSection() {
+        transfersSection.forEach(Runnable::run);
+        transfersSection.clear();
+    }
+
+    private void saveDepositorSettings(String depositorId, boolean hideTransfers,
+                                       boolean priceInReceipts, boolean priceInOrders) {
+        new TransactionTemplate(txManager).executeWithoutResult(tx -> {
+            jdbc.sql("SELECT set_config('app.depositor_id', :id, true)")
+                    .param("id", depositorId).query(String.class).single();
+            jdbc.sql("SELECT dbo.admin_save_depositor_settings(:id::uuid,"
+                            + " :h::boolean, :r::boolean, :o::boolean)")
+                    .param("id", depositorId)
+                    .param("h", hideTransfers)
+                    .param("r", priceInReceipts)
+                    .param("o", priceInOrders)
+                    .query().listOfRows();
+        });
     }
 
     /** Проверяет, что вызов отклонён с ожидаемым кодом ответа. */

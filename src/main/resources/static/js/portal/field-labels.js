@@ -18,9 +18,8 @@
   const PORTAL = window.PORTAL;
   if (!PORTAL) return;
 
-  const esc = v => String(v === null || v === undefined ? '' : v)
-    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  const say = m => { if (typeof notify === 'function') notify(m); };
+  // общие помощники — core.js (аудит A4)
+  const {esc, say} = window.PORTAL;
   const T_ = k => (typeof T === 'function' ? T(k) : k);
 
   async function api(method, path, body){

@@ -1,7 +1,6 @@
 package com.ahlers.portal3pl.browser;
 
 import com.ahlers.portal3pl.auth.PortalUser;
-import com.microsoft.playwright.options.LoadState;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -114,7 +113,7 @@ class DocumentPagingPanelTest extends BrowserTestBase {
         signInUiAsClient();
         page.evaluate("() => showTab('receipts')");
         waitForColumns("receipts");
-        page.waitForLoadState(LoadState.NETWORKIDLE);
+        waitForQuiet();
 
         @SuppressWarnings("unchecked")
         List<String> filled = (List<String>) page.evaluate("""

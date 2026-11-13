@@ -50,6 +50,21 @@ public class DocumentRepository {
     }
 
     /** Шапка одного документа. Пустой список означает «нет доступа или не существует». */
+    /** Версия документа: момент последнего изменения в микросекундах. */
+    static final String VERSION_SQL = """
+            SELECT (extract(epoch FROM updated_at) * 1000000)::bigint::text
+              FROM dbo.%s WHERE doc_id = :docId::uuid""";
+
+    /**
+     * Версия, которую видит экран (аудит A9): с ней уходит каждая запись
+     * черновика, и устаревшая получает отказ. Строкой — в JSON число
+     * такой длины теряло бы точность.
+     */
+    public String version(DocumentType type, String docId) {
+        return jdbc.sql(VERSION_SQL.formatted(type.headerTable()))
+                .param("docId", docId).query(String.class).optional().orElse("");
+    }
+
     public List<Map<String, Object>> header(DocumentType type, String docId) {
         String sql = "SELECT * FROM dbo.%s WHERE doc_id = :docId::uuid"
                 .formatted(type.headerView());
@@ -62,6 +77,22 @@ public class DocumentRepository {
                 SELECT * FROM dbo.%s WHERE doc_id = :docId::uuid ORDER BY line_number
                 """.formatted(type.linesView());
         return SqlRows.toCamelCase(jdbc.sql(sql).param("docId", docId).query().listOfRows());
+    }
+
+    /**
+     * История документа из журнала действий (V116): по строке на изменённое
+     * поле, события — новые сверху. Слова (статусы, склады, да/нет) — на
+     * языке читающего, их делает база ({@code audit_value}).
+     */
+    public List<Map<String, Object>> history(DocumentType type, String docId) {
+        return SqlRows.toCamelCase(jdbc.sql("""
+                        SELECT event_id, to_json(at) #>> '{}' AS at, actor, actor_name, action, part,
+                               field, field_key, old_text, new_text
+                          FROM dbo.audit_history(:type, :docId)
+                        """)
+                .param("type", type.path())
+                .param("docId", docId)
+                .query().listOfRows());
     }
 
     /** Детализация: записи партий. lineNumber не задан — возвращаются все строки документа. */

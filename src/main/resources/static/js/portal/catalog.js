@@ -15,7 +15,9 @@
   PORTAL.page = {};
   PORTAL.pageTotal = {};
 
-  const dash = v => (v === null || v === undefined || v === '') ? '—' : v;
+  // общие помощники — core.js (аудит A4)
+
+  const {dash} = window.PORTAL;
   const ruDate = iso => {
     if (!iso) return '—';
     const d = String(iso).slice(0, 10).split('-');
@@ -158,8 +160,11 @@
 
     PORTAL.onLogin(() => {
       PORTAL.reloadProducts();
-      load('service-tariffs', renderTariffsFromApi);
-      load('invoices', renderInvoicesFromApi);
+      // «Биллинг» скрыт — счета и тарифы сервер не отдаст (аудит S3)
+      if (!PORTAL.sectionHidden('billing')){
+        load('service-tariffs', renderTariffsFromApi);
+        load('invoices', renderInvoicesFromApi);
+      }
     });
   }
 

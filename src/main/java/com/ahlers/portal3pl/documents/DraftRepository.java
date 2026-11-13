@@ -271,6 +271,28 @@ public class DraftRepository {
                 .update();
     }
 
+    /**
+     * Версия документа (A9), со строкой шапки, заблокированной до конца
+     * транзакции: проверка и запись тогда не разойдутся с чужим
+     * сохранением. Та же формула, что {@link DocumentRepository#version}.
+     */
+    public String lockVersion(DocumentType type, String docId) {
+        return jdbc.sql(DocumentRepository.VERSION_SQL.formatted(type.headerTable()) + " FOR UPDATE")
+                .param("docId", docId).query(String.class).optional().orElse(null);
+    }
+
+    /**
+     * Отметить, что документ изменился: правка состава — тоже правка
+     * документа, иначе версия (A9) не заметила бы чужие строки.
+     * {@code clock_timestamp()}, а не {@code now()}: две записи в одной
+     * транзакции тоже должны дать разные версии.
+     */
+    public void touch(DocumentType type, String docId) {
+        jdbc.sql("UPDATE dbo.%s SET updated_at = clock_timestamp() WHERE doc_id = :docId::uuid"
+                        .formatted(type.headerTable()))
+                .param("docId", docId).update();
+    }
+
     /** Пересчитывает количество строк документа — колонка показывается в списке. */
     public void refreshLineCount(DocumentType type, String docId) {
         String sql = """

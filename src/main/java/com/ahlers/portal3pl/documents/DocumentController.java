@@ -85,6 +85,12 @@ public class DocumentController {
         return service.lineDetails(DocumentType.ofPath(docType), docId, lineNumber);
     }
 
+    /** История документа: кто, когда и что менял (журнал действий, V116). */
+    @GetMapping("/{docId}/history")
+    public List<Map<String, Object>> history(@PathVariable String docType, @PathVariable String docId) {
+        return service.history(DocumentType.ofPath(docType), docId);
+    }
+
     // ---------- Запись: черновики (этап 7, решение Р5) ----------
 
     /** Создать черновик. Тело запроса — поля шапки, можно пустое. */
@@ -165,9 +171,15 @@ public class DocumentController {
         return Map.of("canConfirm", problems.isEmpty(), "problems", problems);
     }
 
-    /** Подтвердить: проверка, отправка в WMS, смена статуса. */
+    /** Подтвердить: проверка, задание в очередь WMS и первая попытка отправки (V127). */
     @PostMapping("/{docId}/confirm")
     public Map<String, Object> confirm(@PathVariable String docType, @PathVariable String docId) {
         return drafts.confirm(DocumentType.ofPath(docType), docId);
+    }
+
+    /** «Отправить ещё раз» у документа с ошибкой отправки (аудит A1, V127). */
+    @PostMapping("/{docId}/resend")
+    public Map<String, Object> resend(@PathVariable String docType, @PathVariable String docId) {
+        return drafts.resend(DocumentType.ofPath(docType), docId);
     }
 }

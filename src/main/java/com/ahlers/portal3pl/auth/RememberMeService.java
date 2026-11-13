@@ -40,6 +40,9 @@ import java.util.Map;
  *       Иначе смена пароля не отбирала бы доступ — а это главное,
  *       ради чего её меняют.</li>
  * </ul>
+ *
+ * <p>Таблицу токенов портал не читает и не пишет напрямую — только
+ * функциями {@code auth_remember_*} (V133, аудит S10).
  */
 @Service
 public class RememberMeService {
@@ -72,17 +75,12 @@ public class RememberMeService {
         jdbc.sql("SELECT dbo.auth_remember_cleanup()").query().listOfRows();
 
         String token = newToken();
-        jdbc.sql("""
-                        INSERT INTO dbo.auth_remember_token
-                               (user_id, token_hash, expires_at, user_agent)
-                        VALUES (:user::uuid, :hash::varchar,
-                                now() + make_interval(days => :days), :agent::varchar)
-                        """)
+        jdbc.sql("SELECT dbo.auth_remember_issue(:user::uuid, :hash::varchar, :days, :agent::varchar)")
                 .param("user", userId)
                 .param("hash", fingerprint(token))
                 .param("days", DAYS)
                 .param("agent", agent(request))
-                .update();
+                .query().listOfRows();
 
         response.addCookie(cookie(request, token, (int) Duration.ofDays(DAYS).toSeconds()));
     }
@@ -94,8 +92,10 @@ public class RememberMeService {
      * просрочен, погашен или учётная запись заблокирована.
      *
      * <p>Токен гасится здесь же: вызывающий обязан выдать новый
-     * (см. {@link #remember}). Так одноразовость получается сама собой,
-     * без отдельного признака «использован».
+     * (см. {@link #remember}). Погашенный ({@code last_used_at}) больше не
+     * впускает, но удаляется не сразу (V130, аудит S13): запросы загрузки
+     * страницы идут разом с одним токеном, и соседу того, кто его погасил,
+     * незачем стирать cookie — тот уже получил новый.
      */
     @Transactional
     public PortalUser restore(HttpServletRequest request, HttpServletResponse response) {
@@ -103,17 +103,7 @@ public class RememberMeService {
         if (token == null) {
             return null;
         }
-        Map<String, Object> row = jdbc.sql("""
-                        DELETE FROM dbo.auth_remember_token t
-                         USING dbo.app_user u, dbo.enum_user_role r
-                         WHERE t.token_hash = :hash::varchar
-                           AND u.user_id = t.user_id
-                           AND r.id = u.role_id
-                           AND t.expires_at > now()
-                           AND u.is_active
-                     RETURNING u.user_id::text AS user_id, u.login, u.full_name,
-                               r.code AS role_code, u.must_change_password
-                     """)
+        Map<String, Object> row = jdbc.sql("SELECT * FROM dbo.auth_remember_use(:hash::varchar)")
                 .param("hash", fingerprint(token))
                 .query()
                 .listOfRows()
@@ -122,6 +112,11 @@ public class RememberMeService {
                 .orElse(null);
 
         if (row == null) {
+            // Погашен только что соседним запросом — тот уже выдал новый
+            // токен; стереть cookie здесь значило бы стереть и его.
+            if (justReplaced(token)) {
+                return null;
+            }
             // Признак недействителен — убираем cookie, иначе браузер
             // будет присылать мусор при каждом запросе ещё 15 дней.
             forgetCookie(request, response);
@@ -136,6 +131,17 @@ public class RememberMeService {
                 Boolean.TRUE.equals(row.get("must_change_password")));
     }
 
+    /** Токен погашен меньше {@link #GRACE_SECONDS} секунд назад. */
+    private boolean justReplaced(String token) {
+        return Boolean.TRUE.equals(jdbc.sql("SELECT dbo.auth_remember_just_replaced(:hash::varchar, :grace)")
+                .param("hash", fingerprint(token))
+                .param("grace", GRACE_SECONDS)
+                .query(Boolean.class).single());
+    }
+
+    /** Сколько погашенный токен не стирает cookie у соседних запросов. */
+    static final int GRACE_SECONDS = 30;
+
     /* ======================= Отмена ======================= */
 
     /** Выход: гасим именно этот токен, остальные устройства не трогаем. */
@@ -143,9 +149,9 @@ public class RememberMeService {
     public void forget(HttpServletRequest request, HttpServletResponse response) {
         String token = fromCookie(request);
         if (token != null) {
-            jdbc.sql("DELETE FROM dbo.auth_remember_token WHERE token_hash = :hash::varchar")
+            jdbc.sql("SELECT dbo.auth_remember_forget(:hash::varchar)")
                     .param("hash", fingerprint(token))
-                    .update();
+                    .query().listOfRows();
         }
         forgetCookie(request, response);
     }
@@ -158,9 +164,9 @@ public class RememberMeService {
      */
     @Transactional
     public void forgetAll(String userId) {
-        jdbc.sql("DELETE FROM dbo.auth_remember_token WHERE user_id = :user::uuid")
+        jdbc.sql("SELECT dbo.auth_remember_forget_all(:user::uuid)")
                 .param("user", userId)
-                .update();
+                .query().listOfRows();
     }
 
     /* ======================= Вспомогательное ======================= */

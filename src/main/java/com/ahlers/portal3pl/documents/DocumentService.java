@@ -79,6 +79,7 @@ public class DocumentService {
         }
         Map<String, Object> head = header.getFirst();
         return Map.of(
+                "version", repository.version(type, docId),   // для сверки правки (A9)
                 "header", head,
                 "lines", repository.lines(type, docId),
                 "lineDetails", repository.lineDetails(type, docId, null),
@@ -102,6 +103,13 @@ public class DocumentService {
     public List<Map<String, Object>> lines(DocumentType type, String docId) {
         depositorScope.apply();
         return repository.lines(type, docId);
+    }
+
+    /** История документа (V116). Чужой документ — пустая история: журнал под RLS. */
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> history(DocumentType type, String docId) {
+        depositorScope.apply();
+        return repository.history(type, docId);
     }
 
     @Transactional(readOnly = true)

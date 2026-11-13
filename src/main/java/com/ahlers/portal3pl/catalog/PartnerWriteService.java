@@ -405,14 +405,17 @@ public class PartnerWriteService {
                 .orElseThrow(() -> Fail.notFound("error.address.not_found"));
     }
 
-    /** Кто ведёт справочники. Кладовщик и разработчик — только смотрят. */
+    /**
+     * Кто ведёт справочники: поклажедатель, менеджер, складской сотрудник,
+     * администратор (решение заказчика 11.11.2026, как у товаров).
+     */
     private void requireEditor() {
         String role = jdbc.sql("SELECT dbo.auth_role_by_login(:login::text)")
                 .param("login", DepositorContext.userLogin())
                 .query(String.class)
                 .optional()
                 .orElse("");
-        if (!List.of("depositor", "manager", "admin").contains(role)) {
+        if (!List.of("depositor", "manager", "staff", "admin").contains(role)) {
             throw Fail.forbidden("error.access.partners");
         }
         currentUser.requireUserId();   // заодно убеждаемся, что учётка активна

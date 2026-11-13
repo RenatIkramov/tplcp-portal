@@ -158,6 +158,16 @@ public class LocaleService {
             // нельзя — такой текст всё равно негде показать.
             throw Fail.notFound("error.text.key_unused", "key", textKey);
         }
+        // Разметка — только из белого списка (аудит S5, V122): тексты идут
+        // в страницу как разметка, и на форму входа тоже. Правило в базе
+        // (ui_text_markup_ok); здесь — чтобы ответить человеку, а не сбоем.
+        boolean markupOk = Boolean.TRUE.equals(jdbc.sql("SELECT dbo.ui_text_markup_ok(:value::text)")
+                .param("value", value)
+                .query(Boolean.class)
+                .single());
+        if (!markupOk) {
+            throw Fail.badRequest("error.text.markup_not_allowed");
+        }
         jdbc.sql("SELECT dbo.ui_text_save(:key::text, :code::text, :value::text)")
                 .param("key", textKey)
                 .param("code", localeCode)

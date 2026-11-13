@@ -135,13 +135,16 @@
     const list = addresses[consigneeId] || [];
     const chosen = selected !== undefined ? selected
         : (list.some(a => String(a.addressId) === String(field.value)) ? field.value : '');
-    const esc = v => String(v === null || v === undefined ? '' : v).replace(/"/g, '&quot;');
-    const options = list.map(a => '<option value="' + esc(a.addressId) + '"'
-        + (String(a.addressId) === String(chosen) ? ' selected' : '') + '>'
-        + esc(a.address) + '</option>').join('');
-    const placeholder = chosen ? ''
-        : '<option value="" selected>' + T('sku.text.not_selected') + '</option>';
-    field.innerHTML = placeholder + options;
+    // Адрес вводит клиент: только текстом, не разметкой (аудит S1).
+    // Прежде здесь был innerHTML с «экранированием» одной кавычки — тег
+    // в адресе становился тегом.
+    field.replaceChildren();
+    if (!chosen) field.add(new Option(T('sku.text.not_selected'), '', true, true));
+    list.forEach(a => {
+      const on = String(a.addressId) === String(chosen);
+      field.add(new Option(String(a.address === null || a.address === undefined ? '' : a.address),
+          String(a.addressId), on, on));
+    });
   }
 
   /**
@@ -442,13 +445,17 @@
     const d = String(iso).slice(0,10).split('-');
     return d.length === 3 ? d[2] + '.' + d[1] + '.' + d[0] : iso;
   };
-  const dash = v => (v === null || v === undefined || v === '') ? '—' : v;
+
+  // общие помощники — core.js (аудит A4)
+  const {dash} = window.PORTAL;
 
   /** Карточка из API → объект документа в терминах демо. */
   function toDocument(type, card){
     const h = card.header;
     const totalCount = {
       docId: h.docId, no: h.documentNo,
+      // версия, которую видит экран: с ней уходит каждая запись (аудит A9)
+      version: card.version || null,
       // пустой номер ERP оставляем пустым: заголовок карточки подставит номер портала
       erpNo: h.erpNumber || '', wmsNumber: dash(h.docNumber),
       status: PORTAL.statusBadge(h.statusCode), statusLabel: h.statusName || '', statusCode: h.statusCode,
@@ -617,6 +624,17 @@
 
   /* ---------------- действия с черновиком ---------------- */
 
+  /**
+   * Заголовок с версией черновика, которую видит экран (аудит A9): сервер
+   * отказывает 409, если документ уже изменил другой. Без версии — без
+   * сверки (документ ещё не записан).
+   * @param {string|null|undefined} version
+   * @returns {Record<string, string>}
+   */
+  function seen(version){
+    return version ? {'If-Match': '"' + version + '"'} : {};
+  }
+
   function tell(e){
     if (typeof notify === 'function') notify(e.message || String(e));
   }
@@ -637,13 +655,16 @@
     const ref = refOf(type);
     if (!ref || ref.statusCode !== PORTAL.STATUS.DRAFT) return null;
     let docId = ref.docId;
+    let card;
     if (!docId){
-      const card = await api('POST', '/api/' + type, collectHeader(type));
+      card = await api('POST', '/api/' + type, collectHeader(type));
       docId = card.header.docId;
     } else {
-      await api('PUT', '/api/' + type + '/' + docId, collectHeader(type));
+      card = await api('PUT', '/api/' + type + '/' + docId, collectHeader(type), seen(ref.version));
     }
-    await api('PUT', '/api/' + type + '/' + docId + '/lines', collectLines(type));
+    // Состав — с версией, которую только что выдала запись шапки: шапка и
+    // состав одного сохранения — одна правка, а не две.
+    await api('PUT', '/api/' + type + '/' + docId + '/lines', collectLines(type), seen(card.version));
     const doc = await openFromApi(type, docId, true);
     // Список документов показывает номер, дату, контрагента и число
     // строк — всё это только что изменилось. Без обновления человек,
@@ -674,7 +695,7 @@
       docId: null, no: '', erpNo: '', wmsNumber: '—',
       status: 'draft', statusCode: PORTAL.STATUS.DRAFT, statusLabel: T('receipts.option.draft'),
       date: PORTAL.dateTimeText(new Date().toISOString()),
-      author: (PORTAL.uiUser && PORTAL.uiUser.full_name) || '',
+      author: (PORTAL.uiUser && PORTAL.uiUser.fullName) || '',
       comment: '', trip: '', lineCount: 0, totalPieces: 0,
       weight: '', volume: '', palletCount: '', cargoPlaces: '',
       carrier: '', transportType: '', transportBrand: '', carNumber: '', trailerNumber: '',
@@ -750,16 +771,9 @@
       await save(type, true);
       const saved = refOf(type);
       if (!saved || !saved.docId) return;
-      const card = await api('POST', '/api/' + type + '/' + saved.docId + '/confirm');
-      const doc = toDocument(type, card);
-      show(type, doc, true);
-      clearReasons(type);
-      if (typeof notify === 'function'){
-        notify(doc.statusCode === PORTAL.STATUS.SENDING_FAILED
-            ? T('sku.text.sending_to_wms_failed_the_document')
-            : T('common.message.document_sent_to_wms', {no: doc.no}));
-      }
-      if (typeof portalReloadDocuments === 'function') portalReloadDocuments();
+      const card = await api('POST', '/api/' + type + '/' + saved.docId + '/confirm',
+          undefined, seen(saved.version));
+      sent(type, card);
     } catch (e){
       // Отказ показываем там же, где человек его ждёт — в карточке,
       // и плашкой: плашка заметна, баннер остаётся читаемым.
@@ -768,6 +782,60 @@
     }
   }
 
+
+  /**
+   * Ответ подтверждения или повтора (V127): показать документ и сказать,
+   * чем кончилась первая попытка. «Отправляется» — WMS не ответил сразу,
+   * портал повторяет сам; карточка тогда перечитывается, пока открыта.
+   */
+  function sent(type, card){
+    const doc = toDocument(type, card);
+    show(type, doc, true);
+    clearReasons(type);
+    if (typeof notify === 'function'){
+      notify(doc.statusCode === PORTAL.STATUS.SENDING
+          ? T('common.message.document_sending', {no: doc.no})
+          : doc.statusCode === PORTAL.STATUS.SENDING_FAILED
+            ? T('sku.text.sending_to_wms_failed_the_document')
+            : T('common.message.document_sent_to_wms', {no: doc.no}));
+    }
+    if (typeof portalReloadDocuments === 'function') portalReloadDocuments();
+    watchSending(type, doc);
+  }
+
+  /** Как часто перечитывать «Отправляется»: портал повторяет раз в минуту. */
+  const SENDING_REFRESH_MS = 30000;
+
+  /**
+   * Пока документ «Отправляется» и открыт в карточке, перечитывать его:
+   * человек увидит «Отправлен» или «Ошибку отправки», не нажимая ничего.
+   * Ушёл с карточки или открыл другой документ — перечитывание кончается.
+   */
+  function watchSending(type, doc){
+    if (!doc || doc.statusCode !== PORTAL.STATUS.SENDING) return;
+    setTimeout(() => {
+      const now = refOf(type);
+      if (!now || now.docId !== doc.docId || now.statusCode !== PORTAL.STATUS.SENDING) return;
+      openFromApi(type, doc.docId, true)
+        .then(fresh => {
+          if (fresh.statusCode === PORTAL.STATUS.SENDING) watchSending(type, fresh);
+          else if (typeof portalReloadDocuments === 'function') portalReloadDocuments();
+        })
+        .catch(() => {});
+    }, SENDING_REFRESH_MS);
+  }
+
+  /** «Отправить ещё раз» у документа с ошибкой отправки (V127). */
+  async function resend(type){
+    const ref = refOf(type);
+    if (!ref || !ref.docId) return;
+    try {
+      sent(type, await api('POST', '/api/' + type + '/' + ref.docId + '/resend'));
+    } catch (e){
+      showRefusal(type, e.message || String(e));
+      tell(e);
+    }
+  }
 
   async function remove(type){
     const ref = refOf(type);
@@ -780,7 +848,7 @@
       return;
     }
     try {
-      await api('DELETE', '/api/' + type + '/' + ref.docId);
+      await api('DELETE', '/api/' + type + '/' + ref.docId, undefined, seen(ref.version));
       PORTAL.card.closeAskDelete(type);
       PORTAL.card.forget(type);
       showTab(type);
@@ -853,7 +921,7 @@
     }
     if (doc.transportState === PORTAL.TRANSPORT.NOT_SENT){
       const again = me.canEditTransport
-        ? ' <button class="btn ghost" style="margin-left:8px;" onclick="PORTAL.draft.resendTransport(\'' + docType + '\')">'
+        ? ' <button class="btn ghost" style="margin-left:8px;" ' + PORTAL.call('PORTAL.draft.resendTransport', docType) + '>'
           + html(T('common.button.resend_transport')) + '</button>'
         : '';
       return box('#991b1b', html(T('common.text.transport_not_sent', {error: doc.transportError || '—'})) + again);
@@ -929,6 +997,7 @@
     create: type => createNew(type).catch(tell),
     save: type => save(type).catch(tell),
     confirm,
+    resend,
     remove,
     saveTransport,
     resendTransport,

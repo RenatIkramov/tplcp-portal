@@ -27,7 +27,7 @@
    * переведённым; здесь только коды, от которых зависит поведение
    * экрана, и цвет плашки.
    */
-  PORTAL.STATUS = Object.freeze({DRAFT: '01', SENT_TO_WMS: '02', SENDING_FAILED: '03'});
+  PORTAL.STATUS = Object.freeze({DRAFT: '01', SENT_TO_WMS: '02', SENDING_FAILED: '03', SENDING: '04'});
 
   /**
    * Логическое значение на экран (V91): «Да» / «Нет» на языке пользователя,
@@ -52,7 +52,7 @@
    */
   const STATUS_BADGE = {
     '01': 'draft', '90': 'muted',
-    '02': 'warn', '10': 'warn', '20': 'warn', '21': 'warn', '30': 'warn', '40': 'warn', '51': 'warn',
+    '02': 'warn', '04': 'warn', '10': 'warn', '20': 'warn', '21': 'warn', '30': 'warn', '40': 'warn', '51': 'warn',
     '50': 'ok', '60': 'ok',
     '03': 'err', '61': 'err'
   };
@@ -249,12 +249,14 @@
    * @param {string} method
    * @param {string} path
    * @param {unknown} [body]
+   * @param {Record<string, string>} [headers] добавочные заголовки — например
+   *        If-Match с версией черновика (аудит A9)
    * @returns {Promise<any>}
    */
-  PORTAL.api = async (method, path, body) => {
+  PORTAL.api = async (method, path, body, headers) => {
     const resp = await fetch(path, {
       method: method,
-      headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+      headers: Object.assign({'Content-Type': 'application/json', 'Accept': 'application/json'}, headers || {}),
       body: body === undefined ? undefined : JSON.stringify(body)
     });
     if (resp.status === 204) return null;
@@ -367,8 +369,183 @@
    * <p>Для кнопок и заголовков, которые собираются как элементы DOM,
    * тот же смысл даёт `PORTAL.label(el, key)`.
    */
-  PORTAL.t = key => '<span data-i18n="' + key + '">'
-      + (typeof T === 'function' ? T(key) : key) + '</span>';
+  PORTAL.t = key => '<span data-i18n="' + PORTAL.esc(key) + '">'
+      + PORTAL.safeHtml(typeof T === 'function' ? T(key) : key) + '</span>';
+
+  /** Теги текстов интерфейса, которые остаются разметкой (V122; ссылка — отдельно). */
+  const TEXT_TAGS = new Set(['B', 'STRONG', 'I', 'EM']);
+
+  /**
+   * Текст интерфейса в разметку: только белый список (аудит 11.11.2026, S5).
+   *
+   * <p>ЧТО БЫЛО. Перевод вставлялся как есть: {@code el.innerHTML = текст}.
+   * Часть текстов и правда с разметкой (жирный, перенос, ссылка на
+   * почту), но текст с картинкой и обработчиком выполнился бы у каждого
+   * — и на форме входа, где набирают пароль.
+   *
+   * <p>КАК СТАЛО. Остаются b, strong, i, em, br и ссылка на mailto или
+   * https; у остального тег снимается, а текст внутри показывается как
+   * текст. То же правило проверяет база при записи (ui_text_markup_ok),
+   * экран — второй замок. Разбор — в отдельном документе: картинки
+   * и скрипты в нём не загружаются и не выполняются.
+   * @param {unknown} value
+   */
+  PORTAL.safeHtml = value => {
+    const s = String(value === null || value === undefined ? '' : value);
+    if (s.indexOf('<') < 0) return s;          // разметки нет — как есть, это дёшево
+    const doc = new DOMParser().parseFromString('<body>' + s, 'text/html');
+    /** @type {string[]} */
+    const out = [];
+    /** @param {Node} node */
+    const walk = node => node.childNodes.forEach(n => {
+      if (n.nodeType === Node.TEXT_NODE){
+        out.push(PORTAL.esc(n.nodeValue));
+        return;
+      }
+      if (n.nodeType !== Node.ELEMENT_NODE) return;
+      const el = /** @type {Element} */ (n);
+      const tag = el.tagName;
+      if (tag === 'BR'){
+        out.push('<br>');
+      } else if (TEXT_TAGS.has(tag)){
+        out.push('<' + tag.toLowerCase() + '>');
+        walk(el);
+        out.push('</' + tag.toLowerCase() + '>');
+      } else if (tag === 'A' && /^(mailto:|https:\/\/)/i.test(el.getAttribute('href') || '')){
+        out.push('<a href="' + PORTAL.esc(el.getAttribute('href')) + '">');
+        walk(el);
+        out.push('</a>');
+      } else if (tag !== 'SCRIPT' && tag !== 'STYLE'){
+        walk(el);                               // тег снят, текст остался
+      }
+    });
+    walk(doc.body);
+    return out.join('');
+  };
+
+  /** Текст в разметку: значение никогда не станет тегом или атрибутом. */
+  PORTAL.esc = v => String(v === null || v === undefined ? '' : v)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+  /*
+   * Общие помощники разметки и сообщений (аудит 11.11.2026, A4). Прежде
+   * каждый модуль заводил свои esc / attr / text / dash / say / messageOf —
+   * около семидесяти копий, и копии расходились: draft.js экранировал одну
+   * кавычку, и адрес доставки становился разметкой (S1). Модуль берёт их
+   * отсюда: const {esc, dash, say} = PORTAL;
+   */
+
+  /** Пустое значение — прочерк. */
+  PORTAL.dash = v => (v === null || v === undefined || v === '') ? '—' : v;
+
+  /** Плашка с ответом портала. */
+  PORTAL.say = m => { if (typeof window.notify === 'function') window.notify(m); };
+
+  /** Текст ошибки для человека: у исключения — его сообщение. */
+  PORTAL.messageOf = e => (e instanceof Error ? e.message : String(e));
+
+  /**
+   * Вызов по щелчку без сборки скрипта из данных (аудит 11.11.2026, S1).
+   *
+   * <p>ЧТО БЫЛО. Строка списка собиралась как onclick с кодом товара
+   * в кавычках прямо в тексте скрипта: код экранировался как HTML,
+   * кавычка — обратной косой, а сама косая — нет. Код из косой,
+   * кавычки и скобки закрывал строку скрипта, и дальше браузер выполнял
+   * то, что клиент вписал в код товара, — у менеджера или
+   * администратора, щёлкнувшего по строке (пример — ScriptInjectionTest).
+   *
+   * <p>КАК СТАЛО. Имя функции и аргументы лежат в атрибутах
+   * {@code data-call} и {@code data-args} (JSON), экранированные как
+   * обычный текст. Текст атрибута данных браузер не выполняет никогда;
+   * вызывает общий обработчик ниже. Имя — только наше, из кода:
+   * точечный путь от window ({@code PORTAL.skuCard.packagingEdit}).
+   *
+   * <p>Кнопка внутри строки: срабатывает ближайший к щелчку элемент
+   * с data-call, строка под ней — нет. stopPropagation не нужен.
+   */
+  PORTAL.call = (fn, ...args) =>
+      ' data-call="' + PORTAL.esc(fn) + '" data-args="' + PORTAL.esc(JSON.stringify(args)) + '"';
+
+  /** То же по mousedown: выпадающий список закрывается по blur раньше щелчка. */
+  PORTAL.callOnPress = (fn, ...args) =>
+      ' data-press="' + PORTAL.esc(fn) + '" data-args="' + PORTAL.esc(JSON.stringify(args)) + '"';
+
+  /** То же по change: флажки и списки (аудит A3). */
+  PORTAL.callOnChange = (fn, ...args) =>
+      ' data-change="' + PORTAL.esc(fn) + '" data-args="' + PORTAL.esc(JSON.stringify(args)) + '"';
+
+  /** То же по input: поле ввода сообщает каждое нажатие (аудит A3). */
+  PORTAL.callOnInput = (fn, ...args) =>
+      ' data-input="' + PORTAL.esc(fn) + '" data-args="' + PORTAL.esc(JSON.stringify(args)) + '"';
+
+  /**
+   * Аргументы, которые берутся у самого элемента в момент вызова — прежде
+   * в onclick для этого писали {@code this.checked}, {@code this.value},
+   * {@code this}: состояние флажка, значение поля, сам элемент.
+   * {@code PORTAL.call('PORTAL.card.check', type, i, PORTAL.CHECKED)}.
+   */
+  PORTAL.CHECKED = '$checked';
+  PORTAL.VALUE = '$value';
+  PORTAL.SELF = '$self';
+
+  /** @param {string} path */
+  function callable(path){
+    /** @type {any} */
+    let target = window;
+    let owner = null;
+    for (const part of path.split('.')){
+      if (target === null || target === undefined) return null;
+      owner = target;
+      target = target[part];
+    }
+    return typeof target === 'function' ? {fn: target, owner} : null;
+  }
+
+  /**
+   * @param {Event} e
+   * @param {string} attrName
+   */
+  function dispatch(e, attrName){
+    const start = /** @type {Element | null} */ (e.target instanceof Element ? e.target : null);
+    const host = start && start.closest('[' + attrName + ']');
+    if (!host || /** @type {HTMLButtonElement} */ (host).disabled) return;
+    // Модуль сам назначил элементу обработчик (btn.onclick = …): он и
+    // главный — так было и со строкой onclick в разметке, которую
+    // назначение свойства заменяло. Иначе сработали бы оба.
+    const own = {'data-call': 'onclick', 'data-backdrop': 'onclick', 'data-change': 'onchange',
+      'data-input': 'oninput', 'data-press': 'onmousedown'}[attrName];
+    if (own && /** @type {any} */ (host)[own]) return;
+    // Подложка окна: закрывает щелчок по ней самой, а не по содержимому
+    // (прежде — «if(event.target===this) …» в onclick).
+    if (attrName === 'data-backdrop' && e.target !== host) return;
+    // Ссылка-кнопка (href="#"): адрес страницы не меняется
+    if (attrName === 'data-call' && host.tagName === 'A') e.preventDefault();
+    // Элемент со своим onclick и stopPropagation (флажок в строке)
+    // сюда не доходит: строка под ним не открывается, как и прежде.
+    const path = host.getAttribute(attrName) || '';
+    const found = callable(path);
+    if (!found){
+      console.error('data-call: нет функции', path);
+      return;
+    }
+    /** @type {unknown[]} */
+    let args = [];
+    try {
+      const parsed = JSON.parse(host.getAttribute('data-args') || '[]');
+      if (Array.isArray(parsed)) args = parsed;
+    } catch (err) { /* пустой список аргументов */ }
+    const input = /** @type {HTMLInputElement} */ (host);
+    args = args.map(a => a === PORTAL.CHECKED ? !!input.checked
+        : a === PORTAL.VALUE ? input.value
+        : a === PORTAL.SELF ? host : a);
+    found.fn.apply(found.owner, args);
+  }
+  document.addEventListener('click', e => dispatch(e, 'data-call'));
+  document.addEventListener('click', e => dispatch(e, 'data-backdrop'));
+  document.addEventListener('mousedown', e => dispatch(e, 'data-press'));
+  document.addEventListener('change', e => dispatch(e, 'data-change'));
+  document.addEventListener('input', e => dispatch(e, 'data-input'));
 
   /** То же для готового элемента: подпись и атрибут разом. */
   PORTAL.label = (el, key) => {
@@ -551,7 +728,20 @@
     adminSubHooks.forEach(fn => fn(sub));
   };
 
-  window.openAbout = () => window.showView('about');
+  /*
+   * Переходы кнопок «Назад» — именем, а не строкой скрипта в разметке
+   * (аудит A3): прежде в onclick писали «showTab('admin'); showAdminSub('users')»
+   * и «showView(PORTAL.lastView)».
+   */
+  /** Вернуться к экрану, открытому последним. */
+  PORTAL.backToLastView = () => window.showView(PORTAL.lastView);
+  /** Вернуться к разделу, открытому последним. */
+  PORTAL.backToLastTab = () => window.showTab(PORTAL.lastView);
+  /** Раздел «Справочники», подвкладка sub. */
+  PORTAL.openReferencesSub = sub => { window.showTab('references'); window.showReferencesSub(sub); };
+  /** Раздел «Администрирование», подвкладка sub. */
+  PORTAL.openAdminSub = sub => { window.showTab('admin'); window.showAdminSub(sub); };
+
   // «Контакты» — contacts.js, «Личный кабинет» — profile.js: открывают
   // экран и читают данные
 

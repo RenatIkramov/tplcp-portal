@@ -1,5 +1,7 @@
 package com.ahlers.portal3pl.documents;
 
+import com.ahlers.portal3pl.auth.SessionUser;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -33,13 +35,21 @@ import java.util.Map;
 public class DocumentDictionaryController {
 
     private final DocumentService service;
+    private final SessionUser session;
 
-    public DocumentDictionaryController(DocumentService service) {
+    public DocumentDictionaryController(DocumentService service, SessionUser session) {
         this.service = service;
+        this.session = session;
     }
 
+    /**
+     * Только вошедшему (аудит 11.11.2026, S2): прежде проверку делал один
+     * фильтр, и обход фильтра отдавал списки кому угодно. Остальные
+     * контроллеры спрашивают пользователя сами — этот теперь тоже.
+     */
     @GetMapping("/api/document-dictionaries")
-    public Map<String, Object> dictionaries() {
+    public Map<String, Object> dictionaries(HttpServletRequest request) {
+        session.requireUser(request);
         return service.dictionaries();
     }
 }

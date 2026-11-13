@@ -321,6 +321,11 @@ public class ColumnService {
             throw Fail.notFound("error.field.shown_nowhere",
                     "field", fieldId, "object", objectCode);
         }
+        // Название поля — простой текст (аудит S5, V122): угловые скобки
+        // не нужны и в разметке страницы опасны.
+        if (label != null && (label.indexOf('<') >= 0 || label.indexOf('>') >= 0)) {
+            throw Fail.badRequest("error.field_label.angle_brackets");
+        }
         jdbc.sql("""
                         SELECT dbo.admin_field_label_save(
                                  :dep::uuid, :code::text, :field::text, :label::text)

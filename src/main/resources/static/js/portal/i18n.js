@@ -5,9 +5,8 @@
   const PORTAL = window.PORTAL;
   if (!PORTAL) return;
 
-  const esc = v => String(v === null || v === undefined ? '' : v)
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-  const say = m => { if (typeof notify === 'function') notify(m); };
+  // общие помощники — core.js (аудит A4)
+  const {esc, say} = window.PORTAL;
 
   // fromAccount — язык взят из учётной записи вошедшего, и портальный
   // язык по умолчанию его больше не перебивает (см. install).
@@ -99,7 +98,9 @@
     all.forEach(el => {
       if (!el.getAttribute || !el.hasAttribute('data-i18n')) return;
       const t = state.texts[el.getAttribute('data-i18n')];
-      if (t) el.innerHTML = t;
+      // только разрешённая разметка: текст правится в администрировании
+      // и показывается и на форме входа (аудит S5, PORTAL.safeHtml)
+      if (t) el.innerHTML = PORTAL.safeHtml(t);
     });
     Array.from(root.querySelectorAll('[data-i18n-placeholder]')).forEach(el => {
       const t = state.texts[el.getAttribute('data-i18n-placeholder') || ''];
@@ -161,7 +162,7 @@
      'renderBillingServices', 'renderBillingInvoices', 'renderAdminUsers',
      'renderEnumValues', 'renderDepositorsDir', 'renderWarehousesDir',
      'renderReportsConfigTable', 'renderReportRows',
-     'populateReportsConfigDepositorFilter'
+     'populateReportsConfigDepositorFilter', 'renderAuditLog'
     ].forEach(name => {
       if (typeof window[name] === 'function') safely(name, window[name]);
     });
@@ -414,16 +415,16 @@
       + '</div>'
       + '<div class="filters">'
       + '<div class="fgroup"><label for="uiTextsSearch">' + T('common.text.search_by_text_or_key') + '</label>'
-      + '<input id="uiTextsSearch" oninput="portalUiTextsRender()" placeholder="'
+      + '<input id="uiTextsSearch"' + PORTAL.callOnInput('portalUiTextsRender') + ' placeholder="'
       + esc(T('admin.placeholder.ui_texts_search')) + '"/></div>'
       + '<div class="fgroup"><label for="uiTextsScope">' + T('admin.label.scope') + '</label>'
-      + '<select id="uiTextsScope" onchange="portalUiTextsRender()">'
+      + '<select id="uiTextsScope"' + PORTAL.callOnChange('portalUiTextsRender') + '>'
       + '<option value="">' + T('admin.option.all_scopes') + '</option></select></div>'
       + '<div class="fgroup"><label for="uiTextsElement">' + T('admin.label.element') + '</label>'
-      + '<select id="uiTextsElement" onchange="portalUiTextsRender()">'
+      + '<select id="uiTextsElement"' + PORTAL.callOnChange('portalUiTextsRender') + '>'
       + '<option value="">' + T('admin.option.all_elements') + '</option></select></div>'
       + '<div class="fgroup"><label for="uiTextsFilter">' + T('common.text.show') + '</label>'
-      + '<select id="uiTextsFilter" onchange="portalUiTextsRender()">'
+      + '<select id="uiTextsFilter"' + PORTAL.callOnChange('portalUiTextsRender') + '>'
       + '<option value="">' + T('common.text.all_keys') + '</option>'
       + '<option value="missing">' + T('common.text.missing_translations_only') + '</option></select></div>'
       + '<div class="spacer"></div></div>'
@@ -505,7 +506,7 @@
           + '<td>' + esc(r.owner || '—') + '</td>'
           + codes.map(c => '<td><input class="kv-input kv-input-editable" style="min-width:220px;" value="'
               + esc(r.values[c] || '') + '" data-key="' + esc(r.textKey) + '" data-locale="' + esc(c)
-              + '" onchange="portalUiTextSave(this)"/></td>').join('')
+              + '"' + PORTAL.callOnChange('portalUiTextSave', PORTAL.SELF) + '/></td>').join('')
           + '</tr>').join('')
       : '<tr><td colspan="' + (codes.length + 4) + '" style="color:var(--muted);">' + T('stock.text.nothing_found') + '</td></tr>';
   };

@@ -14,11 +14,9 @@
 (function(){
   'use strict';
 
-  const esc = s => String(s === null || s === undefined ? '' : s)
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
+  // общие помощники — core.js (аудит A4)
+  const {esc, dash} = window.PORTAL;
   const T_ = k => (typeof T === 'function' ? T(k) : k);
-  const dash = v => (v === null || v === undefined || v === '' ? '—' : v);
 
   /** @type {{loaded: boolean, data: ContactsAnswer | null}} */
   const state = {loaded: false, data: null};

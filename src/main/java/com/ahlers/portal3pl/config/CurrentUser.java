@@ -106,6 +106,46 @@ public class CurrentUser {
     }
 
     /**
+     * Вправе ли пользователь создать документ этого вида: и черновик
+     * кнопкой «Создать», и загрузку из Excel проверяет одно место.
+     *
+     * <p>НАЙДЕНО АУДИТОМ (11.11.2026, S3). Прежде галочки «может
+     * создавать…» проверяла только загрузка из Excel, а черновик через
+     * {@code POST /api/orders} создавался в обход: кнопку прятал экран,
+     * адрес оставался открыт.
+     */
+    public void requireMayCreate(com.ahlers.portal3pl.documents.DocumentType type) {
+        switch (type) {
+            case ORDERS -> requireMayCreateOrders();
+            case RECEIPTS -> requireMayCreateReceipts();
+            case TRANSFERS -> requireMayCreateTransfers();
+        }
+    }
+
+    /** Скрыт ли пользователю раздел «Биллинг» (§6.3) — счета и тарифы. */
+    public boolean billingHidden() {
+        String login = DepositorContext.userLogin();
+        if (login == null || login.isBlank()) {
+            return false;
+        }
+        return jdbc.sql("""
+                        SELECT COALESCE(s.hide_billing_tab, false)
+                        FROM dbo.app_user u
+                        LEFT JOIN dbo.user_settings s ON s.user_id = u.user_id
+                        WHERE u.login = :login
+                        """)
+                .param("login", login)
+                .query(Boolean.class)
+                .optional()
+                .orElse(false);
+    }
+
+    /** Скрыт ли у текущего поклажедателя раздел «Перемещения» (V35). */
+    public boolean transfersHidden() {
+        return Boolean.TRUE.equals(depositorSettings().get("hideTransfersTab"));
+    }
+
+    /**
      * Право из {@code user_settings}; нет строки настроек — право есть.
      * Имя колонки — из кода выше, не снаружи.
      */

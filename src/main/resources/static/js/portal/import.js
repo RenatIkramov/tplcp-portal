@@ -5,9 +5,8 @@
   const PORTAL = window.PORTAL;
   if (!PORTAL) return;
 
-  const esc = v => String(v === null || v === undefined ? '' : v)
-    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  const say = m => { if (typeof notify === 'function') notify(m); };
+  // общие помощники — core.js (аудит A4)
+  const {esc, say} = window.PORTAL;
   const T_ = k => (typeof T === 'function' ? T(k) : k);
 
   /**
@@ -542,8 +541,9 @@
     const own = Object.keys(UPLOAD_BUTTONS);
     document.querySelectorAll('button').forEach(btn => {
       if (own.indexOf(btn.id) >= 0) return;
-      const onclick = btn.getAttribute('onclick') || '';
-      if (/notify\('(Диалог загрузки|Загрузка ранее подготовленного)/.test(onclick)){
+      // заглушка прототипа: щелчок зовёт notify с таким сообщением (аудит A3)
+      const stub = btn.getAttribute('data-call') === 'notify' ? (btn.getAttribute('data-args') || '') : '';
+      if (/(Диалог загрузки|Загрузка ранее подготовленного)/.test(stub)){
         btn.style.display = 'none';
       }
     });
@@ -562,7 +562,8 @@
       const btn = document.getElementById(id);
       if (btn && !btn.dataset.wired){
         btn.dataset.wired = '1';
-        btn.removeAttribute('onclick');
+        btn.removeAttribute('data-call');
+        btn.removeAttribute('data-args');
         btn.onclick = () => pickFile(UPLOAD_BUTTONS[id]);
       }
     });

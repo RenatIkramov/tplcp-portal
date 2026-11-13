@@ -7,7 +7,9 @@ import com.ahlers.portal3pl.common.MsgRef;
 import com.ahlers.portal3pl.config.CurrentUser;
 import com.ahlers.portal3pl.config.DepositorScope;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -27,10 +29,13 @@ public class DraftService {
     private final WmsGateway wms;
     private final ActorText texts;
     private final LineQuality quality;
+    private final WmsOutbox outbox;
+    private final TransactionTemplate tx;
 
     public DraftService(DepositorScope depositorScope, CurrentUser currentUser,
                         DraftRepository drafts, DocumentRepository documents, WmsGateway wms,
-                        ActorText texts, LineQuality quality) {
+                        ActorText texts, LineQuality quality, WmsOutbox outbox,
+                        PlatformTransactionManager txManager) {
         this.depositorScope = depositorScope;
         this.currentUser = currentUser;
         this.drafts = drafts;
@@ -38,12 +43,15 @@ public class DraftService {
         this.wms = wms;
         this.texts = texts;
         this.quality = quality;
+        this.outbox = outbox;
+        this.tx = new TransactionTemplate(txManager);
     }
 
     @Transactional
     public Map<String, Object> create(DocumentType type, Map<String, Object> header) {
         depositorScope.apply();
         String userId = currentUser.requireUserId();
+        currentUser.requireMayCreate(type);   // галочка «может создавать…» (аудит S3)
         Map<String, Object> values = header == null ? new java.util.HashMap<>() : new java.util.HashMap<>(header);
         requireErpNumber(type, null, values, true);
         singleWarehouse(type, values);
@@ -242,6 +250,7 @@ public class DraftService {
         int lineNumber = drafts.nextLineNumber(type, docId);
         drafts.addLine(type, docId, lineNumber, quality.normalized(line));
         drafts.refreshLineCount(type, docId);
+        drafts.touch(type, docId);
         return card(type, docId);
     }
 
@@ -259,6 +268,7 @@ public class DraftService {
         if (drafts.updateLine(type, docId, lineNumber, values) == 0) {
             throw Fail.notFound("error.line.not_found");
         }
+        drafts.touch(type, docId);
         return card(type, docId);
     }
 
@@ -289,6 +299,7 @@ public class DraftService {
             drafts.addLine(type, docId, lineNumber++, line);
         }
         drafts.refreshLineCount(type, docId);
+        drafts.touch(type, docId);
         return card(type, docId);
     }
 
@@ -299,43 +310,71 @@ public class DraftService {
         requireDraft(type, docId);
         drafts.deleteLines(type, docId, lineNumbers);
         drafts.refreshLineCount(type, docId);
+        drafts.touch(type, docId);
         return card(type, docId);
     }
 
     /**
-     * Подтверждение: проверяем, отправляем в WMS, переводим статус.
-     * Пока контракта API нет, отправка заглушена (Р5) — меняется ровно одно место.
+     * Подтверждение (Р5, очередь — аудит A1, V127).
+     *
+     * <p>Без {@code @Transactional} намеренно: транзакций две, и WMS
+     * вызывается между ними, когда соединение с базой уже свободно.
+     * <ol>
+     *   <li>Транзакция: документ заблокирован и сверен с версией экрана,
+     *       проверен, получает статус «Отправляется», задание — в очередь.
+     *       Второе одновременное «Подтвердить» ждёт блокировку и получает
+     *       отказ: документ уже не черновик.</li>
+     *   <li>Первая попытка отправки — сразу ({@link WmsOutbox#deliver}).
+     *       WMS ответил — «Отправлен в WMS»; нет — «Отправляется», дальше
+     *       повторяет расписание.</li>
+     * </ol>
      */
-    @Transactional
     public Map<String, Object> confirm(DocumentType type, String docId) {
-        depositorScope.apply();
-        currentUser.requireUserId();
-        requireDraft(type, docId);
+        Long job = tx.execute(s -> {
+            depositorScope.apply();
+            currentUser.requireUserId();
+            requireDraft(type, docId);
+            List<String> problems = problemTexts(type, docId);
+            if (!problems.isEmpty()) {
+                throw Fail.unprocessable("error.document.not_ready",
+                        "problems", String.join("; ", problems));
+            }
+            return enqueue(type, docId);
+        });
+        outbox.deliver(job);
+        return tx.execute(s -> card(type, docId));
+    }
 
-        List<String> problems = problemTexts(type, docId);
-        if (!problems.isEmpty()) {
-            throw Fail.unprocessable("error.document.not_ready",
-                    "problems", String.join("; ", problems));
-        }
+    /**
+     * «Отправить ещё раз» у документа с ошибкой отправки (V127): то же,
+     * что подтверждение, только без проверок черновика — состав уже ушёл
+     * в очередь однажды и с тех пор не менялся.
+     */
+    public Map<String, Object> resend(DocumentType type, String docId) {
+        Long job = tx.execute(s -> {
+            depositorScope.apply();
+            currentUser.requireUserId();
+            if (drafts.lockVersion(type, docId) == null) {
+                throw Fail.notFound("error.document.not_found");
+            }
+            Map<String, Object> state = state(type, docId);
+            if (!DocumentStatus.SENDING_FAILED.equals(state.get("statusCode"))
+                    || !EnumCodes.Origin.PORTAL.equals(state.get("origin"))) {
+                throw Fail.conflict("error.document.not_failed");
+            }
+            return enqueue(type, docId);
+        });
+        outbox.deliver(job);
+        return tx.execute(s -> card(type, docId));
+    }
 
-        String depositorId = depositorScope.currentDepositorId();
-        try {
-            wms.sendDocument(type, docId);
-            drafts.setStatus(type, docId, DocumentStatus.SENT_TO_WMS, true);
-            drafts.logSync(type, depositorId, EnumCodes.SyncStatus.SUCCESS, null);
-        } catch (RuntimeException e) {
-            // Откатывать в черновик нельзя: иначе «не отправлял» неотличимо
-            // от «отправлял, не прошло» (Р5).
-            drafts.setStatus(type, docId, DocumentStatus.SENDING_FAILED, false);
-            drafts.logSync(type, depositorId, EnumCodes.SyncStatus.FAILED, e.getMessage());
-            return card(type, docId);
-        }
+    /** Статус «Отправляется» и задание в очередь — в транзакции вызывающего. */
+    private long enqueue(DocumentType type, String docId) {
+        drafts.setStatus(type, docId, DocumentStatus.SENDING, false);
         // Транспорт, заполненный в черновике, уходит вслед за документом (V84).
         // Пустой не отправляется: WMS незачем заводить пустую сущность.
-        if (drafts.hasTransport(type, docId)) {
-            deliverTransport(type, docId);
-        }
-        return card(type, docId);
+        return outbox.enqueue(type, docId, depositorScope.currentDepositorId(),
+                drafts.hasTransport(type, docId));
     }
 
     /**
@@ -400,6 +439,7 @@ public class DraftService {
             throw Fail.notFound("error.document.not_found");
         }
         return Map.of(
+                "version", documents.version(type, docId),
                 "header", header.getFirst(),
                 "lines", documents.lines(type, docId),
                 "lineDetails", documents.lineDetails(type, docId, null),
@@ -414,12 +454,26 @@ public class DraftService {
         return state;
     }
 
-    /** Редактировать можно только собственный черновик портала (Р5). */
+    /**
+     * Редактировать можно только собственный черновик портала (Р5), и
+     * только тот, который экран видел (A9): строка шапки блокируется до
+     * конца транзакции, версия сверяется с присланной экраном
+     * ({@link EditVersion}). Второе «Подтвердить» по той же причине ждёт
+     * первое и получает отказ, а не отправляет документ ещё раз.
+     */
     private void requireDraft(DocumentType type, String docId) {
+        String current = drafts.lockVersion(type, docId);
+        if (current == null) {
+            throw Fail.notFound("error.document.not_found");
+        }
         Map<String, Object> state = state(type, docId);
         boolean draft = DocumentStatus.DRAFT.equals(state.get("statusCode")) && EnumCodes.Origin.PORTAL.equals(state.get("origin"));
         if (!draft) {
             throw Fail.conflict("error.document.sent_to_wms");
+        }
+        String expected = EditVersion.expected();
+        if (expected != null && !expected.equals(current)) {
+            throw Fail.conflict("error.document.changed_by_other");
         }
     }
 

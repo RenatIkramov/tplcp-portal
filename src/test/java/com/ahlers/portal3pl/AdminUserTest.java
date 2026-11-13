@@ -32,19 +32,19 @@ class AdminUserTest extends PortalTestBase {
 
     @AfterEach
     void removeTestUsers() {
-        jdbc.sql("""
+        owner().jdbc.sql("""
                 DELETE FROM dbo.user_depositor_access
                  WHERE user_id IN (SELECT user_id FROM dbo.app_user WHERE login LIKE 'p.%.test@%')
                 """).update();
-        jdbc.sql("""
+        owner().jdbc.sql("""
                 DELETE FROM dbo.user_warehouse_access
                  WHERE user_id IN (SELECT user_id FROM dbo.app_user WHERE login LIKE 'p.%.test@%')
                 """).update();
-        jdbc.sql("""
+        owner().jdbc.sql("""
                 DELETE FROM dbo.user_settings
                  WHERE user_id IN (SELECT user_id FROM dbo.app_user WHERE login LIKE 'p.%.test@%')
                 """).update();
-        jdbc.sql("DELETE FROM dbo.app_user WHERE login LIKE 'p.%.test@%'").update();
+        owner().jdbc.sql("DELETE FROM dbo.app_user WHERE login LIKE 'p.%.test@%'").update();
     }
 
     private AdminUserService.Profile profileOf(String login, String role, List<String> depositors) {

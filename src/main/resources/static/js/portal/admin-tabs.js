@@ -49,8 +49,9 @@
     // и поступлений переехали сюда из «Общих справочников».
     {id: 'enumValues', labelKey: 'admin.button.enums',
      subs: ['enumValues']},
-    {id: 'errors', labelKey: 'admin.button.errors',
-     subs: ['integration', 'excel']},
+    // «Ошибки» стали «Журналами» (V117): первым — журнал действий.
+    {id: 'logs', labelKey: 'admin.button.logs',
+     subs: ['audit', 'integration', 'excel']},
     {id: 'reports', labelKey: 'admin.button.report_settings',
      subs: ['reports-config']},
     {id: 'uitexts', labelKey: 'admin.button.interface_texts',
@@ -71,6 +72,7 @@
     'users':            'references.button.users',
     'depositorsDir':    'references.button.depositors',
     'languages':        'references.button.languages',
+    'audit':            'admin.button.audit_log',
     'integration':      'admin.button.integration_errors',
     'excel':            'admin.button.excel_import_errors',
     'reports-config':   'admin.button.report_settings',

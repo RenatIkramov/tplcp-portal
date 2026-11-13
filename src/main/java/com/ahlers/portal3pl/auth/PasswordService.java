@@ -1,8 +1,6 @@
 package com.ahlers.portal3pl.auth;
 
 import com.ahlers.portal3pl.common.Fail;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -19,10 +17,23 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class PasswordService {
 
-    /** Минимальная длина. Перебор дополнительно сдерживает блокировка после пяти попыток. */
+    /** Минимальная длина. Перебор дополнительно сдерживают задержка и лимит по адресу (V123). */
     private static final int MIN_LENGTH = 8;
 
-    private static final Logger log = LoggerFactory.getLogger(PasswordService.class);
+    /**
+     * Больше bcrypt не проверяет: хвост длиннее 72 байт он молча
+     * отбрасывает, и пароль «совпадал» бы с любым, у кого те же первые
+     * 72 байта (аудит S11).
+     */
+    static final int MAX_BYTES = 72;
+
+    /** Длина выданного пароля (решение заказчика 11.11.2026: 12 знаков подряд). */
+    static final int ISSUED_LENGTH = 12;
+
+    /** Знаки выданного пароля: без похожих — 0/O/o, 1/l/I. Его диктуют по телефону. */
+    static final String ISSUED_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
+
+    private static final java.security.SecureRandom RANDOM = new java.security.SecureRandom();
 
     private final JdbcClient jdbc;
     private final PasswordEncoder encoder;
@@ -38,15 +49,8 @@ public class PasswordService {
     /** Пользователь меняет свой пароль. Возвращает его же, но уже без флага «сменить». */
     @Transactional
     public PortalUser changeOwn(PortalUser user, String currentPassword, String newPassword) {
-        long startedAt = System.currentTimeMillis();
         String hash = passwordHash(user.userId());
-        long readAt = System.currentTimeMillis();
         boolean matched = hash != null && !hash.isBlank() && encoder.matches(currentPassword, hash);
-        long verifiedAt = System.currentTimeMillis();
-        // Если смена пароля подтормаживает, по этой строке видно, где именно:
-        // чтение из базы или расчёт хеша (он медленный по назначению).
-        log.info("Смена пароля {}: чтение {} мс, сверка пароля {} мс",
-                user.login(), readAt - startedAt, verifiedAt - readAt);
         if (!matched) {
             throw Fail.forbidden("error.password.current_wrong");
         }
@@ -79,19 +83,26 @@ public class PasswordService {
     }
 
     /**
-     * Временный пароль из слогов: читается вслух и переносится без ошибок,
-     * при этом отвечает требованиям — оба регистра, знак и цифры.
+     * Временный пароль, который выдаёт администратор: 12 знаков подряд из
+     * {@link #ISSUED_ALPHABET} (решение заказчика 11.11.2026).
+     *
+     * <p>ЧТО БЫЛО (аудит S11). {@code java.util.Random} — предсказуем по
+     * времени запуска, — и шаблон «три слога, дефис, четыре цифры»: около
+     * 4·10⁸ вариантов. Теперь {@code SecureRandom} и около 7·10²⁰.
+     * Пароль всегда отвечает требованиям: обе буквы и цифра есть.
      */
     public static String generate() {
-        String consonants = "kmnprst", vowels = "aeiou";
-        java.util.Random r = new java.util.Random();
-        StringBuilder word = new StringBuilder();
-        for (int i = 0; i < 3; i++) {
-            word.append(consonants.charAt(r.nextInt(consonants.length())))
-                 .append(vowels.charAt(r.nextInt(vowels.length())));
+        while (true) {
+            StringBuilder out = new StringBuilder(ISSUED_LENGTH);
+            for (int i = 0; i < ISSUED_LENGTH; i++) {
+                out.append(ISSUED_ALPHABET.charAt(RANDOM.nextInt(ISSUED_ALPHABET.length())));
+            }
+            String p = out.toString();
+            if (p.chars().anyMatch(Character::isUpperCase) && p.chars().anyMatch(Character::isLowerCase)
+                    && p.chars().anyMatch(Character::isDigit)) {
+                return p;
+            }
         }
-        String base = Character.toUpperCase(word.charAt(0)) + word.substring(1);
-        return base + "-" + (1000 + r.nextInt(9000));
     }
 
     private String passwordHash(String userId) {
@@ -124,7 +135,7 @@ public class PasswordService {
      * Требования к паролю — ровно те, что портал показывает в окне смены:
      * не короче восьми символов, латинские буквы заглавные и строчные, плюс
      * цифра или знак. Больше условий не ставим: сдерживает перебор не длина
-     * правил, а блокировка после пяти неудачных попыток.
+     * правил, а задержка после неудач подряд и лимит по адресу (V123).
      * <p>
      * Кириллица запрещена сознательно: на чужой раскладке такой пароль
      * не ввести, а пользователь увидит только «неверный пароль».
@@ -136,6 +147,9 @@ public class PasswordService {
         if (password.length() < MIN_LENGTH) {
             throw Fail.badRequest("error.password.too_short",
                     "min", MIN_LENGTH, "length", password.length());
+        }
+        if (password.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > MAX_BYTES) {
+            throw Fail.badRequest("error.password.too_long", "max", MAX_BYTES);
         }
         boolean lower = false, upper = false, digit = false, symbol = false, nonLatin = false;
         for (char c : password.toCharArray()) {

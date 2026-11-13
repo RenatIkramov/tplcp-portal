@@ -99,7 +99,7 @@ class PasswordDialogTest extends BrowserTestBase {
 
         page.click("#pwLang .lang-current");
         page.click("#pwLang .lang-menu [data-locale='en']");
-        page.waitForTimeout(400);
+        waitForQuiet();   // тексты нового языка пришли
 
         assertEquals("✓", mark("length"), "после смены языка пропала отметка «длина»");
         assertEquals("✓", mark("case"), "после смены языка пропала отметка «регистр»");

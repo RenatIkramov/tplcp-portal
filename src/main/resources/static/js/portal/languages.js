@@ -20,11 +20,9 @@
 (function(){
   'use strict';
 
-  const esc = s => String(s === null || s === undefined ? '' : s)
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
+  // общие помощники — core.js (аудит A4)
+  const {esc, say} = window.PORTAL;
   const T_ = k => (typeof T === 'function' ? T(k) : k);
-  const say = m => { if (typeof notify === 'function') notify(m); };
 
   async function api(method, url, body){
     const opt = {method: method, headers: {'Accept': 'application/json'}};

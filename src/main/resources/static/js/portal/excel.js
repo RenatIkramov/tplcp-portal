@@ -5,9 +5,9 @@
   const PORTAL = window.PORTAL;
   if (!PORTAL) return;
 
-  const say = m => { if (typeof notify === 'function') notify(m); };
+  // общие помощники — core.js (аудит A4)
+  const {say, messageOf} = window.PORTAL;
   /** Текст исключения: бросают не только Error. */
-  const messageOf = e => (e instanceof Error ? e.message : String(e));
 
   /**
    * Скачивание файла с сервера.
@@ -133,9 +133,11 @@
       const host = document.getElementById(hostId);
       if (!host) return;
       host.querySelectorAll('button').forEach(btn => {
-        const target = templateOf(btn.getAttribute('onclick') || '');
+        // заглушка прототипа узнаётся по своему сообщению (data-args, аудит A3)
+        const target = templateOf(btn.getAttribute('data-args') || '');
         if (!target) return;
-        btn.removeAttribute('onclick');
+        btn.removeAttribute('data-call');
+        btn.removeAttribute('data-args');
         btn.id = btn.id || target.id;
         btn.onclick = () => target.run(btn);
       });

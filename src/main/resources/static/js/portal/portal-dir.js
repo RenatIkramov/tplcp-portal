@@ -8,10 +8,8 @@
   const isAdmin = () => !!PORTAL.session && PORTAL.session.roleCode === 'admin';
   const mayEdit = isAdmin;
 
-  const dash = v => (v === null || v === undefined || v === '') ? '—' : v;
-  const esc = v => String(v === null || v === undefined ? '' : v)
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-  const say = m => { if (typeof notify === 'function') notify(m); };
+  // общие помощники — core.js (аудит A4)
+  const {dash, esc, say} = window.PORTAL;
   const ruDate = iso => {
     if (!iso) return '—';
     const d = String(iso).slice(0, 10).split('-');
@@ -30,6 +28,9 @@
   }
 
   /* ================= Два справочника с карточкой ================= */
+
+  /** Вид объекта в журнале действий для «Истории» карточки (V118). */
+  const HISTORY_TYPES = {warehousesDir: 'warehouse', depositorsDir: 'depositor', operatorsDir: 'operator'};
 
   const DIRS = {
     warehousesDir: {
@@ -99,7 +100,6 @@
    *         tab: string}}
    */
   const state = {dir: null, mode: 'view', id: null, row: null, draft: {}, tab: 'requisites'};
-  PORTAL.portalDir = state;
 
   /**
    * Свой склад списков, а НЕ общий PORTAL.catalog.
@@ -133,7 +133,7 @@
     section.id = 'view-portaldir-detail';
     section.innerHTML =
         '<div class="panel-head">'
-      + '<button class="back-btn" onclick="portalDirBack()">' + T('portal.text.back_to_list') + '</button>'
+      + '<button class="back-btn"' + PORTAL.call('portalDirBack') + '>' + T('portal.text.back_to_list') + '</button>'
       + '<div class="actions" id="portalDirActions"></div></div>'
       + '<div class="detail-head"><h2 id="portalDirTitle" style="margin:0 0 16px;"></h2></div>'
       + '<div class="admin-subtabs" id="portalDirTabs" style="display:none;"></div>'
@@ -168,14 +168,14 @@
       return '<div class="kv" style="grid-column:1/-1;"><label>' + PORTAL.t(field.labelKey)
         + '</label><div><textarea class="kv-input kv-input-editable" rows="6"'
         + ' style="width:100%; resize:vertical; font-family:inherit;"'
-        + ' data-col="' + field.col + '" oninput="portalDirField(this)">'
+        + ' data-col="' + field.col + '"' + PORTAL.callOnInput('portalDirField', PORTAL.SELF) + '>'
         + esc(v === null || v === undefined ? '' : v) + '</textarea></div></div>';
     }
     return '<div class="kv"><label>' + PORTAL.t(field.labelKey) + (field.required ? ' *' : '')
       + '</label><div style="min-width:320px;"><input class="kv-input kv-input-editable" type="'
       + (field.date ? 'date' : 'text') + '" value="'
       + esc(v === null || v === undefined ? '' : (field.date ? String(v).slice(0, 10) : v))
-      + '" data-col="' + field.col + '" oninput="portalDirField(this)"/></div></div>';
+      + '" data-col="' + field.col + '"' + PORTAL.callOnInput('portalDirField', PORTAL.SELF) + '/></div></div>';
   }
 
   function render(){
@@ -190,13 +190,13 @@
 
     let actions = '';
     if (editing){
-      actions = '<button class="btn primary" onclick="portalDirSave()">' + T('portal.text.save') + '</button>'
-        + '<button class="btn ghost" onclick="portalDirCancel()">' + T('common.button.cancel') + '</button>';
+      actions = '<button class="btn primary"' + PORTAL.call('portalDirSave') + '>' + T('portal.text.save') + '</button>'
+        + '<button class="btn ghost"' + PORTAL.call('portalDirCancel') + '>' + T('common.button.cancel') + '</button>';
     } else if (mayEdit() && state.id){
-      actions = '<button class="btn primary" onclick="portalDirEdit()">' + T('sku.text.edit') + '</button>'
-        + '<button class="btn" onclick="portalDirArchive(' + (archived ? 'true' : 'false') + ')">'
+      actions = '<button class="btn primary"' + PORTAL.call('portalDirEdit') + '>' + T('sku.text.edit') + '</button>'
+        + '<button class="btn"' + PORTAL.call('portalDirArchive', archived) + '>'
         + (archived ? T('sku.text.restore_from_archive') : T('portal.text.archive')) + '</button>'
-        + '<button class="btn ghost" onclick="portalDirDelete()">' + T('common.button.delete') + '</button>';
+        + '<button class="btn ghost"' + PORTAL.call('portalDirDelete') + '>' + T('common.button.delete') + '</button>';
     }
     document.getElementById('portalDirActions').innerHTML = actions;
 
@@ -205,16 +205,30 @@
     // вкладки прячутся — иначе неясно, что сохраняет какая кнопка.
     const ds = PORTAL.depositorSettings;
     const settings = state.dir === 'depositorsDir' && state.id && !editing && ds ? ds : null;
+    // «История» (журнал действий, V118) — у сохранённой записи и только
+    // администратору: журнал справочников портала читает он один.
+    const auditType = HISTORY_TYPES[state.dir];
+    const history = !!(auditType && state.id && !editing && PORTAL.isAdmin());
+    const tabs = [{id: 'requisites', key: 'portal.tab.requisites'}]
+        .concat(settings ? settings.TABS : [])
+        .concat(history ? [{id: 'history', key: 'audit.tab.history'}] : []);
+    if (!tabs.some(t => t.id === state.tab)) state.tab = 'requisites';
     const tabsEl = /** @type {HTMLElement} */ (document.getElementById('portalDirTabs'));
-    if (!settings) state.tab = 'requisites';
-    tabsEl.style.display = settings ? '' : 'none';
-    tabsEl.innerHTML = settings
-      ? [{id: 'requisites', key: 'portal.tab.requisites'}].concat(settings.TABS)
-          .map(t => '<button class="admin-subtab-btn' + (t.id === state.tab ? ' active' : '') + '"'
-            + ' type="button" data-tab="' + t.id + '" onclick="portalDirTab(\'' + t.id + '\')">'
+    tabsEl.style.display = tabs.length > 1 ? '' : 'none';
+    tabsEl.innerHTML = tabs.length > 1
+      ? tabs.map(t => '<button class="admin-subtab-btn' + (t.id === state.tab ? ' active' : '') + '"'
+            + ' type="button" data-tab="' + t.id + '"' + PORTAL.call('portalDirTab', t.id) + '>'
             + esc(T(t.key)) + '</button>').join('')
       : '';
     const bodyEl = /** @type {HTMLElement} */ (document.getElementById('portalDirBody'));
+    if (state.tab === 'history' && auditType && state.id){
+      const id = state.id;
+      const dirKey = state.dir;
+      showView('portaldir-detail');
+      PORTAL.history.show(bodyEl, PORTAL.history.url(auditType, id),
+          {stillWanted: () => state.id === id && state.dir === dirKey && state.tab === 'history'});
+      return;
+    }
     if (settings && state.tab !== 'requisites'){
       bodyEl.innerHTML = '';
       showView('portaldir-detail');
@@ -247,7 +261,9 @@
 
   /** Вкладка карточки поклажедателя. */
   window.portalDirTab = function(tab){
-    if (state.tab !== 'requisites' && PORTAL.depositorSettings) PORTAL.depositorSettings.leave();
+    if (state.tab !== 'requisites' && state.tab !== 'history' && PORTAL.depositorSettings){
+      PORTAL.depositorSettings.leave();
+    }
     state.tab = tab;
     render();
   };
@@ -408,8 +424,7 @@
     if (counter) counter.textContent = '(' + rows.length + ')';
 
     body.innerHTML = rows.length
-      ? rows.map(r => '<tr style="cursor:pointer;" onclick="portalOpenPortalDir(\'' + dirName
-          + '\',\'' + esc(r[dir.key]) + '\')">'
+      ? rows.map(r => '<tr style="cursor:pointer;"' + PORTAL.call('portalOpenPortalDir', dirName, r[dir.key]) + '>'
           + dir.columns.map((c, i) => {
               const v = c === 'contractValidUntil' ? ruDate(r[c]) : dash(r[c]);
               const mark = (i === 0 && r.isActive === false)
@@ -437,11 +452,11 @@
     actions.insertAdjacentHTML('afterbegin',
         '<label style="font-size:13px; color:var(--muted); margin-right:12px;">'
       + '<input type="checkbox" id="' + dirName + 'ShowArchived"'
-      + ' onchange="portalDirArchiveFilter(\'' + dirName + '\')"/> '
+      + PORTAL.callOnChange('portalDirArchiveFilter', dirName) + '/> '
       + PORTAL.t('portal.text.show_archived') + '</label>'
       + '<button class="btn primary" id="' + dirName + 'CreateBtn"'
       + ' data-i18n="' + labelKey + '"'
-      + ' onclick="portalDirCreate(\'' + dirName + '\')">' + esc(T(labelKey)) + '</button>');
+      + PORTAL.call('portalDirCreate', dirName) + '>' + esc(T(labelKey)) + '</button>');
   }
 
   /* ========= Организации оператора в администрировании =========

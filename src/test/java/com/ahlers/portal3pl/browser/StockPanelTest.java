@@ -1,7 +1,6 @@
 package com.ahlers.portal3pl.browser;
 
 import com.ahlers.portal3pl.auth.PortalUser;
-import com.microsoft.playwright.options.LoadState;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -49,7 +48,7 @@ class StockPanelTest extends BrowserTestBase {
         signInUiAsClient();
         page.evaluate("() => showTab('stock')");
         page.waitForSelector("#filter-stock-code");
-        page.waitForLoadState(LoadState.NETWORKIDLE);
+        waitForQuiet();
 
         // Поля панели — те, что отмечены в справочнике как набор
         // по умолчанию. Список берётся из базы, а не вписан сюда:
@@ -140,7 +139,7 @@ class StockPanelTest extends BrowserTestBase {
         signInUiAsClient();
         page.evaluate("() => showTab('stock')");
         page.waitForSelector("#stockBody tr");
-        page.waitForLoadState(LoadState.NETWORKIDLE);
+        waitForQuiet();
 
         String total = singleValue("SELECT count(*)::text FROM dbo.v_stock_lines");
         assertTrue(page.innerText("#stockPagination").contains(total),

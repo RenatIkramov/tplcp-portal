@@ -5,13 +5,10 @@
   const PORTAL = window.PORTAL;
   if (!PORTAL) return;
 
-  const esc = v => String(v === null || v === undefined ? '' : v)
-    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  const dash = v => (v === null || v === undefined || v === '') ? '—' : v;
-  const say = m => { if (typeof notify === 'function') notify(m); };
+  // общие помощники — core.js (аудит A4)
+  const {esc, dash, say, messageOf} = window.PORTAL;
   const T_ = k => (typeof T === 'function' ? T(k) : k);
   /** Текст исключения: бросают не только Error. */
-  const messageOf = e => (e instanceof Error ? e.message : String(e));
 
   /** @type {Portal['importLog']} */
   const state = {imports: [], issues: [], depositorId: '', loaded: false};

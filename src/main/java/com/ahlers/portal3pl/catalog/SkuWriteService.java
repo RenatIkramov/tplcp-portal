@@ -424,8 +424,10 @@ public class SkuWriteService {
     }
 
     /**
-     * Кто может править справочник. Складской сотрудник ведёт склад,
-     * а не номенклатуру клиента; разработчик в портале только смотрит.
+     * Кто может править справочник: поклажедатель, менеджер, складской
+     * сотрудник, администратор (решение заказчика 11.11.2026: сотрудник
+     * склада правит и черновики, и справочники; настройка прав по ролям —
+     * возможно, позже).
      */
     private void requireEditor() {
         String role = jdbc.sql("SELECT dbo.auth_role_by_login(:login::text)")
@@ -433,7 +435,7 @@ public class SkuWriteService {
                 .query(String.class)
                 .optional()
                 .orElse("");
-        if (!List.of("depositor", "manager", "admin").contains(role)) {
+        if (!List.of("depositor", "manager", "staff", "admin").contains(role)) {
             throw Fail.forbidden("error.access.sku");
         }
         currentUser.requireUserId();   // заодно убеждаемся, что учётка активна

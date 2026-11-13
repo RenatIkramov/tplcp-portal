@@ -169,7 +169,7 @@ class DraftHeaderTest extends BrowserTestBase {
         // и сам подставляет основной адрес. Снимок «что было на экране
         // перед сохранением» — честнее, чем «что мы туда положили»:
         // проверяется именно сохранение, а не наша расстановка значений.
-        page.waitForTimeout(800);
+        waitForQuiet();
         Object before = readHeader();
         assertFalse(((Map<?, ?>) before).isEmpty(),
                 "ни одного поля шапки не нашлось на экране — проверять нечего");
@@ -289,7 +289,7 @@ class DraftHeaderTest extends BrowserTestBase {
         // состав, чтение карточки). Ждём идентификатор: он появляется,
         // когда база создала запись, то есть сохранение состоялось.
         page.waitForFunction("() => !!(" + action(3) + " && " + action(3) + ".docId)");
-        page.waitForTimeout(500);
+        waitForQuiet();
     }
 
     private String action(int index) {

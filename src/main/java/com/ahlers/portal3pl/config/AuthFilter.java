@@ -49,12 +49,21 @@ public class AuthFilter implements Filter {
             throws IOException, ServletException {
         HttpServletRequest http = (HttpServletRequest) request;
         HttpServletResponse resp = (HttpServletResponse) response;
-        String path = http.getRequestURI();
+        String path = apiPath(http);
 
         try {
             PortalUser user = session.currentUser(http);
             if (user == null) {
                 user = restoreRemembered(http, resp);
+            }
+            // Права и пароль могли измениться после входа (аудит S4):
+            // сеанс спрашивает базу на каждом запросе к данным.
+            if (user != null && requiresLogin(path) && !"ok".equals(session.verdict(http, user))) {
+                session.signOut(http);
+                response(resp, HttpServletResponse.SC_UNAUTHORIZED,
+                        "{\"message\":" + json(texts.of("error.auth.session_ended"))
+                                + ",\"key\":\"error.auth.session_ended\"}");
+                return;
             }
             if (user != null) {
                 DepositorContext.set(user.login(), session.depositorId(http));
@@ -130,7 +139,11 @@ public class AuthFilter implements Filter {
      * cookie второй раз не сработает.
      */
     private PortalUser restoreRemembered(HttpServletRequest http, HttpServletResponse resp) {
-        if (!http.getRequestURI().startsWith("/api/")) {
+        // Только запросы, которым нужен вход. Тексты и языки страница
+        // просит при загрузке одновременно с /api/auth/session — тратить
+        // на них одноразовый токен значило гасить его у того запроса,
+        // который и должен был войти (аудит S13).
+        if (!requiresLogin(apiPath(http))) {
             return null;
         }
         PortalUser user = rememberMe.restore(http, resp);
@@ -140,6 +153,23 @@ public class AuthFilter implements Filter {
         session.setUser(http, user);
         rememberMe.remember(http, resp, user.userId());
         return user;
+    }
+
+    /**
+     * Адрес запроса в том виде, в каком по нему выбирает обработчик Spring:
+     * раскодированный ({@code %61} → {@code a}), без параметров пути
+     * ({@code ;x=1}) и без двойных косых.
+     *
+     * <p>НАЙДЕНО АУДИТОМ (11.11.2026, S2). Прежде здесь был сырой
+     * {@code getRequestURI()}: {@code /%61pi/me} и {@code /api;x/me}
+     * фильтр считал «не API» и пропускал без входа, а Spring отдавал их
+     * тем же контроллерам. Сравнивать надо то же, по чему выбирают.
+     */
+    static String apiPath(HttpServletRequest http) {
+        String servlet = http.getServletPath();
+        String info = http.getPathInfo();
+        String path = (servlet == null ? "" : servlet) + (info == null ? "" : info);
+        return path.isEmpty() ? "/" : path;
     }
 
     private static boolean requiresLogin(String path) {

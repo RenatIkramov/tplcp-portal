@@ -110,14 +110,33 @@ public abstract class BrowserTestBase extends PortalTestBase {
         }
     }
 
+    /**
+     * Соблюдать ли заголовок Content-Security-Policy портала (аудит A3).
+     *
+     * <p>Проверки обычно его обходят: {@code page.evaluate} и
+     * {@code waitForFunction} передают браузеру код строкой, а правило
+     * портала строковый код запрещает — так и должно быть у людей, но тогда
+     * проверка не могла бы заглянуть в страницу. Соблюдает правило
+     * ContentPolicyTest: он и проверяет, что портал под ним работает.
+     */
+    protected boolean strictContentPolicy() {
+        return false;
+    }
+
     @BeforeEach
     void openPage() {
-        context = browser.newContext(new Browser.NewContextOptions().setViewportSize(1440, 900));
+        context = browser.newContext(new Browser.NewContextOptions().setViewportSize(1440, 900)
+                .setBypassCSP(!strictContentPolicy()));
         page = context.newPage();
         page.setDefaultTimeout(15_000);
         jsErrors.clear();
         refused.clear();
         broken.clear();
+        inFlight.clear();
+        lastNetworkChange = System.nanoTime();
+        page.onRequest(r -> networkChanged(r, true));
+        page.onRequestFinished(r -> networkChanged(r, false));
+        page.onRequestFailed(r -> networkChanged(r, false));
         page.onConsoleMessage(this::rememberIfError);
         page.onPageError(text -> jsErrors.add("pageerror: " + text));
         page.onResponse(response -> {
@@ -181,7 +200,7 @@ public abstract class BrowserTestBase extends PortalTestBase {
         // без этого итог проверок зависел от порядка их запуска — тест
         // сервера ждал английский, а получал русский от браузерного.
         // Язык клиентов возвращает PortalTestBase, здесь — служебный админ.
-        inContext("UPDATE dbo.app_user SET locale_id = NULL WHERE login = '" + ADMIN + "'");
+        owner().jdbc.sql("UPDATE dbo.app_user SET locale_id = NULL WHERE login = :l").param("l", ADMIN).update();
     }
 
     /**
@@ -230,10 +249,11 @@ public abstract class BrowserTestBase extends PortalTestBase {
                     .param("hash", passwordEncoder.encode(password))
                     .query()
                     .listOfRows();
-            jdbc.sql("UPDATE dbo.app_user SET is_active = true WHERE user_id = :id::uuid")
-                    .param("id", id)
-                    .update();
         });
+        // владельцем и после транзакции: строку она только что меняла (V133)
+        owner().jdbc.sql("UPDATE dbo.app_user SET is_active = true WHERE login = :l")
+                .param("l", login)
+                .update();
     }
 
     /** Вход через настоящую форму входа, как это делает человек. */
@@ -327,6 +347,51 @@ public abstract class BrowserTestBase extends PortalTestBase {
         };
         page.evaluate("([id, v]) => { const el = document.getElementById(id); if (el) el.value = v; }",
                 java.util.List.of(prefix + "_erpNo", uniqueErp()));
+    }
+
+    /** Запросы страницы, которые ещё не ответили, — с моментом отправки. */
+    private final java.util.Map<com.microsoft.playwright.Request, Long> inFlight =
+            new java.util.concurrent.ConcurrentHashMap<>();
+    /** Когда число запросов в пути менялось последний раз. */
+    private long lastNetworkChange;
+
+    /** Сколько тишины в сети считать «экран дорисован». */
+    private static final long QUIET_MS = 200;
+
+    /**
+     * Запрос, о конце которого браузер так и не сообщил (страницу
+     * перерисовали посреди запроса), не держит ожидание вечно: старше
+     * этого срока он «в пути» не считается.
+     */
+    private static final long STALE_MS = 5_000;
+
+    private void networkChanged(com.microsoft.playwright.Request request, boolean started) {
+        if (started) {
+            inFlight.put(request, System.nanoTime());
+        } else {
+            inFlight.remove(request);
+        }
+        lastNetworkChange = System.nanoTime();
+    }
+
+    private boolean nothingInFlight() {
+        long now = System.nanoTime();
+        return inFlight.values().stream().allMatch(t -> (now - t) / 1_000_000 > STALE_MS);
+    }
+
+    /**
+     * Дождаться, пока страница перестанет ходить на сервер: все запросы
+     * ответили, и {@value #QUIET_MS} мс новых не было (аудит 11.11.2026, D7).
+     *
+     * <p>Вместо {@code waitForLoadState(NETWORKIDLE)} — то состояние
+     * загрузки страницы достигается один раз и дальше возвращается сразу
+     * (см. {@link #nextRequest}), — и вместо {@code waitForTimeout(…)},
+     * который ждал «примерно сколько хватит»: на медленной машине не
+     * хватало, на быстрой — проверка просто стояла.
+     */
+    protected void waitForQuiet() {
+        page.waitForCondition(() -> nothingInFlight()
+                && (System.nanoTime() - lastNetworkChange) / 1_000_000 >= QUIET_MS);
     }
 
     /**

@@ -33,6 +33,8 @@ public class PasswordController {
         // в сессии хранится копия записи пользователя — обновляем, иначе
         // портал продолжит требовать смену пароля уже после смены
         session.updateUser(request, updated);
+        // смена пароля гасит все сеансы (V121) — этот открываем заново
+        session.renew(request);
         return Map.of("message", texts.of("info.password.changed"));
     }
 }

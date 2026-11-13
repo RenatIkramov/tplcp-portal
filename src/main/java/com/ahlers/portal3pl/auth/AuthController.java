@@ -1,6 +1,7 @@
 package com.ahlers.portal3pl.auth;
 
 import com.ahlers.portal3pl.common.Fail;
+import com.ahlers.portal3pl.common.PortalException;
 import com.ahlers.portal3pl.i18n.LocaleService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -48,7 +49,18 @@ public class AuthController {
     @PostMapping("/login")
     public Map<String, Object> login(@RequestBody LoginRequest body, HttpServletRequest request,
                                      HttpServletResponse response) {
-        PortalUser user = auth.authenticate(body.login(), body.password());
+        PortalUser user;
+        try {
+            user = auth.authenticate(body.login(), body.password(), request.getRemoteAddr());
+        } catch (PortalException refused) {
+            // Неудача подряд — ответ задерживается (V123, решение заказчика:
+            // задержка вместо запирания учётки). Здесь, а не в AuthService:
+            // там открыта транзакция, и ждать с занятым соединением незачем.
+            if (refused.getStatusCode().value() == HttpStatus.UNAUTHORIZED.value()) {
+                pause(auth.failureDelayMs(body.login()));
+            }
+            throw refused;
+        }
         session.setUser(request, user);
         if (Boolean.TRUE.equals(body.remember())) {
             rememberMe.remember(request, response, user.userId());
@@ -59,6 +71,17 @@ public class AuthController {
             session.selectDepositor(request, String.valueOf(depositors.getFirst().get("depositorId")));
         }
         return sessionState(user, depositors, session.depositorId(request));
+    }
+
+    private static void pause(long millis) {
+        if (millis <= 0) {
+            return;
+        }
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     @PostMapping("/logout")

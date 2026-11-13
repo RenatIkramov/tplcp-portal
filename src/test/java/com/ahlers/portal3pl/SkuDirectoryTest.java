@@ -205,11 +205,17 @@ class SkuDirectoryTest extends PortalTestBase {
 
     /* ---------------- Доступ и изоляция ---------------- */
 
+    /**
+     * Сотрудник склада правит справочник наравне с поклажедателем
+     * (решение заказчика 11.11.2026; прежде было «только смотрит»).
+     */
     @Test
-    void staffCannotEditDirectory() {
+    void staffEditsDirectory() {
         signInAs(STAFF_USER, DEPOSITOR);
-        expectRejection(403, () -> sku.createSku(Map.of(
-                "code", PREFIX + "009", "name", "Не должно появиться", "uom_id", 1)));
+        String id = (String) sku.createSku(Map.of(
+                "code", PREFIX + "009", "name", "Завёл склад", "uom_id", 1)).get("skuId");
+        assertEquals("Поправил склад",
+                sku.updateSku(id, Map.of("name", "Поправил склад")).get("name"));
     }
 
     @Test

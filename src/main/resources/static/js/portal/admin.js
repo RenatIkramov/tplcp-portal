@@ -9,8 +9,9 @@
   const api = PORTAL.api;
 
   const byId = id => document.getElementById(id);
-  const esc = v => String(v === null || v === undefined ? '' : v)
-    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+  // общие помощники — core.js (аудит A4)
+  const {esc} = window.PORTAL;
 
   /* ======================================================================
      1. Окно смены пароля
@@ -285,7 +286,7 @@
         ? ' title="' + esc(T('admin.hint.must_change_password_badge')) + '"' : '';
       const stateBadge = '<span class="badge ' + badgeClass + '"' + hint + '><span class="dot"></span>'
         + esc(u.userStatusName || '') + '</span>';
-      return '<tr onclick="portalOpenAdminUser(\'' + u.userId + '\')">'
+      return '<tr' + PORTAL.call('portalOpenAdminUser', u.userId) + '>'
         + '<td><strong>' + esc(u.fullName) + '</strong></td>'
         + '<td>' + esc(u.roleName || u.roleCode) + '</td>'
         + '<td>' + esc(scopeOf(u)) + '</td>'
@@ -556,7 +557,30 @@
         () => { showTab('admin'); showAdminSub('users'); });
     showView('admin-user-edit');
     if (!isNew && PORTAL.isAdmin()) await addCopyBlock(u.userId);
+    if (!isNew) addHistoryBlock(el, u.userId);
   };
+
+  /**
+   * «История изменений» внизу карточки (журнал действий, V118): свёрнута,
+   * читается с сервера при раскрытии — карточку открывают чаще, чем историю.
+   * В ней же права и доступы человека.
+   * @param {HTMLElement} host
+   * @param {string} userId
+   */
+  function addHistoryBlock(host, userId){
+    const box = document.createElement('details');
+    box.className = 'history-details';
+    box.id = 'auHistory';
+    box.innerHTML = '<summary>' + esc(T('audit.title.change_history')) + '</summary>'
+      + '<div id="auHistoryBody" style="margin-top:12px;"></div>';
+    host.appendChild(box);
+    box.addEventListener('toggle', () => {
+      const body = byId('auHistoryBody');
+      if (!box.open || !body) return;
+      PORTAL.history.show(body, PORTAL.history.url('app_user', userId),
+          {stillWanted: () => box.isConnected && box.open});
+    });
+  }
 
   /* ---------------- скопировать настройки другого пользователя ---------------- */
 
@@ -580,7 +604,7 @@
       + others.map(x => '<option value="' + esc(x.userId) + '">'
           + esc(x.fullName || x.login) + ' (' + esc(x.login) + ')</option>').join('')
       + '</select></div>'
-      + '<button class="btn" type="button" onclick="portalCopyUserSettings(\'' + esc(userId) + '\')">'
+      + '<button class="btn" type="button"' + PORTAL.call('portalCopyUserSettings', userId) + '>'
       + T('admin.button.copy') + '</button>'
       + '<div class="hint" style="width:100%; margin:0;">' + T('admin.hint.what_copy_settings_transfers') + '</div>';
     row.parentNode.insertBefore(box, row.nextSibling);

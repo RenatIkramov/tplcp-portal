@@ -129,7 +129,7 @@ class ColumnPickerTest extends BrowserTestBase {
                 }
                 """);
         page.evaluate("() => PORTAL.tables.redraw('receipts')");
-        page.waitForTimeout(300);
+        waitForQuiet();
 
         List<String> head = headers("receiptsHead");
         int column = head.indexOf(columnLabel("receipts", "trip"));
@@ -199,8 +199,7 @@ class ColumnPickerTest extends BrowserTestBase {
                       const items = Array.from(document.querySelectorAll('#colList .col-item'));
                       for (const it of items){
                         const cb = it.querySelector('input[type=checkbox]');
-                        const on = cb && (cb.getAttribute('onchange') || '');
-                        if (on.indexOf("'barcode'") >= 0 && cb.checked) cb.click();
+                        if (it.getAttribute('data-col') === 'barcode' && cb && cb.checked) cb.click();
                       }
                       PORTAL.tables.pickerApply();
                     }
@@ -210,7 +209,13 @@ class ColumnPickerTest extends BrowserTestBase {
                     columnLabel("packaging", "barcode"));
 
             // Строки обязаны потерять ту же клетку: иначе данные
-            // разъедутся с заголовком на одну колонку.
+            // разъедутся с заголовком на одну колонку. Заголовок
+            // перерисовывается раньше строк: пока строки грузятся, в теле
+            // одна клетка «загрузка» — её и считала проверка (падала
+            // изредка, в полном прогоне 13.11.2026). Ждём настоящие строки.
+            waitForQuiet();
+            page.waitForFunction("() => { const tr = document.querySelector('#packagingBody tr');"
+                    + " return tr && tr.querySelectorAll('td').length > 1; }");
             int cells = ((Number) page.evaluate(
                     "() => { const tr = document.querySelector('#packagingBody tr');"
                             + " return tr ? tr.querySelectorAll('td').length : 0; }")).intValue();

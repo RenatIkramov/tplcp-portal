@@ -254,11 +254,13 @@ class PartnerDirectoryTest extends PortalTestBase {
 
     /* ---------------- Доступ и изоляция ---------------- */
 
+    /** Сотрудник склада ведёт контрагентов (решение заказчика 11.11.2026). */
     @Test
-    void staffCannotEditDirectories() {
+    void staffEditsDirectories() {
         signInAs(STAFF_USER, DEPOSITOR);
-        expectRejection(403, () -> partners.create(PartnerKind.SUPPLIER,
-                Map.of("code", PREFIX + "S9", "name", "Не должен появиться")));
+        String id = (String) partners.create(PartnerKind.SUPPLIER,
+                Map.of("code", PREFIX + "S9", "name", "Завёл склад")).get("supplierId");
+        assertTrue(id != null && !id.isBlank(), "поставщик не создан");
     }
 
     @Test
