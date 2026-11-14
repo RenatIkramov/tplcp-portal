@@ -4,6 +4,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+
 /**
  * Единственное место, через которое портал обращается к ArtWMS.
  * <p>
@@ -34,5 +40,62 @@ public class WmsGateway {
         // TODO этап 8: отдельный запрос к сущностям транспорта ArtWMS
         log.info("Заглушка WMS: транспорт по документу {} ({}) считается переданным",
                 docId, type.path());
+    }
+
+    /* ======================= Отчёты (V138) ======================= */
+
+    /** Состояние задания отчёта в WMS. */
+    public enum ReportStatus { RUNNING, READY, FAILED }
+
+    /** Ответ WMS о задании: готов — с именем и типом файла, ошибка — с текстом WMS. */
+    public record ReportState(ReportStatus status, String fileName, String contentType, String message) {
+    }
+
+    /** Файл готового отчёта. */
+    public record ReportFile(String fileName, String contentType, byte[] content) {
+    }
+
+    /** Что запросили у заглушки — чтобы её «файл» показывал, с чем ушёл запрос. */
+    private final Map<String, String> stubJobs = new ConcurrentHashMap<>();
+
+    /**
+     * Запросить отчёт: код отчёта и значения параметров (ключ — код
+     * параметра в WMS). WMS отвечает номером задания; файл готов позже.
+     * Исключение — WMS запрос не приняла.
+     */
+    public String requestReport(String wmsCode, Map<String, String> params) {
+        // TODO этап 8: запрос к ArtWMS «код отчёта + параметры», в ответе — номер задания.
+        String job = "STUB-" + UUID.randomUUID();
+        StringBuilder csv = new StringBuilder("parameter;value\nreport;").append(wmsCode).append('\n');
+        params.forEach((k, v) -> csv.append(k).append(';').append(v).append('\n'));
+        stubJobs.put(job, wmsCode + "|" + csv);
+        log.info("Заглушка WMS: отчёт {} запрошен, задание {}, параметры {}", wmsCode, job, params);
+        return job;
+    }
+
+    /** Готово ли задание. Исключение — WMS не ответила (портал спросит ещё раз). */
+    public ReportState reportState(String jobId) {
+        // TODO этап 8: запрос состояния задания в ArtWMS.
+        String job = stubJobs.get(jobId);
+        if (job == null) {
+            return new ReportState(ReportStatus.FAILED, null, null, "unknown job " + jobId);
+        }
+        return new ReportState(ReportStatus.READY, fileName(job), "text/csv", null);
+    }
+
+    /** Файл готового отчёта. Исключение — WMS файл не отдала. */
+    public ReportFile reportFile(String jobId) {
+        // TODO этап 8: скачивание файла задания из ArtWMS.
+        String job = stubJobs.get(jobId);
+        if (job == null) {
+            throw new IllegalStateException("заглушка WMS не знает задание " + jobId
+                    + " — портал перезапускали после запроса");
+        }
+        return new ReportFile(fileName(job), "text/csv",
+                job.substring(job.indexOf('|') + 1).getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static String fileName(String job) {
+        return job.substring(0, job.indexOf('|')) + "-" + LocalDate.now() + ".csv";
     }
 }

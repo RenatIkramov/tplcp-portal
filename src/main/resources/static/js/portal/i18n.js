@@ -158,11 +158,10 @@
    */
   function rerender(){
     safely('таблицы', () => PORTAL.tables.redrawAll());
-    ['renderSuppliers', 'renderConsignees', 'renderReports',
+    ['renderSuppliers', 'renderConsignees', 'renderClientReports',
      'renderBillingServices', 'renderBillingInvoices', 'renderAdminUsers',
      'renderEnumValues', 'renderDepositorsDir', 'renderWarehousesDir',
-     'renderReportsConfigTable', 'renderReportRows',
-     'populateReportsConfigDepositorFilter', 'renderAuditLog'
+     'renderReportCatalog', 'renderAuditLog'
     ].forEach(name => {
       if (typeof window[name] === 'function') safely(name, window[name]);
     });

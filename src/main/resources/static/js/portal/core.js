@@ -682,10 +682,6 @@
         .forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
     PORTAL.lastView = tab;
     window.showView(tab);
-    if (tab === 'admin'){
-      ['populateReportsConfigDepositorFilter', 'renderReportsConfigTable']
-        .forEach(fn => { if (typeof window[fn] === 'function') window[fn](); });
-    }
     if (tab === 'references') window.showReferencesSub(referencesSub);
     setTimeout(() => PORTAL.tables.updateScroll(tab), 0);
   };
@@ -717,9 +713,6 @@
         .forEach(b => b.classList.toggle('active', b.dataset.sub === sub));
     document.querySelectorAll('.admin-sub[id^="admin-sub-"]')
         .forEach(s => s.classList.toggle('active', s.id === 'admin-sub-' + sub));
-    if (sub === 'reports-config' && typeof window.renderReportsConfigTable === 'function'){
-      window.renderReportsConfigTable();
-    }
   };
 
   /** Человек открыл подвкладку администрирования. */

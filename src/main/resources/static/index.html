@@ -198,7 +198,6 @@
 <div class="panel-head">
 <button data-i18n="receipts.button.back_to_receipts" class="back-btn" data-call="showTab" data-args="[&quot;receipts&quot;]">← Назад к списку поступлений</button>
 <div class="actions">
-<button data-i18n="receipts.button.print" class="btn ghost" data-call="openPrintDocumentModal" data-args="[&quot;receipts&quot;]">Печать</button>
 <span id="receiptResendActions" style="display:none;">
   <button data-i18n="common.button.send_again" class="btn primary" data-call="PORTAL.draft.resend" data-args="[&quot;receipts&quot;]">Отправить ещё раз</button>
 </span>
@@ -244,7 +243,6 @@
 <div class="panel-head">
 <button data-i18n="transfers.button.back_to_transfers" class="back-btn" data-call="showTab" data-args="[&quot;transfers&quot;]">← Назад к списку перемещений</button>
 <div class="actions">
-<button data-i18n="transfers.button.print" class="btn ghost" data-call="openPrintDocumentModal" data-args="[&quot;transfers&quot;]">Печать</button>
 <span id="transferResendActions" style="display:none;">
   <button data-i18n="common.button.send_again" class="btn primary" data-call="PORTAL.draft.resend" data-args="[&quot;transfers&quot;]">Отправить ещё раз</button>
 </span>
@@ -321,7 +319,6 @@
 <div class="panel-head">
 <button data-i18n="orders.button.back_to_orders" class="back-btn" data-call="showTab" data-args="[&quot;orders&quot;]">← Назад к списку заказов</button>
 <div class="actions">
-<button data-i18n="orders.button.print" class="btn ghost" data-call="openPrintDocumentModal" data-args="[&quot;orders&quot;]">Печать</button>
 <span id="orderResendActions" style="display:none;">
   <button data-i18n="common.button.send_again" class="btn primary" data-call="PORTAL.draft.resend" data-args="[&quot;orders&quot;]">Отправить ещё раз</button>
 </span>
@@ -577,7 +574,6 @@
 <div class="panel-head">
 <button data-i18n="stock.button.back_to_list" class="back-btn" data-call="PORTAL.backToLastTab">← Назад к списку</button>
 <div class="actions">
-<button data-i18n="stock.button.movement_history" class="btn ghost" data-call="PORTAL.stockCard.movementHistory">История движения</button>
 </div>
 </div>
 <div class="detail-head" id="productDetailHead"></div>
@@ -608,12 +604,8 @@
 </table>
 </div>
 <div class="section-title" data-i18n="billing.title.service_reports">Отчёты по оказанным услугам</div>
-<div class="table-card">
-<table>
-<thead><tr><th data-i18n="common.label.report_name">Наименование отчёта</th><th></th></tr></thead>
-<tbody id="billingReportsBody"></tbody>
-</table>
-</div>
+<!-- отчёты биллинга и готовые файлы рисует js/portal/reports.js (место 02) -->
+<div id="billingReportsHost"></div>
 <div class="panel-head">
 <div class="section-title" data-i18n="billing.title.invoices_issued_by_accounting" style="margin:0;">Счета, выставленные бухгалтерией</div>
 </div>
@@ -633,19 +625,10 @@
 <!-- ================= ОТЧЁТЫ ================= -->
 <section class="view" id="view-reports">
 <div class="panel-head">
-<h1><span data-i18n="common.button.reports">Отчёты</span> <span class="count" id="reportsCount"></span></h1>
-<div class="actions">
-<button class="btn primary" data-i18n="receipts.button.create_new" data-call="notify" data-args="[&quot;Открыта форма формирования нового отчёта&quot;]">+ Создать новый</button>
-<button class="btn" data-i18n="receipts.button.import_from_excel" data-call="notify" data-args="[&quot;Загрузка ранее подготовленного файла отчёта&quot;]">Загрузить из Excel</button>
-<button class="btn ghost" data-i18n="receipts.button.download_excel_template" data-call="notify" data-args="[&quot;Скачивается: Шаблон_Параметры_отчёта.xlsx&quot;]">Скачать шаблон Excel</button>
+<h1><span data-i18n="common.button.reports">Отчёты</span></h1>
 </div>
-</div>
-<div class="table-card">
-<table>
-<thead><tr><th data-i18n="common.label.report_name">Наименование отчёта</th><th></th></tr></thead>
-<tbody id="reportsBody"></tbody>
-</table>
-</div>
+<!-- отчёты клиента и готовые файлы рисует js/portal/reports.js (место 01) -->
+<div id="reportsHost"></div>
 </section>
 <!-- ================= АДМИНИСТРИРОВАНИЕ (только для admin) ================= -->
 <section class="view" id="view-admin">
@@ -674,33 +657,8 @@
 </div>
 <!-- Ошибки загрузки Excel: разметку рисует js/portal/import-log.js -->
 <div class="admin-sub" id="admin-sub-excel"></div>
-<div class="admin-sub" id="admin-sub-reports-config">
-<div class="panel-head" style="margin-bottom:0;">
-<div data-i18n="admin.button.report_settings" class="section-title" style="margin:0;">Настройка отчётов</div>
-<div class="actions">
-<button data-i18n="admin.button.add_report" class="btn primary" data-call="openReportConfigEdit" data-args="[null]">+ Добавить отчёт</button>
-</div>
-</div>
-<div class="filters">
-<div class="fgroup"><label for="reportsConfigDepositorFilter" data-i18n="admin.label.depositor">Поклажедатель</label>
-<select id="reportsConfigDepositorFilter" data-change="renderReportsConfigTable">
-<option data-i18n="common.option.all" value="">Все</option>
-</select>
-</div>
-<div class="fgroup"><label for="reportsConfigLocationFilter" data-i18n="common.label.location">Расположение</label>
-<select id="reportsConfigLocationFilter" data-change="renderReportsConfigTable">
-<option data-i18n="common.option.all" value="">Все</option>
-</select>
-</div>
-<div class="spacer"></div>
-</div>
-<div class="table-card">
-<table>
-<thead><tr><th>№</th><th data-i18n="admin.column.depositor">Поклажедатель</th><th data-i18n="admin.column.report_name">Наименование отчёта</th><th data-i18n="admin.column.wms_report_code">Код отчёта в WMS</th><th data-i18n="admin.column.parameters">Параметры</th><th data-i18n="admin.column.location">Расположение</th><th></th></tr></thead>
-<tbody id="reportsConfigBody"></tbody>
-</table>
-</div>
-</div>
+<!-- Настройка отчётов: разметку рисует js/portal/report-catalog.js (V135) -->
+<div class="admin-sub" id="admin-sub-reports-config"></div>
 
 <div class="admin-sub" id="admin-sub-warehousesDir">
 <div class="panel-head">
@@ -977,74 +935,9 @@
 </div>
 </div>
 </div>
-<div class="col-overlay" id="printDocOverlay" style="align-items:center;justify-content:center;" data-backdrop="closePrintDocumentModal">
-<div class="col-panel" style="width:460px; box-shadow:0 8px 32px rgba(0,0,0,.24); border-radius:10px;">
-<h3 id="printDocTitle" style="font-size:17px; margin-bottom:2px;"></h3>
-<div id="printDocWmsCode" style="color:var(--muted); font-size:13px; margin-bottom:14px;"></div>
-<div class="table-card">
-<table>
-<thead><tr><th><span data-i18n="common.column.report_act">Отчёт / акт</span></th><th></th></tr></thead>
-<tbody id="printDocReportsList"></tbody>
-</table>
-</div>
-<div class="col-actions">
-<button data-i18n="common.button.close" class="btn ghost" data-call="closePrintDocumentModal" style="flex:1;">Закрыть</button>
-</div>
-</div>
-</div>
-<div class="col-overlay" id="deleteReportConfigOverlay" style="align-items:center;justify-content:center;" data-backdrop="closeDeleteReportConfigConfirm">
-<div class="col-panel" style="width:360px; box-shadow:0 8px 32px rgba(0,0,0,.24); border-radius:10px;">
-<h3 style="font-size:16px;"><span data-i18n="common.title.delete_report">Удаление отчёта</span></h3>
-<div class="hint" style="margin-bottom:18px;">Вы уверены, что хотите удалить этот отчёт из настроек?</div>
-<div class="col-actions">
-<button data-i18n="common.button.yes_delete" class="btn primary" style="flex:1; background:#c0392b; border-color:#c0392b;" data-call="confirmDeleteReportConfig">Да, удалить</button>
-<button data-i18n="common.button.cancel" class="btn ghost" data-call="closeDeleteReportConfigConfirm">Отмена</button>
-</div>
-</div>
-</div>
-<div class="col-overlay" id="reportConfigOverlay" style="align-items:center;justify-content:center;" data-backdrop="closeReportConfigEdit">
-<div class="col-panel" style="width:460px; box-shadow:0 8px 32px rgba(0,0,0,.24); border-radius:10px; max-height:90vh; overflow-y:auto;">
-<h3 id="reportConfigTitle" style="font-size:16px;"><span data-i18n="common.title.add_report">Добавление отчёта</span></h3>
-
-<div style="display:flex; flex-direction:column; gap:14px; margin-top:12px;">
-  <div class="kv"><label for="rc_order"><span data-i18n="common.label.sequence_number">Порядковый номер</span></label>
-    <input type="number" min="1" step="1" class="kv-input kv-input-editable" id="rc_order">
-  </div>
-  <div class="kv"><label for="rc_depositorId"><span data-i18n="portal.title.depositor">Поклажедатель</span></label>
-    <select class="kv-input kv-input-editable" id="rc_depositorId"></select>
-  </div>
-  <div class="kv"><label for="rc_name"><span data-i18n="admin.column.report_name">Наименование отчёта</span></label>
-    <input type="text" class="kv-input kv-input-editable" id="rc_name">
-  </div>
-  <div class="kv"><label for="rc_wmsCode"><span data-i18n="admin.column.wms_report_code">Код отчёта в WMS</span></label>
-    <input type="text" class="kv-input kv-input-editable" id="rc_wmsCode">
-  </div>
-  <div class="kv"><label for="rc_location"><span data-i18n="admin.column.location">Расположение</span></label>
-    <select class="kv-input kv-input-editable" id="rc_location"></select>
-  </div>
-  <div class="line-info-title" style="padding-top:0;">Параметры отчёта (необязательно)</div>
-  <div id="rc_paramsWrap" style="display:flex; flex-direction:column; gap:12px;"></div>
-</div>
-<div class="col-actions">
-<button data-i18n="common.button.save" class="btn primary" data-call="saveReportConfig" style="flex:1;">Сохранить</button>
-<button data-i18n="common.button.cancel" class="btn ghost" data-call="closeReportConfigEdit">Отмена</button>
-</div>
-</div>
-</div>
-<div class="col-overlay" id="genReportOverlay" style="align-items:center;justify-content:center;" data-backdrop="closeGenerateReportModal">
-<div class="col-panel" style="width:400px; box-shadow:0 8px 32px rgba(0,0,0,.24); border-radius:10px;">
-<h3 id="genReportTitle" style="font-size:16px;"><span data-i18n="common.title.report_parameters">Параметры отчёта</span></h3>
-<div class="hint">Укажите значения для формирования отчёта</div>
-<div id="genReportFields" style="display:flex; flex-direction:column; gap:14px; margin-top:12px;"></div>
-<div class="col-actions">
-<button data-i18n="common.button.generate_report" class="btn primary" data-call="submitGenerateReport" style="flex:1;">Сформировать отчёт</button>
-<button data-i18n="common.button.cancel" class="btn ghost" data-call="closeGenerateReportModal">Отмена</button>
-</div>
-</div>
-</div>
 <!-- Код портала: core.js — общее (сеанс, запросы, навигация, плашка),
-     дальше модули экранов. Демо, которое ещё не переехало на сервер
-     (отчёты), — js/demo/, перед i18n.js. -->
+     дальше модули экранов. Демо прототипа больше нет (js/demo/ удалён
+     14.11.2026 вместе с демо-отчётами). -->
 <script src="js/portal/core.js"></script>
 <script src="js/portal/table-columns.js"></script>
 <script src="js/portal/tables.js"></script>
@@ -1238,7 +1131,8 @@
 <script src="js/portal/contacts.js"></script>
 <script src="js/portal/languages.js"></script>
 <script src="js/portal/enum-values.js"></script>
-<script src="js/demo/reports.js"></script>
+<script src="js/portal/report-catalog.js"></script>
+<script src="js/portal/reports.js"></script>
 <script src="js/portal/profile.js"></script>
 <script src="js/portal/i18n.js"></script>
 

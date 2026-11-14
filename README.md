@@ -10,7 +10,7 @@ B2B self-service портал 3PL-оператора. Бэкенд на Spring B
 | `src/main/java/com/ahlers/portal3pl/` | код приложения                                       |
 | `src/main/resources/application.yml`  | подключение к базе, Flyway — свой у каждой машины, в git не идёт |
 | `src/main/resources/application-prod.yml` | рабочий портал (профиль `prod`), без паролей     |
-| `src/main/resources/db/migration/`    | миграции базы (Flyway), V1…V134                      |
+| `src/main/resources/db/migration/`    | миграции базы (Flyway), V1…V140                      |
 | `src/main/resources/static/`          | фронтенд: `index.html`, `css/`, `js/`                |
 | `src/main/types/portal.d.ts`          | типы для проверки JavaScript (`tsc`, `tsconfig.json`) |
 | `src/test/java/com/ahlers/portal3pl/` | тесты, в том числе браузерные (`browser/`)           |
@@ -31,6 +31,7 @@ B2B self-service портал 3PL-оператора. Бэкенд на Spring B
 | `columns`   | справочник колонок: выбор, порядок, переименование под клиента |
 | `i18n`      | языки и тексты интерфейса                                      |
 | `excel`     | шаблоны и загрузка из Excel                                    |
+| `reports`   | каталог отчётов WMS, отчёты клиента, запуск и опрос готовности |
 | `common`    | имена колонок, приведение типов, тексты отказов                |
 
 ### Фронтенд
@@ -42,7 +43,6 @@ B2B self-service портал 3PL-оператора. Бэкенд на Spring B
 | `static/index.html`          | разметка всех экранов                           |
 | `static/css/portal.css`      | оформление                                      |
 | `static/js/portal/*.js`      | код портала, по файлу на раздел; общее — `core.js` (`PORTAL.api`, `PORTAL.esc`, `PORTAL.call`) |
-| `static/js/demo/reports.js`  | последний кусок демо — каталог отчётов, уйдёт вместе с ним |
 | `static/js/i18n-fallback.js` | `T()` и запасные русские подписи               |
 
 `i18n-fallback.js` собирается из базы инструментом
@@ -170,6 +170,13 @@ RLS. Сделано специально: один забытый `WHERE` в о�
 «Подтвердить» ставит «Отправляется» и кладёт задание; WMS вызывается
 вне транзакции базы, неудачу портал повторяет раз в минуту, после 15-й —
 «Ошибка отправки» и кнопка «Отправить ещё раз».
+
+**Отчёты формирует WMS** (`V135`–`V138`, `reports`). Портал хранит
+каталог и запуски: шлёт в WMS код отчёта и значения параметров, WMS
+отвечает номером задания, портал раз в `portal.reports.poll-ms`
+спрашивает о готовности (дольше `portal.reports.timeout-minutes` —
+ошибка), файл забирает у WMS при скачивании. Всё общение с WMS —
+`WmsGateway`, пока заглушка.
 
 **Одновременная правка черновика.** Карточка отдаёт `version`, экран
 шлёт её в `If-Match`, устаревшая запись получает 409 (`EditVersion`).

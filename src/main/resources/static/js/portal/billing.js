@@ -40,12 +40,12 @@
         groups.push(current);
       }
       current.nodes.push(el);
-      ['billingServicesBody', 'billingReportsBody', 'billingInvoicesBody'].forEach(id => {
+      ['billingServicesBody', 'billingReportsHost', 'billingInvoicesBody'].forEach(id => {
         if (el.querySelector && el.querySelector('#' + id)) current.table = id;
       });
     });
 
-    ownerOf.billingReportsBody = 'reports';
+    ownerOf.billingReportsHost = 'reports';
     ownerOf.billingServicesBody = 'services';
     ownerOf.billingInvoicesBody = 'invoices';
 

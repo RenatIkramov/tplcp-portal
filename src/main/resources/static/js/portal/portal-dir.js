@@ -209,8 +209,11 @@
     // администратору: журнал справочников портала читает он один.
     const auditType = HISTORY_TYPES[state.dir];
     const history = !!(auditType && state.id && !editing && PORTAL.isAdmin());
+    // «Отчёты» — какие отчёты каталога выданы клиенту (report-catalog.js, V135)
+    const reports = settings && PORTAL.depositorReports ? PORTAL.depositorReports : null;
     const tabs = [{id: 'requisites', key: 'portal.tab.requisites'}]
         .concat(settings ? settings.TABS : [])
+        .concat(reports ? [reports.TAB] : [])
         .concat(history ? [{id: 'history', key: 'audit.tab.history'}] : []);
     if (!tabs.some(t => t.id === state.tab)) state.tab = 'requisites';
     const tabsEl = /** @type {HTMLElement} */ (document.getElementById('portalDirTabs'));
@@ -227,6 +230,12 @@
       showView('portaldir-detail');
       PORTAL.history.show(bodyEl, PORTAL.history.url(auditType, id),
           {stillWanted: () => state.id === id && state.dir === dirKey && state.tab === 'history'});
+      return;
+    }
+    if (reports && state.tab === reports.TAB.id){
+      bodyEl.innerHTML = '';
+      showView('portaldir-detail');
+      reports.show(state.id || '', bodyEl);
       return;
     }
     if (settings && state.tab !== 'requisites'){
@@ -261,7 +270,9 @@
 
   /** Вкладка карточки поклажедателя. */
   window.portalDirTab = function(tab){
-    if (state.tab !== 'requisites' && state.tab !== 'history' && PORTAL.depositorSettings){
+    if (state.tab === 'reports' && PORTAL.depositorReports){
+      PORTAL.depositorReports.leave();
+    } else if (state.tab !== 'requisites' && state.tab !== 'history' && PORTAL.depositorSettings){
       PORTAL.depositorSettings.leave();
     }
     state.tab = tab;
@@ -294,6 +305,7 @@
       state.draft = {};
       state.tab = 'requisites';
       if (PORTAL.depositorSettings) PORTAL.depositorSettings.forget();
+      if (PORTAL.depositorReports) PORTAL.depositorReports.forget();
       state.row = await api('GET', DIRS[dirName].base + '/' + encodeURIComponent(id));
       state.id = id;
       render();
@@ -312,7 +324,8 @@
   };
 
   window.portalDirEdit = function(){
-    if (state.tab !== 'requisites' && PORTAL.depositorSettings) PORTAL.depositorSettings.leave();
+    if (state.tab === 'reports' && PORTAL.depositorReports) PORTAL.depositorReports.leave();
+    else if (state.tab !== 'requisites' && PORTAL.depositorSettings) PORTAL.depositorSettings.leave();
     state.tab = 'requisites';
     state.mode = 'edit';
     state.draft = {};
