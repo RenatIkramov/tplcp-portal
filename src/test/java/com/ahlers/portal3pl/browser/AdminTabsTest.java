@@ -42,6 +42,7 @@ class AdminTabsTest extends BrowserTestBase {
                         text("admin.button.enums"),
                         text("admin.button.logs"),
                         text("admin.button.report_settings"),
+                        text("admin.button.integration"),
                         text("admin.button.interface_texts")),
                 labels("#adminGroupTabs"),
                 "верхний ряд администрирования собран не из тех групп");

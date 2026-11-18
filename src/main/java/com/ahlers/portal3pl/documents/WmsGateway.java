@@ -4,8 +4,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -40,6 +42,41 @@ public class WmsGateway {
         // TODO этап 8: отдельный запрос к сущностям транспорта ArtWMS
         log.info("Заглушка WMS: транспорт по документу {} ({}) считается переданным",
                 docId, type.path());
+    }
+
+    /* ======================= Остатки (V142) ======================= */
+
+    /**
+     * Сколько товара WMS может зарезервировать прямо сейчас: наличие этого
+     * качества на складе минус резерв заказов, которые WMS уже приняла.
+     * Запрос «Проверка доступности товара» (поток 65 документа «Потоки
+     * интеграции»). Исключение — WMS не ответила.
+     *
+     * @return количество; {@code null} — WMS числа не дала, портал остаётся
+     *         при своих данных (так отвечает заглушка: своих остатков у неё нет)
+     */
+    public BigDecimal freeStock(String depositorId, String warehouseId, String skuCode, String qualityCode) {
+        // TODO этап 8: REST-запрос ArtWMS B2BAPI «проверка доступности» по товару, складу и квалификации.
+        log.info("Заглушка WMS: свободный остаток {} / {} / качество {} — числа нет", skuCode, warehouseId, qualityCode);
+        return null;
+    }
+
+    /** Строка среза остатков в формате портала: код товара портала, код качества WMS, количество. */
+    public record StockRow(String skuCode, String wmsQualityCode, BigDecimal qty) {
+    }
+
+    /**
+     * Срез остатков клиента на складе — для сверки (V143). Склады в API
+     * WMS — разные порты, поэтому адрес приходит со склада. Перевод ответа
+     * WMS в строки портала — здесь же. Исключение — WMS не ответила.
+     *
+     * @return строки среза (пустой список — у клиента на складе ничего нет);
+     *         {@code null} — данных нет (так отвечает заглушка)
+     */
+    public List<StockRow> stockSnapshot(String baseUrl, String depositorWmsCode) {
+        // TODO этап 8: REST-запрос остатков ArtWMS по клиенту на адрес склада и перевод строк.
+        log.info("Заглушка WMS: срез остатков клиента {} по адресу {} — данных нет", depositorWmsCode, baseUrl);
+        return null;
     }
 
     /* ======================= Отчёты (V138) ======================= */

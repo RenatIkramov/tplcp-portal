@@ -10,7 +10,7 @@ B2B self-service портал 3PL-оператора. Бэкенд на Spring B
 | `src/main/java/com/ahlers/portal3pl/` | код приложения                                       |
 | `src/main/resources/application.yml`  | подключение к базе, Flyway — свой у каждой машины, в git не идёт |
 | `src/main/resources/application-prod.yml` | рабочий портал (профиль `prod`), без паролей     |
-| `src/main/resources/db/migration/`    | миграции базы (Flyway), V1…V140                      |
+| `src/main/resources/db/migration/`    | миграции базы (Flyway), V1…V144                      |
 | `src/main/resources/static/`          | фронтенд: `index.html`, `css/`, `js/`                |
 | `src/main/types/portal.d.ts`          | типы для проверки JavaScript (`tsc`, `tsconfig.json`) |
 | `src/test/java/com/ahlers/portal3pl/` | тесты, в том числе браузерные (`browser/`)           |
@@ -24,7 +24,7 @@ B2B self-service портал 3PL-оператора. Бэкенд на Spring B
 | `auth`      | вход, сессии, «запомнить меня», роли, пароли                   |
 | `admin`     | пользователи, доступы, справочники уровня портала              |
 | `audit`     | журнал действий и история карточек                            |
-| `stock`     | запасы и детализация по партиям                                |
+| `stock`     | запасы (сжатый слой `stock_balance` — считает база, V141) и партии |
 | `documents` | поступления, заказы, перемещения; черновики, очередь отправки в WMS |
 | `catalog`   | номенклатура, контрагенты, биллинг                             |
 | `lists`     | списки с отбором и страницами на сервере                      |
@@ -32,6 +32,8 @@ B2B self-service портал 3PL-оператора. Бэкенд на Spring B
 | `i18n`      | языки и тексты интерфейса                                      |
 | `excel`     | шаблоны и загрузка из Excel                                    |
 | `reports`   | каталог отчётов WMS, отчёты клиента, запуск и опрос готовности |
+| `files`     | файловое хранилище: содержимое — в папке сервера, описание — в `stored_file` (V144) |
+| `integration` | настройки интеграции с WMS и сверка остатков (V143)          |
 | `common`    | имена колонок, приведение типов, тексты отказов                |
 
 ### Фронтенд
@@ -100,6 +102,7 @@ ALTER ROLE portal_owner LOGIN PASSWORD '…';
 | `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`, `SPRING_DATASOURCE_PASSWORD` | база и роль `portal_app` |
 | `SPRING_FLYWAY_USER`, `SPRING_FLYWAY_PASSWORD` | владелец схемы `portal_owner` — для миграций при старте |
 | `PORTAL_ADMIN_INITIAL_PASSWORD` | первый пароль `admin`, не короче 12 знаков; нужен только на первом запуске |
+| `PORTAL_FILES_DIR` | папка файлового хранилища (готовые отчёты); не задана — `data/files` рядом с порталом. Папку включить в резервное копирование |
 
 - Пока у `admin` пароль из `V18`, портал с профилем `prod` не
   запустится без `PORTAL_ADMIN_INITIAL_PASSWORD` (`DefaultPasswordGuard`).
@@ -175,8 +178,14 @@ RLS. Сделано специально: один забытый `WHERE` в о�
 каталог и запуски: шлёт в WMS код отчёта и значения параметров, WMS
 отвечает номером задания, портал раз в `portal.reports.poll-ms`
 спрашивает о готовности (дольше `portal.reports.timeout-minutes` —
-ошибка), файл забирает у WMS при скачивании. Всё общение с WMS —
-`WmsGateway`, пока заглушка.
+ошибка). Готовый файл портал забирает у WMS один раз и хранит у себя
+(`files`, V144): «Скачать» отдаёт свой файл, запуск и файл удаляются по
+сроку хранения. Всё общение с WMS — `WmsGateway`, пока заглушка.
+
+**Файловое хранилище** (`V144`, `files`). Содержимое — в папке
+`portal.files.dir` под именем идентификатора файла, описание — в таблице
+`stored_file` под RLS. Ночная уборка удаляет файлы с истёкшим сроком
+и файлы, чьё описание уже удалено.
 
 **Одновременная правка черновика.** Карточка отдаёт `version`, экран
 шлёт её в `If-Match`, устаревшая запись получает 409 (`EditVersion`).

@@ -265,6 +265,10 @@
     if (!resp.ok){
       const e = /** @type {PortalHttpError} */ (new Error(PORTAL.errorText(resp.status, data)));
       e.status = resp.status;
+      // ключ и подстановки отказа — тем, кому мало текста: окну нехватки
+      // при подтверждении нужны строки, а не фраза (V142)
+      e.key = data && data.key || null;
+      e.params = data && data.params || null;
       throw e;
     }
     return data;

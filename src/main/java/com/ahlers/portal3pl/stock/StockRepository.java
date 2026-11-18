@@ -11,7 +11,9 @@ import java.util.List;
  * <p>Сам список запасов читает общий {@code ListRepository}: отбор,
  * порядок и страницы у всех списков портала устроены одинаково,
  * и запрос у них один. Здесь остаётся то, чего нет у других, —
- * партии одного товара.
+ * партии одного товара. Партии — подробный слой, «как в WMS» (V141):
+ * резерва и «доступно» по партии портал не знает, они считаются
+ * по товару и складу в сжатом слое {@code stock_balance}.
  * <p>
  * Фильтра по поклажедателю в запросе НЕТ намеренно: его накладывает сама
  * база по политике RLS, опираясь на app.depositor_id (см. StockService).
@@ -29,7 +31,7 @@ public class StockRepository {
     private static final String DETAILS_SQL = """
             SELECT sku_code, sku_name, warehouse_id, warehouse_name,
                    batch_number, series_number, expiry_date, quality, quality_code,
-                   quantity, reserved_qty, blocked_qty, available_qty,
+                   quantity, blocked_qty,
                    unit_name, updated_at, synced_at
             FROM dbo.v_stock_details
             WHERE sku_code = :skuCode

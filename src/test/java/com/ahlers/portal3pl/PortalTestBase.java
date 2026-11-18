@@ -29,7 +29,19 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
  * стабилен, а проверять мы хотим именно правила (кто что может), а не механику
  * HTTP — коды ответов при этом всё равно проверяются, через статус исключения.
  */
-@SpringBootTest
+// Файлы проверок — во временную папку, а не в data/files рядом с проектом (V144).
+//
+// Подключения к базе: проверки с подменой WmsGateway и своими настройками заводят
+// отдельные контексты Spring, каждый — со своим набором подключений, и до конца
+// прогона они не закрываются. По 10 постоянных подключений на контекст к 16.11.2026
+// дали 92 из 100 разрешённых сервером; рядом работал сам портал — и прогон упал
+// с «оставшиеся слоты подключений зарезервированы». Теперь набор мал и простаивающие
+// подключения отдаёт: контекст, чьи проверки прошли, базу не занимает.
+@SpringBootTest(properties = {
+        "portal.files.dir=${java.io.tmpdir}/tplcp-portal-test-files",
+        "spring.datasource.hikari.maximum-pool-size=5",
+        "spring.datasource.hikari.minimum-idle=0",
+        "spring.datasource.hikari.idle-timeout=10000"})
 public abstract class PortalTestBase {
 
     protected static final String DEPOSITOR = "D-001";

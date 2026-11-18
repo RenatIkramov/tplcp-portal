@@ -778,7 +778,110 @@
       // Отказ показываем там же, где человек его ждёт — в карточке,
       // и плашкой: плашка заметна, баннер остаётся читаемым.
       showRefusal(type, e.message || String(e));
+      if (isShortage(e)){
+        // не хватает товара — окно со строками и проверкой в WMS (V142)
+        shortage = {type: type, lines: e.params.lines, checked: false, busy: false, error: ''};
+        renderShortage();
+        return;
+      }
       tell(e);
+    }
+  }
+
+  /* ---------------- нехватка при подтверждении (V142) ---------------- */
+
+  /**
+   * Открытое окно нехватки: строки, которым не хватает «Доступно».
+   * {@code checked} — WMS уже спросили, и она нехватку подтвердила.
+   * @type {{type: string, lines: any[], checked: boolean, busy: boolean, error: string} | null}
+   */
+  let shortage = null;
+
+  /** Отказ «товара не хватает» — со строками нехватки. */
+  const isShortage = (/** @type {any} */ e) => !!e && Array.isArray(e.params && e.params.lines)
+      && (e.key === 'error.stock.not_enough' || e.key === 'error.stock.not_enough_checked');
+
+  function shortageHost(){
+    let host = document.getElementById('stockShortageOverlay');
+    if (!host){
+      host = document.createElement('div');
+      host.className = 'col-overlay';
+      host.id = 'stockShortageOverlay';
+      host.style.alignItems = 'center';
+      host.style.justifyContent = 'center';
+      host.setAttribute('data-backdrop', 'PORTAL.draft.closeShortage');
+      document.body.appendChild(host);
+    }
+    return host;
+  }
+
+  function renderShortage(){
+    const s = shortage;
+    if (!s) return;
+    const esc = PORTAL.esc;
+    const qty = (/** @type {unknown} */ v) => esc(String(Number(v)));
+    const host = shortageHost();
+    host.innerHTML = '<div class="col-panel" style="width:760px;max-width:96vw;height:auto;'
+      + 'box-shadow:0 8px 32px rgba(0,0,0,.24);border-radius:10px;max-height:90vh;overflow-y:auto;">'
+      + '<h3 style="font-size:16px;">' + esc(T('stock.title.not_enough')) + '</h3>'
+      + '<div class="hint" id="stockShortageHint">'
+      + esc(T(s.checked ? 'stock.hint.not_enough_checked' : 'stock.hint.not_enough')) + '</div>'
+      + '<div class="table-card" style="margin-top:12px;"><table style="width:100%;"><thead><tr>'
+      + '<th>' + esc(T('col.stock.code')) + '</th><th>' + esc(T('col.stock.name')) + '</th>'
+      + '<th>' + esc(T('stock.column.quality')) + '</th>'
+      + '<th class="num">' + esc(T('stock.column.required')) + '</th>'
+      + '<th class="num">' + esc(T('col.stock.available')) + '</th>'
+      + '<th class="num">' + esc(T('stock.column.shortage')) + '</th>'
+      + '</tr></thead><tbody>'
+      + s.lines.map(l => '<tr data-shortage="' + esc(l.skuCode) + '"><td><strong>' + esc(l.skuCode) + '</strong></td>'
+          + '<td style="white-space:normal;">' + esc(l.skuName) + '</td><td>' + esc(l.qualityName) + '</td>'
+          + '<td class="num">' + qty(l.requiredQty) + '</td><td class="num">' + qty(l.availableQty) + '</td>'
+          + '<td class="num" style="color:#c0392b;font-weight:600;">' + qty(l.shortageQty) + '</td></tr>').join('')
+      + '</tbody></table></div>'
+      + (s.error ? '<div class="form-error" id="stockShortageError" role="alert" style="margin-top:14px;color:#c0392b;'
+          + 'background:#fdecea;border:1px solid #f5c6cb;border-radius:6px;padding:8px 10px;">' + esc(s.error) + '</div>' : '')
+      + '<div class="col-actions">'
+      + '<button type="button" class="btn primary" id="stockShortageCheck" style="flex:1;"' + (s.busy ? ' disabled' : '')
+      + PORTAL.call('PORTAL.draft.checkStock') + '>'
+      + esc(T(s.busy ? 'stock.button.checking' : 'stock.button.check_wms')) + '</button>'
+      + '<button type="button" class="btn ghost"' + PORTAL.call('PORTAL.draft.closeShortage') + '>'
+      + esc(T('common.button.close')) + '</button></div></div>';
+    host.classList.add('active');
+  }
+
+  function closeShortage(){
+    shortage = null;
+    document.getElementById('stockShortageOverlay')?.classList.remove('active');
+  }
+
+  /**
+   * «Проверить актуальные остатки»: портал спрашивает WMS и подтверждает
+   * заново. Хватает — документ уходит сразу; нет — в окне числа от WMS;
+   * WMS не ответила — отказ в самом окне (плашка была бы под ним).
+   */
+  async function checkStock(){
+    const s = shortage;
+    if (!s || s.busy) return;
+    const ref = refOf(s.type);
+    if (!ref || !ref.docId){ closeShortage(); return; }
+    s.busy = true;
+    s.error = '';
+    renderShortage();
+    try {
+      const card = await api('POST', '/api/' + s.type + '/' + ref.docId + '/confirm?checkStock=true',
+          undefined, seen(ref.version));
+      closeShortage();
+      sent(s.type, card);
+    } catch (e){
+      s.busy = false;
+      if (isShortage(e)){
+        s.lines = e.params.lines;
+        s.checked = e.key === 'error.stock.not_enough_checked';
+        showRefusal(s.type, e.message || String(e));
+      } else {
+        s.error = e.message || String(e);
+      }
+      renderShortage();
     }
   }
 
@@ -997,6 +1100,8 @@
     create: type => createNew(type).catch(tell),
     save: type => save(type).catch(tell),
     confirm,
+    checkStock,
+    closeShortage,
     resend,
     remove,
     saveTransport,

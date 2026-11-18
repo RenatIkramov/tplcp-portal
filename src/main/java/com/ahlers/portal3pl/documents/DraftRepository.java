@@ -276,6 +276,27 @@ public class DraftRepository {
      * транзакции: проверка и запись тогда не разойдутся с чужим
      * сохранением. Та же формула, что {@link DocumentRepository#version}.
      */
+    /**
+     * Строки документа, которым не хватает «Доступно» (V142). Функция базы
+     * берёт блокировку пересчёта остатков клиента — до конца транзакции:
+     * резерв этого документа встанет раньше, чем проверку пройдёт следующий.
+     */
+    public List<Map<String, Object>> stockShortage(DocumentType type, String docId) {
+        return SqlRows.toCamelCase(jdbc.sql("""
+                        SELECT sku_id::text AS sku_id, sku_code, sku_name, warehouse_id, quality_code, quality_name,
+                               required_qty, available_qty, shortage_qty
+                          FROM dbo.stock_doc_shortage(:type, :docId::uuid)
+                        """)
+                .param("type", type.path()).param("docId", docId).query().listOfRows());
+    }
+
+    /** Записать ответ WMS «свободно для резерва» и пересчитать остаток (V142). */
+    public void applyWmsFree(String skuId, String warehouseId, String qualityCode, java.math.BigDecimal free) {
+        jdbc.sql("SELECT dbo.stock_apply_wms_free(:sku::uuid, :wh, :quality, :free)")
+                .param("sku", skuId).param("wh", warehouseId).param("quality", qualityCode).param("free", free)
+                .query(rs -> { });
+    }
+
     public String lockVersion(DocumentType type, String docId) {
         return jdbc.sql(DocumentRepository.VERSION_SQL.formatted(type.headerTable()) + " FOR UPDATE")
                 .param("docId", docId).query(String.class).optional().orElse(null);

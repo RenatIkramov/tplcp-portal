@@ -58,7 +58,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>Исключить из прогона: {@code mvn test -DexcludedGroups=browser}.
  */
 @Tag("browser")
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+// свойства — те же, что у PortalTestBase: аннотация наследника заменяет родительскую целиком
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+        properties = {
+                "portal.files.dir=${java.io.tmpdir}/tplcp-portal-test-files",
+                "spring.datasource.hikari.maximum-pool-size=5",
+                "spring.datasource.hikari.minimum-idle=0",
+                "spring.datasource.hikari.idle-timeout=10000"})
 public abstract class BrowserTestBase extends PortalTestBase {
 
     /**

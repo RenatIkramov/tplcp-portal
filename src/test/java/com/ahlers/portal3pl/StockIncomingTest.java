@@ -122,7 +122,8 @@ class StockIncomingTest extends PortalTestBase {
     }
 
     /**
-     * «Ожидается» — поступления, которые склад ждёт: 02, 10, 30 (V87).
+     * «Ожидается» — поступления, которые склад ждёт: 04, 02, 10, 30 (V87;
+     * 04 — с нажатия «Подтвердить», V141).
      * Не ждёт — ошибка отправки (склад о документе не знает), принятое
      * и отменённое.
      */
@@ -132,7 +133,7 @@ class StockIncomingTest extends PortalTestBase {
         String[] pair = pairWithoutStock();
         String docId = createSentReceipt(pair[0], pair[1], 70);
         try {
-            for (String code : List.of("02", "10", "30")) {
+            for (String code : List.of("04", "02", "10", "30")) {
                 setStatus(docId, code);
                 assertFalse(linesFor(pair[0], pair[1]).isEmpty(),
                         "поступление в статусе " + code + " должно ожидаться");

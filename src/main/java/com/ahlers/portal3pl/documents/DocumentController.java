@@ -173,8 +173,9 @@ public class DocumentController {
 
     /** Подтвердить: проверка, задание в очередь WMS и первая попытка отправки (V127). */
     @PostMapping("/{docId}/confirm")
-    public Map<String, Object> confirm(@PathVariable String docType, @PathVariable String docId) {
-        return drafts.confirm(DocumentType.ofPath(docType), docId);
+    public Map<String, Object> confirm(@PathVariable String docType, @PathVariable String docId,
+                                       @RequestParam(defaultValue = "false") boolean checkStock) {
+        return drafts.confirm(DocumentType.ofPath(docType), docId, checkStock);
     }
 
     /** «Отправить ещё раз» у документа с ошибкой отправки (аудит A1, V127). */

@@ -4,16 +4,23 @@ import com.ahlers.portal3pl.common.ActorText;
 import com.ahlers.portal3pl.common.EnumCodes;
 import com.ahlers.portal3pl.common.Fail;
 import com.ahlers.portal3pl.common.MsgRef;
+import com.ahlers.portal3pl.common.PortalException;
 import com.ahlers.portal3pl.config.CurrentUser;
 import com.ahlers.portal3pl.config.DepositorScope;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * Запись документов. Все правила решения Р5 собраны здесь:
@@ -21,6 +28,8 @@ import java.util.Map;
  */
 @Service
 public class DraftService {
+
+    private static final Logger log = LoggerFactory.getLogger(DraftService.class);
 
     private final DepositorScope depositorScope;
     private final CurrentUser currentUser;
@@ -330,6 +339,29 @@ public class DraftService {
      * </ol>
      */
     public Map<String, Object> confirm(DocumentType type, String docId) {
+        return confirm(type, docId, false);
+    }
+
+    /**
+     * То же с проверкой остатков (V142, решение заказчика 14.11.2026):
+     * заказ сверх «Доступно» без проверки в WMS не проходит.
+     *
+     * <p>Не хватает по данным портала — отказ {@code error.stock.not_enough}
+     * со строками нехватки; экран показывает их и кнопку «Проверить
+     * актуальные остатки». Она зовёт этот же метод с {@code checkStock}:
+     * портал спрашивает WMS по строкам нехватки, записывает ответ и
+     * проверяет заново. Хватает — документ уходит, нет — отказ
+     * {@code error.stock.not_enough_checked}. WMS не ответила — документ
+     * остаётся черновиком.
+     *
+     * <p>Проверка и статус «Отправляется» — в одной транзакции и под
+     * блокировкой остатков клиента: два заказа на один остаток оба пройти
+     * не могут.
+     */
+    public Map<String, Object> confirm(DocumentType type, String docId, boolean checkStock) {
+        if (checkStock) {
+            refreshStockFromWms(type, docId);
+        }
         Long job = tx.execute(s -> {
             depositorScope.apply();
             currentUser.requireUserId();
@@ -339,10 +371,61 @@ public class DraftService {
                 throw Fail.unprocessable("error.document.not_ready",
                         "problems", String.join("; ", problems));
             }
+            List<Map<String, Object>> shortage = drafts.stockShortage(type, docId);
+            if (!shortage.isEmpty()) {
+                throw Fail.conflict(checkStock ? "error.stock.not_enough_checked" : "error.stock.not_enough",
+                        "items", shortageText(shortage), "lines", shortage);
+            }
             return enqueue(type, docId);
         });
         outbox.deliver(job);
         return tx.execute(s -> card(type, docId));
+    }
+
+    /**
+     * Спросить WMS по строкам нехватки и записать ответ. WMS — вне
+     * транзакции: соединение с базой её ответа не ждёт. Отвечает не по
+     * всем строкам документа, а только по тем, где портал видит нехватку.
+     */
+    private void refreshStockFromWms(DocumentType type, String docId) {
+        String[] depositorId = new String[1];
+        List<Map<String, Object>> shortage = tx.execute(s -> {
+            depositorScope.apply();
+            currentUser.requireUserId();
+            requireDraft(type, docId);
+            depositorId[0] = depositorScope.currentDepositorId();
+            return drafts.stockShortage(type, docId);
+        });
+        if (shortage == null || shortage.isEmpty()) {
+            return;
+        }
+        Map<Map<String, Object>, BigDecimal> answers = new LinkedHashMap<>();
+        try {
+            for (Map<String, Object> line : shortage) {
+                answers.put(line, wms.freeStock(depositorId[0], (String) line.get("warehouseId"),
+                        (String) line.get("skuCode"), (String) line.get("qualityCode")));
+            }
+        } catch (RuntimeException e) {
+            log.warn("WMS не ответила на проверку остатков по документу {}: {}", docId, e.toString());
+            throw new PortalException(HttpStatus.SERVICE_UNAVAILABLE, "error.stock.check_unavailable", Map.of());
+        }
+        tx.executeWithoutResult(s -> {
+            depositorScope.apply();
+            answers.forEach((line, free) -> {
+                if (free != null) {
+                    drafts.applyWmsFree((String) line.get("skuId"), (String) line.get("warehouseId"),
+                            (String) line.get("qualityCode"), free);
+                }
+            });
+        });
+    }
+
+    /** «RK-001 — 5, RK-002 — 12»: код товара и сколько не хватает — для текста отказа. */
+    private static String shortageText(List<Map<String, Object>> shortage) {
+        return shortage.stream()
+                .map(l -> l.get("skuCode") + " — " + new BigDecimal(String.valueOf(l.get("shortageQty")))
+                        .stripTrailingZeros().toPlainString())
+                .collect(Collectors.joining(", "));
     }
 
     /**
