@@ -44,6 +44,22 @@ public class WmsGateway {
                 docId, type.path());
     }
 
+    /* ======================= Файлы клиента (V145) ======================= */
+
+    /**
+     * Приложить файл клиента к документу в WMS (хранилище файлов ArtWMS,
+     * {@code /file-cloud/upload/new/file}: объект WEA — поступление, AUF —
+     * заказ). Исключение — WMS не приняла; портал повторит.
+     *
+     * @return номер файла в WMS ({@code TxtId})
+     */
+    public String uploadFile(DocumentType type, String docId, String fileName, String contentType, byte[] content) {
+        // TODO этап 8: multipart-запрос в file-cloud; объект и его идентификатор в WMS — по документам ArtWMS.
+        log.info("Заглушка WMS: файл «{}» ({} байт) к документу {} ({}) считается принятым",
+                fileName, content.length, docId, type.path());
+        return "STUB-FILE-" + UUID.randomUUID();
+    }
+
     /* ======================= Остатки (V142) ======================= */
 
     /**

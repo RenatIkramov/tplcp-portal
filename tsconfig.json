@@ -1,0 +1,18 @@
+{
+  "//": "Проверка типов во фронтенде без сборки (08.11.2026). Браузер получает те же .js; tsc проверяет все файлы. Типы — src/main/types. Подробности: «Фронтенд — проверка типов».",
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "strict": true,
+    "noImplicitAny": false,
+    "useUnknownInCatchVariables": false,
+    "skipLibCheck": true
+  },
+  "include": [
+    "src/main/resources/static/js/**/*.js",
+    "src/main/types/**/*.d.ts"
+  ]
+}

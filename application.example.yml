@@ -1,0 +1,19 @@
+# Образец application.yml — без паролей. Настоящий файл:
+#   src/main/resources/application.yml (в git не попадает, см. .gitignore).
+# Скопировать туда и вписать свои значения вместо <...>.
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/tplcp?currentSchema=dbo
+    username: portal_app
+    password: <пароль portal_app>
+  flyway:
+    # миграции накатывает владелец схемы (V132), не portal_app
+    user: portal_owner
+    password: <пароль portal_owner>
+
+# --- Файловое хранилище портала (V144-V146) ---------------------------------
+# Не задана - data/files относительно папки, из которой запущен портал.
+#portal:
+#  files:
+#    dir: 'C:/3PL_Customer_Portal/files'
+#    upload-max-mb: 100

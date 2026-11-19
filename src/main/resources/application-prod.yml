@@ -1,0 +1,32 @@
+# Рабочий портал: java -jar ... --spring.profiles.active=prod
+# (аудит 11.11.2026, S9 и S12). Паролей здесь нет и быть не должно:
+# база, пароль portal_app и первый пароль admin — из переменных окружения
+# (SPRING_DATASOURCE_URL, SPRING_DATASOURCE_USERNAME, SPRING_DATASOURCE_PASSWORD,
+# SPRING_FLYWAY_USER и SPRING_FLYWAY_PASSWORD — владелец схемы portal_owner, V132;
+# PORTAL_ADMIN_INITIAL_PASSWORD). Остальное — из application.yml.
+server:
+  # Портал за обратным прокси с HTTPS: адрес и схему брать из X-Forwarded-*,
+  # иначе портал не узнает, что запрос пришёл по HTTPS (Secure у кук, HSTS).
+  forward-headers-strategy: native
+  compression:
+    enabled: true
+    mime-types: text/html,text/css,application/javascript,application/json
+  servlet:
+    session:
+      cookie:
+        secure: true
+        http-only: true
+        same-site: lax
+  error:
+    include-stacktrace: never
+    include-message: never
+
+spring:
+  flyway:
+    # Пустая или чужая база — остановка, а не молчаливая «отметка» без миграций.
+    baseline-on-migrate: false
+    clean-disabled: true
+
+logging:
+  level:
+    root: INFO
