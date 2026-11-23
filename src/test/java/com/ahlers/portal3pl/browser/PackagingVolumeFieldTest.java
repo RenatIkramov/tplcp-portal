@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 
 /**
  * Поле «Объём» в окне упаковки карточки товара и отклик кнопки
@@ -85,7 +86,7 @@ class PackagingVolumeFieldTest extends BrowserTestBase {
         page.waitForDownload(() -> {
             page.click("#packagingTemplateBtn");
             assertTrue(page.isDisabled("#packagingTemplateBtn"), "кнопка не заблокировалась");
-            assertFalse(idle.equals(page.innerText("#packagingTemplateBtn")),
+            assertNotEquals(idle, page.innerText("#packagingTemplateBtn"),
                     "надпись не сменилась на «готовлю»");
             page.click("#packagingTemplateBtn", new com.microsoft.playwright.Page.ClickOptions().setForce(true));
         });

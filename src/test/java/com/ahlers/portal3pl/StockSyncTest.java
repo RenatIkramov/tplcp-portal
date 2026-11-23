@@ -217,6 +217,6 @@ class StockSyncTest extends PortalTestBase {
     }
 
     private boolean due() {
-        return Boolean.TRUE.equals(owner().jdbc.sql("SELECT dbo.stock_sync_due()").query(Boolean.class).single());
+        return owner().jdbc.sql("SELECT dbo.stock_sync_due()").query(Boolean.class).single();
     }
 }

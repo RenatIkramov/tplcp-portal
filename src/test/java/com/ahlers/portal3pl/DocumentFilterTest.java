@@ -16,6 +16,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
  * Фильтры списка документов: что разрешено и во что превращается.
@@ -160,7 +161,7 @@ class DocumentFilterTest extends PortalTestBase {
                 .filter(s -> s.length() > 4 && !"null".equals(s))
                 .findFirst()
                 .orElse(null);
-        assertFalse(supplier == null, "в демо-данных нет поступления с поставщиком");
+        assertNotNull(supplier, "в демо-данных нет поступления с поставщиком");
 
         String part = supplier.substring(1, 4).toUpperCase();
         Map<String, Object> found = documents.list(user, DocumentType.RECEIPTS,

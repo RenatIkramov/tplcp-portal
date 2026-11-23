@@ -148,11 +148,11 @@ public class LocaleService {
         if (textKey == null || textKey.isBlank()) {
             throw Fail.badRequest("error.text.key_required");
         }
-        boolean exists = Boolean.TRUE.equals(jdbc
+        boolean exists = jdbc
                 .sql("SELECT EXISTS (SELECT 1 FROM dbo.ui_text_key WHERE text_key = :key::varchar)")
                 .param("key", textKey)
                 .query(Boolean.class)
-                .single());
+                .single();
         if (!exists) {
             // Ключи приходят из вёрстки: выдумывать их в администрировании
             // нельзя — такой текст всё равно негде показать.
@@ -161,10 +161,10 @@ public class LocaleService {
         // Разметка — только из белого списка (аудит S5, V122): тексты идут
         // в страницу как разметка, и на форму входа тоже. Правило в базе
         // (ui_text_markup_ok); здесь — чтобы ответить человеку, а не сбоем.
-        boolean markupOk = Boolean.TRUE.equals(jdbc.sql("SELECT dbo.ui_text_markup_ok(:value::text)")
+        boolean markupOk = jdbc.sql("SELECT dbo.ui_text_markup_ok(:value::text)")
                 .param("value", value)
                 .query(Boolean.class)
-                .single());
+                .single();
         if (!markupOk) {
             throw Fail.badRequest("error.text.markup_not_allowed");
         }

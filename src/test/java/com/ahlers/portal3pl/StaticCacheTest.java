@@ -33,7 +33,9 @@ class StaticCacheTest extends PortalTestBase {
         if (ifModifiedSince != null) {
             request.header("If-Modified-Since", ifModifiedSince);
         }
-        return HttpClient.newHttpClient().send(request.build(), HttpResponse.BodyHandlers.discarding());
+        try (HttpClient client = HttpClient.newHttpClient()) {
+            return client.send(request.build(), HttpResponse.BodyHandlers.discarding());
+        }
     }
 
     @Test

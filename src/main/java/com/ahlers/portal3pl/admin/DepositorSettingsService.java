@@ -45,7 +45,13 @@ public class DepositorSettingsService {
      */
     public record Settings(Boolean hideTransfersTab,
                            Boolean priceInReceipts,
-                           Boolean priceInOrders) {
+                           Boolean priceInOrders,
+                           Boolean kitsEnabled) {
+
+        /** Без галочки комплектов (V155): она тогда не меняется. */
+        public Settings(Boolean hideTransfersTab, Boolean priceInReceipts, Boolean priceInOrders) {
+            this(hideTransfersTab, priceInReceipts, priceInOrders, null);
+        }
     }
 
     @Transactional(readOnly = true)
@@ -55,7 +61,8 @@ public class DepositorSettingsService {
         Map<String, Object> stored = jdbc.sql("""
                         SELECT hide_transfers_tab AS "hideTransfersTab",
                                price_in_receipts  AS "priceInReceipts",
-                               price_in_orders    AS "priceInOrders"
+                               price_in_orders    AS "priceInOrders",
+                               kits_enabled       AS "kitsEnabled"
                         FROM dbo.depositor_settings_of(:dep::uuid)
                         """)
                 .param("dep", depositorId)
@@ -70,6 +77,7 @@ public class DepositorSettingsService {
         out.put("hideTransfersTab", Boolean.TRUE.equals(stored.get("hideTransfersTab")));
         out.put("priceInReceipts", Boolean.TRUE.equals(stored.get("priceInReceipts")));
         out.put("priceInOrders", Boolean.TRUE.equals(stored.get("priceInOrders")));
+        out.put("kitsEnabled", !Boolean.FALSE.equals(stored.get("kitsEnabled")));
         return out;
     }
 
@@ -89,6 +97,14 @@ public class DepositorSettingsService {
                 .param("priceInOrders", flag(s == null ? null : s.priceInOrders()))
                 .query()
                 .listOfRows();
+        // «Используются комплекты» (V155): не прислана — не меняется
+        if (s != null && s.kitsEnabled() != null) {
+            jdbc.sql("SELECT dbo.admin_save_depositor_kits(:dep::uuid, :on)")
+                    .param("dep", depositorId)
+                    .param("on", s.kitsEnabled())
+                    .query()
+                    .listOfRows();
+        }
         return settings(actor, depositorId);
     }
 
@@ -112,13 +128,13 @@ public class DepositorSettingsService {
         if (depositorId == null || depositorId.isBlank()) {
             throw Fail.badRequest("error.depositor.required");
         }
-        boolean known = Boolean.TRUE.equals(jdbc.sql("""
+        boolean known = jdbc.sql("""
                         SELECT EXISTS (SELECT 1 FROM dbo.admin_depositor_access()
                                         WHERE depositor_id::text = :dep::text)
                         """)
                 .param("dep", depositorId)
                 .query(Boolean.class)
-                .single());
+                .single();
         if (!known) {
             throw Fail.notFound("error.depositor.not_found");
         }

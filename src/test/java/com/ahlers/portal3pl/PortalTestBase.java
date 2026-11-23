@@ -297,6 +297,36 @@ public abstract class PortalTestBase {
         transfersSection.clear();
     }
 
+    private final List<Runnable> kitsSetting = new java.util.ArrayList<>();
+
+    /**
+     * Комплекты у клиентов проверок — включены (V155). Галочку снимают
+     * и руками: тогда проверки комплектов упирались бы в скрытые экраны
+     * и отказ 403. Включается до теста, только если снята, и после
+     * возвращается, как была.
+     */
+    @BeforeEach
+    void enableKits() {
+        kitsSetting.clear();
+        for (String[] who : new String[][]{{USER, DEPOSITOR}, {OTHER_USER, OTHER_DEPOSITOR}}) {
+            String id = depositorId(who[0], who[1]);
+            boolean on = owner().jdbc.sql("SELECT kits_enabled FROM dbo.depositor_settings_of(:id::uuid)")
+                    .param("id", id).query(Boolean.class).single();
+            if (on) {
+                continue;
+            }
+            owner().jdbc.sql("SELECT dbo.admin_save_depositor_kits(:id::uuid, true)").param("id", id).query(rs -> { });
+            kitsSetting.add(() -> owner().jdbc.sql("SELECT dbo.admin_save_depositor_kits(:id::uuid, false)")
+                    .param("id", id).query(rs -> { }));
+        }
+    }
+
+    @AfterEach
+    void restoreKits() {
+        kitsSetting.forEach(Runnable::run);
+        kitsSetting.clear();
+    }
+
     private void saveDepositorSettings(String depositorId, boolean hideTransfers,
                                        boolean priceInReceipts, boolean priceInOrders) {
         new TransactionTemplate(txManager).executeWithoutResult(tx -> {

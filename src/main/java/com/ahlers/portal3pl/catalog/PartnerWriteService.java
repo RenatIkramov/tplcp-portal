@@ -225,11 +225,11 @@ public class PartnerWriteService {
         }
         // Первый адрес сразу становится основным: иначе у грузополучателя
         // с единственным адресом заказ подставлять нечего.
-        boolean first = Boolean.TRUE.equals(jdbc
+        boolean first = jdbc
                 .sql("SELECT NOT EXISTS (SELECT 1 FROM dbo.delivery_point WHERE consignee_id = :id::uuid)")
                 .param("id", consigneeId)
                 .query(Boolean.class)
-                .single());
+                .single();
         try {
             jdbc.sql("""
                             INSERT INTO dbo.delivery_point
@@ -300,14 +300,14 @@ public class PartnerWriteService {
                 .param("id", addressId)
                 .query(Long.class)
                 .single();
-        if (orders != null && orders > 0) {
+        if (orders > 0) {
             throw Fail.conflict("error.address.in_use", "count", orders);
         }
-        boolean wasDefault = Boolean.TRUE.equals(jdbc
+        boolean wasDefault = jdbc
                 .sql("SELECT COALESCE(is_default, false) FROM dbo.delivery_point WHERE address_id = :id::uuid")
                 .param("id", addressId)
                 .query(Boolean.class)
-                .single());
+                .single();
         jdbc.sql("DELETE FROM dbo.delivery_point WHERE address_id = :id::uuid")
                 .param("id", addressId)
                 .update();
@@ -386,12 +386,12 @@ public class PartnerWriteService {
     }
 
     private void requireExists(PartnerKind kind, String id) {
-        boolean exists = Boolean.TRUE.equals(jdbc
+        boolean exists = jdbc
                 .sql("SELECT EXISTS (SELECT 1 FROM dbo.%s WHERE %s = :id::uuid)"
                         .formatted(kind.table(), kind.key()))
                 .param("id", id)
                 .query(Boolean.class)
-                .single());
+                .single();
         if (!exists) {
             throw notFound(kind);
         }

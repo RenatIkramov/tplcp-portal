@@ -66,7 +66,7 @@ class ColumnPickerTest extends BrowserTestBase {
         List<String> offered = pickerColumnIds();
 
         TreeSet<String> missing = new TreeSet<>(expected);
-        missing.removeAll(offered);
+        offered.forEach(missing::remove);
         assertTrue(missing.isEmpty(),
                 "колонки есть в справочнике, а в окне ⚙ Колонки их нет — включить нельзя: "
                         + missing);

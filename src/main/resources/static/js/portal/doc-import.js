@@ -125,6 +125,10 @@
       state.type = type;
       if (answer.ok){
         say(tr(doc.imported, {no: answer.documentNo, count: answer.lineCount}));
+        // комплекты поступления и перемещения разложены на комплектующие (V153)
+        if (answer.expandedKits && answer.expandedKits.length){
+          say(T('common.message.kits_expanded', {codes: answer.expandedKits.join(', ')}));
+        }
         if (typeof PORTAL.reloadDocs === 'function') PORTAL.reloadDocs(type);
         // Черновик открывает редактор черновиков (draft.js) — тем же путём,
         // что и щелчок по черновику в списке: поля шапки видны сразу,

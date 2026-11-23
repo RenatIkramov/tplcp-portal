@@ -26,7 +26,7 @@
     tab: 'sections',          // sections | fields | labels
     object: 'sku',            // объект на вкладке полей
     group: null,              // подвкладка карточки товара
-    settings: {hideTransfersTab: false, priceInReceipts: false, priceInOrders: false},
+    settings: {hideTransfersTab: false, priceInReceipts: false, priceInOrders: false, kitsEnabled: true},
     columns: [],              // строки admin_depositor_columns по ВСЕМ таблицам
     // Правки до сохранения. Ключ — «таблица.колонка»: одно имя колонки
     // живёт в разных таблицах («вес» есть и в заказе, и в его строке),
@@ -69,6 +69,14 @@
       + esc(T_('admin.label.show_transfers_section')) + '</label>'
       + '  <div class="hint" style="margin:8px 0 0;">'
       + esc(T_('admin.hint.transfers_section')) + '</div>'
+      // Комплекты (V155): выключены — экранов комплектов у клиента нет
+      + '  <label style="display:flex;align-items:center;gap:8px;font-size:13.5px;'
+      + 'margin-top:14px;padding-top:12px;border-top:1px solid var(--line);">'
+      + '    <input type="checkbox" id="depVisKits"'
+      + (state.settings.kitsEnabled === false ? '' : ' checked') + '> '
+      + esc(T_('admin.label.kits_enabled')) + '</label>'
+      + '  <div class="hint" style="margin:8px 0 0;">'
+      + esc(T_('admin.hint.kits_enabled')) + '</div>'
       + '</div>'
       // Окно ввода строки (V61): нужны ли клиенту цена и сумма. Настройка
       // отдельная по типу документа — цена бывает осмысленна в поступлении
@@ -364,6 +372,8 @@
     if (priceReceipts) state.settings.priceInReceipts = priceReceipts.checked;
     const priceOrders = el.querySelector('#depVisPriceOrders');
     if (priceOrders) state.settings.priceInOrders = priceOrders.checked;
+    const kits = /** @type {HTMLInputElement | null} */ (el.querySelector('#depVisKits'));
+    if (kits) state.settings.kitsEnabled = kits.checked;
   }
 
   async function send(){
@@ -375,7 +385,8 @@
         + encodeURIComponent(state.depositorId || '') + '/settings',
         {hideTransfersTab: state.settings.hideTransfersTab,
          priceInReceipts: state.settings.priceInReceipts,
-         priceInOrders: state.settings.priceInOrders});
+         priceInOrders: state.settings.priceInOrders,
+         kitsEnabled: state.settings.kitsEnabled !== false});
 
       // Поля — только изменённые: каждая строка отдельным запросом,
       // потому что база заводит запись лишь при отличии от портальной
@@ -410,6 +421,8 @@
 
       // правили текущего клиента — перечитываем раскладку и меню
       if (PORTAL.session && PORTAL.session.depositorId === state.depositorId){
+        // разделы и комплекты (V155) — тоже настройка клиента
+        await PORTAL.refreshSettings();
         PORTAL.reloadAll();
       }
       await reread();
@@ -456,7 +469,7 @@
       PORTAL.fieldLabels ? PORTAL.fieldLabels.load(depositorId) : Promise.resolve()
     ]);
     state.depositorId = depositorId;
-    state.settings = prefs || {hideTransfersTab: false, priceInReceipts: false, priceInOrders: false};
+    state.settings = prefs || {hideTransfersTab: false, priceInReceipts: false, priceInOrders: false, kitsEnabled: true};
     state.columns = columnList || [];
     state.draft = {};
     state.defaults = {};

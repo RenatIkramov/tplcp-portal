@@ -6,6 +6,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 /**
  * Склад в шапке портала (V94): список — из справочника складов,
@@ -42,7 +43,7 @@ class HeaderWarehouseTest extends BrowserTestBase {
         assertEquals(200, response.status());
         String body = response.text();
         assertTrue(body.contains("\"warehouseId\":\"WH-ALA\""), "в ответе есть строки склада");
-        assertTrue(!body.contains("\"warehouseId\":\"WH-KGD\""), "в ответе только выбранный склад");
+        assertFalse(body.contains("\"warehouseId\":\"WH-KGD\""), "в ответе только выбранный склад");
 
         // Новый черновик получает выбранный склад
         page.evaluate("() => PORTAL.draft.create('receipts')");

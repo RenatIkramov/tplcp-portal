@@ -18,6 +18,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -82,7 +83,7 @@ class OrderImportTest extends BrowserTestBase {
         upload(content);
 
         page.waitForSelector("#docImportOverlay.active");
-        assertTrue(page.querySelectorAll("#docImportBody tr").size() >= 1, "ошибки — списком");
+        assertFalse(page.querySelectorAll("#docImportBody tr").isEmpty(), "ошибки — списком");
         assertTrue(page.textContent("#docImportBody").contains("NO-SUCH-ITEM"),
                 "в строке ошибки — значение из файла");
         assertEquals("0", singleValue("SELECT count(*)::text FROM dbo.orders WHERE erp_number = '" + ERP + "'"));

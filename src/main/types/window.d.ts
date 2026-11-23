@@ -22,6 +22,12 @@ declare global {
   // portal/audit-log.js
   var renderAuditLog: () => any;
 
+  // portal/report-runs.js
+  var renderReportRuns: () => any;
+
+  // portal/kits.js
+  var renderKits: () => any;
+
   // portal/auth.js
   var doLogin: () => Promise<any>;
   var logout: () => Promise<any>;

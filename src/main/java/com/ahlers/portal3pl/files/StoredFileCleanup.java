@@ -71,7 +71,7 @@ public class StoredFileCleanup {
      */
     public int[] sweep(Instant orphansBefore) {
         List<UUID> expired = tx.execute(s -> jdbc.sql("SELECT dbo.stored_file_expire()").query(UUID.class).list());
-        for (UUID id : expired == null ? List.<UUID>of() : expired) {
+        for (UUID id : expired) {
             store.delete(id);
         }
         Map<UUID, Instant> onDisk = store.list();
@@ -80,7 +80,7 @@ public class StoredFileCleanup {
                 .param("ids", onDisk.keySet().toArray(new UUID[0])).query().listOfRows());
         int orphans = 0;
         int missing = 0;
-        for (Map<String, Object> p : problems == null ? List.<Map<String, Object>>of() : problems) {
+        for (Map<String, Object> p : problems) {
             UUID id = (UUID) p.get("file_id");
             if ("orphan".equals(p.get("problem"))) {
                 if (onDisk.get(id).isBefore(orphansBefore)) {
@@ -92,7 +92,7 @@ public class StoredFileCleanup {
                 log.warn("Файловое хранилище: описание {} есть, а файла в папке нет", id);
             }
         }
-        int[] out = {expired == null ? 0 : expired.size(), orphans, missing};
+        int[] out = {expired.size(), orphans, missing};
         last = new Sweep(Instant.now(), out[0], out[1], out[2]);
         return out;
     }

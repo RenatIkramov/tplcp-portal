@@ -231,17 +231,6 @@
     host.classList.add('active');
   }
 
-  /** Имя файла из Content-Disposition: filename*=UTF-8''… или filename="…". */
-  function fileNameOf(/** @type {string | null} */ header){
-    if (!header) return 'report';
-    const star = /filename\*=UTF-8''([^;]+)/i.exec(header);
-    if (star) {
-      try { return decodeURIComponent(star[1]); } catch (e) { /* ниже — простое имя */ }
-    }
-    const plain = /filename="?([^";]+)"?/i.exec(header);
-    return plain ? plain[1] : 'report';
-  }
-
   async function start(/** @type {any} */ report, /** @type {Record<string, string>} */ values){
     view.busy.add(report.reportId);
     render();
@@ -306,23 +295,13 @@
     },
 
     async download(runId){
-      let resp;
       try {
-        resp = await fetch('/api/reports/runs/' + encodeURIComponent(runId) + '/file');
-      } catch (e){ say(messageOf(e)); return; }
-      if (!resp.ok){
-        say(await PORTAL.responseMessage(resp));
+        await PORTAL.downloadFile('/api/reports/runs/' + encodeURIComponent(runId) + '/file', 'report');
+      } catch (e){
+        // отказ — чаще всего запуск уже убран по сроку: показать и обновить список
+        say(messageOf(e));
         await reloadRuns();
-        return;
       }
-      const url = URL.createObjectURL(await resp.blob());
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = fileNameOf(resp.headers.get('Content-Disposition'));
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      window.setTimeout(() => URL.revokeObjectURL(url), 10000);
     }
   };
 

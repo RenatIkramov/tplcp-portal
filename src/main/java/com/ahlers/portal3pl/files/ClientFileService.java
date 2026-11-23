@@ -168,9 +168,9 @@ public class ClientFileService {
 
         List<UUID> written = new ArrayList<>();
         try {
-            for (int i = 0; i < uploads.size(); i++) {
+            for (Upload upload : uploads) {
                 UUID id = UUID.randomUUID();
-                store.write(id, uploads.get(i).content());
+                store.write(id, upload.content());
                 written.add(id);
             }
             tx.executeWithoutResult(s -> {
@@ -208,7 +208,7 @@ public class ClientFileService {
             return jdbc.sql("SELECT dbo.client_file_remove(:id::uuid)").param("id", fileId)
                     .query(Boolean.class).single();
         });
-        if (Boolean.TRUE.equals(removed)) {
+        if (removed) {
             store.delete(UUID.fromString(fileId));
         }
         return list(type, docId);
@@ -244,7 +244,7 @@ public class ClientFileService {
                         "SELECT file_id, depositor_id::text AS depositor_id, doc_type, doc_id::text AS doc_id,"
                                 + " file_name, content_type FROM dbo.client_file_due(20)")
                 .query().listOfRows());
-        for (Map<String, Object> f : due == null ? List.<Map<String, Object>>of() : due) {
+        for (Map<String, Object> f : due) {
             UUID id = (UUID) f.get("file_id");
             String wmsId = null;
             String error = null;

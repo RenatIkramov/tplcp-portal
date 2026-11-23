@@ -453,6 +453,7 @@
 <div class="admin-subtabs">
 <button data-i18n="references.button.products" class="admin-subtab-btn ref-subtab-btn active" data-refsub="sku" data-call="showReferencesSub" data-args="[&quot;sku&quot;]">Товары</button>
 <button data-i18n="references.button.packaging" class="admin-subtab-btn ref-subtab-btn" data-refsub="packaging" data-call="showReferencesSub" data-args="[&quot;packaging&quot;]">Упаковки</button>
+<button data-i18n="references.button.kits" class="admin-subtab-btn ref-subtab-btn" data-refsub="kits" data-call="showReferencesSub" data-args="[&quot;kits&quot;]">Комплекты</button>
 <button data-i18n="references.button.suppliers" class="admin-subtab-btn ref-subtab-btn" data-refsub="suppliers" data-call="showReferencesSub" data-args="[&quot;suppliers&quot;]">Поставщики</button>
 <button data-i18n="references.button.consignees" class="admin-subtab-btn ref-subtab-btn" data-refsub="consignees" data-call="showReferencesSub" data-args="[&quot;consignees&quot;]">Грузополучатели</button>
 </div>
@@ -516,6 +517,9 @@
 <div class="pagination-bar" id="packagingPagination"></div>
 </div>
 </div>
+
+<!-- Комплекты: разметку рисует js/portal/kits.js (V154) -->
+<div class="admin-sub ref-sub" id="ref-sub-kits"></div>
 
 <div class="admin-sub ref-sub" id="ref-sub-suppliers">
 <div class="panel-head">
@@ -659,6 +663,8 @@
 <div class="admin-sub" id="admin-sub-excel"></div>
 <!-- Настройка отчётов: разметку рисует js/portal/report-catalog.js (V135) -->
 <div class="admin-sub" id="admin-sub-reports-config"></div>
+<!-- Запуски отчётов всех клиентов: разметку рисует js/portal/report-runs.js (V149) -->
+<div class="admin-sub" id="admin-sub-reports-runs"></div>
 <!-- Интеграция с WMS: настройки и сверки остатков рисует js/portal/integration.js (V143) -->
 <div class="admin-sub" id="admin-sub-wms"></div>
 
@@ -973,6 +979,7 @@
      и подписи для «Журнала действий» (V116–V118). -->
 <script src="js/portal/history.js"></script>
 <script src="js/portal/sku-card.js"></script>
+<script src="js/portal/kits.js"></script>
 <script src="js/portal/stock-card.js"></script>
 <script src="js/portal/transfers-list.js"></script>
 
@@ -1135,6 +1142,7 @@
 <script src="js/portal/languages.js"></script>
 <script src="js/portal/enum-values.js"></script>
 <script src="js/portal/report-catalog.js"></script>
+<script src="js/portal/report-runs.js"></script>
 <script src="js/portal/integration.js"></script>
 <script src="js/portal/reports.js"></script>
 <script src="js/portal/profile.js"></script>

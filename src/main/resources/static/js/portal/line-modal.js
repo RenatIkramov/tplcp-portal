@@ -56,7 +56,7 @@
 
   // общие помощники — core.js (аудит A4)
   const {esc: text, esc: attr} = window.PORTAL;
-  const refs = () => (PORTAL.draft && PORTAL.draft.refs) || {skuList: [], packagings: []};
+  const refs = () => (PORTAL.draft && PORTAL.draft.refs) || {skuList: [], packagings: [], kits: {}};
   const products = () => refs().skuList || [];
   const card = () => PORTAL.card;
   const isDraft = doc => !!doc && doc.statusCode === PORTAL.STATUS.DRAFT;
@@ -343,6 +343,9 @@
       PORTAL.draft.loadDirectories().then(() => open(type, mode, index)).catch(() => {});
       return;
     }
+    // остатки — свежие при каждом открытии: за время работы их меняют
+    // синхронизация, другие документы и состав комплекта
+    Object.keys(stockByWarehouse).forEach(id => delete stockByWarehouse[id]);
     const s = state[type];
     const line = mode === 'edit' ? card().lines(type)[index] : null;
     if (mode === 'edit' && !line) return;
@@ -405,6 +408,30 @@
     }
     const mode = s.mode;
     const lines = card().lines(type).slice();
+    // Комплект в поступлении и перемещении (V153) — сразу комплектующими:
+    // WMS принимает и перевозит только то, что лежит на складе
+    const kit = type !== 'orders' ? (refs().kits || {})[product.skuId] : null;
+    if (kit && kit.length){
+      const parts = kit.map((/** @type {any} */ c) => Object.assign({checked: false, series: '', batch: '', exp: '—'}, {
+        code: c.code, skuId: c.skuId, name: c.name, unit: c.unitName || '',
+        [m.qty]: Number((qty * Number(c.qty)).toFixed(3)), lineComment, packagingCode: null, packageCount: null,
+        quality: values.quality
+      }, m.price ? {price: null, currency: null} : {}));
+      if (mode !== 'add' && s.index !== null){
+        lines.splice(s.index, 1, ...parts);
+      } else {
+        parts.forEach(p => {
+          const same = lines.find(l => l.code === p.code
+              && card().quality(l) === p.quality && (l.lineComment || '') === lineComment);
+          if (same) same[m.qty] = Number(((Number(same[m.qty]) || 0) + p[m.qty]).toFixed(3));
+          else lines.push(p);
+        });
+      }
+      close(type);
+      card().setLines(type, lines);
+      notify(T('common.message.kit_expanded', {code: product.code, count: parts.length}));
+      return;
+    }
     const finish = () => {
       close(type);
       card().setLines(type, lines);

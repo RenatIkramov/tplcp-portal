@@ -136,7 +136,7 @@ public class DocumentImportService {
         @SuppressWarnings("unchecked")
         Map<String, Object> header = (Map<String, Object>) card.get("header");
         String docId = String.valueOf(header.get("docId"));
-        drafts.replaceLines(type, docId, p.lines);
+        Map<String, Object> saved = drafts.replaceLines(type, docId, p.lines);
         String documentNo = header.get("documentNo") == null ? null : String.valueOf(header.get("documentNo"));
         log(user, fileName, content.length, p, docId, documentNo, EnumCodes.ImportStatus.APPLIED);
 
@@ -144,6 +144,10 @@ public class DocumentImportService {
         out.put("docId", docId);
         out.put("documentNo", documentNo);
         out.put("lineCount", p.lines.size());
+        // комплекты поступления и перемещения разложены на комплектующие (V153)
+        if (saved.get("expandedKits") != null) {
+            out.put("expandedKits", saved.get("expandedKits"));
+        }
         return out;
     }
 
@@ -473,11 +477,11 @@ public class DocumentImportService {
 
                 String qualityRaw = raw.getOrDefault(DocumentExcel.QUALITY.key(), "");
                 String quality = qualityRaw.isEmpty() ? "01" : DocumentExcel.codeOf(qualityRaw);
-                boolean qualityKnown = Boolean.TRUE.equals(jdbc.sql("""
+                boolean qualityKnown = jdbc.sql("""
                                 SELECT EXISTS (SELECT 1 FROM dbo.enum_quality
                                                WHERE code = :code AND COALESCE(is_active, true))
                                 """)
-                        .param("code", quality).query(Boolean.class).single());
+                        .param("code", quality).query(Boolean.class).single();
                 if (!qualityKnown) {
                     goodsIssue(excelRow, DocumentExcel.QUALITY, DocumentExcel.ERROR + "not_in_list", qualityRaw);
                 }

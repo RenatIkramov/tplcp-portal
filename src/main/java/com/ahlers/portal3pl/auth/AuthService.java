@@ -164,12 +164,12 @@ public class AuthService {
 
     @Transactional(readOnly = true)
     public boolean mayAccess(String login, String depositorId) {
-        return Boolean.TRUE.equals(jdbc
+        return jdbc
                 .sql("SELECT dbo.user_may_access_depositor(:login::text, :id::uuid)")
                 .param("login", login)
                 .param("id", depositorId)
                 .query(Boolean.class)
-                .single());
+                .single();
     }
 
     private void registerAttempt(String login, boolean success) {

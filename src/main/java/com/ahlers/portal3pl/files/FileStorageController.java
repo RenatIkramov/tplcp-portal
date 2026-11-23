@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Администрирование → «Интеграция» → «Хранилище файлов» (V146):
@@ -51,7 +52,8 @@ public class FileStorageController {
         Map<String, Object> kinds = new LinkedHashMap<>();
         jdbc.sql("SELECT kind, file_count, total_bytes FROM dbo.admin_file_storage_stats()").query().listOfRows()
                 .forEach(r -> kinds.put(String.valueOf(r.get("kind")),
-                        Map.of("count", r.get("file_count"), "bytes", r.get("total_bytes"))));
+                        Map.of("count", Objects.requireNonNullElse(r.get("file_count"), 0L),
+                                "bytes", Objects.requireNonNullElse(r.get("total_bytes"), 0L))));
         out.put("kinds", kinds);
         StoredFileCleanup.Sweep last = cleanup.last();
         out.put("lastSweep", last == null ? null : Map.of("at", last.at().toString(), "expired", last.expired(),

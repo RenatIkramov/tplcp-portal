@@ -87,7 +87,7 @@ declare global {
 
   /** Ответ загрузки документа из Excel (POST /api/{orders|receipts|transfers}/excel-import). */
   type DocImportAnswer =
-    | {ok: true; docId: string; documentNo: string; lineCount: number}
+    | {ok: true; docId: string; documentNo: string; lineCount: number; expandedKits?: string[]}
     | {ok: false; issues: DocImportIssue[]};
 
   /** Загрузка в журнале (dbo.admin_excel_imports). */
@@ -179,6 +179,8 @@ declare global {
   interface Portal {
     /** Запрос с разбором ответа; отказ — исключение с готовым сообщением. */
     fetchJson(url: string, options?: RequestInit): Promise<any>;
+    /** Скачать файл с портала; имя — из Content-Disposition (core.js). Отказ — Error с сообщением. */
+    downloadFile(url: string, fallbackName: string): Promise<string>;
     /** «История» карточек и подписи журнала действий (history.js, V118). */
     history: {
       value(v: unknown): string;
@@ -244,6 +246,8 @@ declare global {
     uiUser?: PortalUiUser | null;
     /** Скрыт ли вошедшему раздел меню (transfers, billing): экран туда не ходит. */
     sectionHidden(tab: string): boolean;
+    /** Используются ли у клиента комплекты (core.js, V155). */
+    kitsEnabled(): boolean;
     /** Последний открытый раздел меню (core.js) — к нему ведут «Назад». */
     lastView: string;
     /** Перед переходом в раздел; false — переход отменён (core.js). */
@@ -286,6 +290,14 @@ declare global {
       packagingAdd(): void; packagingEdit(id: string): void; packagingCancel(): void;
       packagingSave(): Promise<void>; packagingDefault(id: string): Promise<void>;
       packagingDelete(id: string): Promise<void>; packagingField(el: HTMLInputElement | HTMLSelectElement): void;
+      kitEdit(): void; kitField(i: number, name: 'code' | 'qty', value: string): void;
+      kitAdd(): void; kitRemove(i: number): void; kitCancel(): void; kitSave(): Promise<void>;
+      openKit(skuId: string, editNow: boolean): Promise<void>;
+    };
+    /** «Справочники → Комплекты» (kits.js, V154); нет — модуль не загрузился. */
+    kits?: {
+      load(): Promise<void>; open(skuId: string): Promise<void>;
+      startAdd(): void; cancelAdd(): void; pick(): void;
     };
     /** Настройки клиента — вкладки карточки поклажедателя (dep-visibility.js, V111). */
     depositorSettings?: {
@@ -430,7 +442,7 @@ declare global {
     refs: {loaded: boolean; warehouses: SelectOption[]; suppliers: SelectOption[];
            consignees: SelectOption[]; skuByCode: Record<string, SkuRow>; packagings: PackagingRow[];
            orderTypes: SelectOption[]; docTypes: SelectOption[]; transportTypes?: SelectOption[];
-           skuList?: any[]};
+           skuList?: any[], kits?: Record<string, any[]>};
     me: {canEditTransport: boolean; priceInReceipts: boolean; priceInOrders: boolean;
          loaded: boolean; roleCode?: string};
     loadDirectories(): Promise<unknown>;

@@ -15,6 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
  * Справочники контрагентов (V23): поставщики, грузополучатели и адреса.
@@ -175,7 +176,7 @@ class PartnerDirectoryTest extends PortalTestBase {
         assertEquals("Сидоров С., +7 702 111 11 11", own.get("contact"));
         assertEquals("Сидоров С., +7 702 111 11 11", own.get("orderContact"),
                 "свой контакт адреса идёт в заказ");
-        assertEquals(null, bare.get("contact"), "у адреса своего контакта нет");
+        assertNull(bare.get("contact"), "у адреса своего контакта нет");
         assertEquals("Петров П., +7 701 000 00 00", bare.get("orderContact"),
                 "без своего контакта в заказ идут контакты грузополучателя");
     }
@@ -196,8 +197,8 @@ class PartnerDirectoryTest extends PortalTestBase {
 
         partners.updateAddress(addressId, Map.of("address", "Алматы, Складская, 7", "contact", " "));
         Map<String, Object> cleared = byAddress(partners.addresses(id), "Алматы, Складская, 7");
-        assertEquals(null, cleared.get("contact"), "пустое — значит своего контакта нет");
-        assertEquals(null, cleared.get("orderContact"),
+        assertNull(cleared.get("contact"), "пустое — значит своего контакта нет");
+        assertNull(cleared.get("orderContact"),
                 "у грузополучателя контактов нет — подставлять нечего");
 
         expectRejection(400, () -> partners.updateAddress(addressId,

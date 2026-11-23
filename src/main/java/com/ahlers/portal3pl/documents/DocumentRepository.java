@@ -49,7 +49,6 @@ public class DocumentRepository {
         return SqlRows.toCamelCase(jdbc.sql(sql).query().listOfRows());
     }
 
-    /** Шапка одного документа. Пустой список означает «нет доступа или не существует». */
     /** Версия документа: момент последнего изменения в микросекундах. */
     static final String VERSION_SQL = """
             SELECT (extract(epoch FROM updated_at) * 1000000)::bigint::text
@@ -65,6 +64,7 @@ public class DocumentRepository {
                 .param("docId", docId).query(String.class).optional().orElse("");
     }
 
+    /** Шапка одного документа. Пустой список означает «нет доступа или не существует». */
     public List<Map<String, Object>> header(DocumentType type, String docId) {
         String sql = "SELECT * FROM dbo.%s WHERE doc_id = :docId::uuid"
                 .formatted(type.headerView());

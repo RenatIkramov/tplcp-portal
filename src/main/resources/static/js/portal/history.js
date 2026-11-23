@@ -38,7 +38,8 @@
 
   /**
    * Какая часть записи менялась: строка документа, место доставки,
-   * права и доступы пользователя, настройки клиента, язык перевода.
+   * права и доступы пользователя, настройки клиента, язык перевода,
+   * параметр и отчёт клиента, сопоставление с WMS.
    * @param {string | null | undefined} part
    */
   function partText(part){
@@ -54,6 +55,16 @@
       case 'locale': return T('audit.part.locale', {v: rest});
       case 'settings': case 'depositors': case 'warehouses': case 'sections':
         return T('audit.part.' + kind);
+      // каталог отчётов и WMS (V148): «param:<ключ>[:locale:<код>]», «report:<код>», «wms[:<код WMS>]»
+      case 'param': {
+        const at = rest.indexOf(':locale:');
+        return at < 0 ? T('audit.part.param', {v: rest})
+          : T('audit.part.param', {v: rest.slice(0, at)}) + ' · ' + T('audit.part.locale', {v: rest.slice(at + 8)});
+      }
+      case 'report': return T('audit.part.report', {v: rest});
+      // состав комплекта (V151): «kit:<код комплектующей>»
+      case 'kit': return T('audit.part.kit', {v: rest});
+      case 'wms': return rest ? T('audit.part.wms_code', {v: rest}) : T('audit.part.wms');
       default: return part;
     }
   }

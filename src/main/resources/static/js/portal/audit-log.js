@@ -28,7 +28,7 @@
 
   /** Виды объектов для отбора — в порядке, в каком их ищут чаще. */
   const OBJECT_TYPES = ['receipts', 'orders', 'transfers', 'sku', 'packaging', 'supplier', 'consignee',
-    'app_user', 'login', 'depositor', 'warehouse', 'operator', 'enum', 'ui_text', 'locale', 'setting'];
+    'app_user', 'login', 'depositor', 'warehouse', 'operator', 'report', 'enum', 'ui_text', 'locale', 'setting'];
 
   /**
    * С какой даты журнал открывается: неделя назад (решение заказчика

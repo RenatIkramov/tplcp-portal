@@ -402,6 +402,15 @@ $seq$;
 
 SET session_replication_role = origin;
 
+-- Состав демо-комплекта (V151): в жизни его присылает WMS. Набор «Рога и копыта» —
+-- пара рогов, четыре копыта и полкило шерсти.
+SELECT dbo.kit_components_apply(d.depositor_id, 'RK-KIT-01',
+         '[{"code": "RK-ROG-01", "qty": 2}, {"code": "RK-KOP-01", "qty": 4}, {"code": "RK-SHE-01", "qty": 0.5}]')
+  FROM dbo.depositor d WHERE d.code = 'D-001';
+-- Своего остатка у комплекта нет (V152): WMS хранит комплектующие. Партия
+-- комплекта, заведённая в демо раньше, убирается.
+DELETE FROM dbo.stock WHERE sku_id IN (SELECT kit_sku_id FROM dbo.sku_kit_component);
+
 -- Сжатый слой остатков (V141): наличие — из партий выше, резерв и «к получению» —
 -- из документов. Триггеры при загрузке выключены, поэтому пересчёт — явно.
 SELECT dbo.stock_rebase_from_details(NULL);

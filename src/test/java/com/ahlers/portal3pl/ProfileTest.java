@@ -13,6 +13,7 @@ import java.util.TreeSet;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 /**
  * Личный кабинет (ProfileService, 11.11.2026).
@@ -54,7 +55,7 @@ class ProfileTest extends PortalTestBase {
                 .query(String.class).list();
         assertEquals(active, ((List<Map<String, Object>>) p.get("warehouses")).stream()
                 .map(w -> String.valueOf(w.get("warehouseId"))).sorted().toList());
-        assertTrue(String.valueOf(p.get("roleName")).length() > 0, "нет названия роли");
+        assertFalse(String.valueOf(p.get("roleName")).isEmpty(), "нет названия роли");
     }
 
     @Test
@@ -80,6 +81,6 @@ class ProfileTest extends PortalTestBase {
         assertEquals(Boolean.TRUE, p.get("allDepositors"));
         assertNull(p.get("organization"));
         assertTrue(((List<?>) p.get("managers")).isEmpty());
-        assertTrue(!((List<?>) p.get("depositors")).isEmpty(), "у администратора нет поклажедателей");
+        assertFalse(((List<?>) p.get("depositors")).isEmpty(), "у администратора нет поклажедателей");
     }
 }

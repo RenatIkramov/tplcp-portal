@@ -22,6 +22,9 @@
   /** Кто ведёт справочник: и сотрудник склада тоже (решение заказчика 11.11.2026). */
   const EDITOR_ROLES = ['depositor', 'manager', 'staff', 'admin'];
   const mayEdit = () => EDITOR_ROLES.includes(PORTAL.session ? PORTAL.session.roleCode : '');
+  /** Состав комплекта вручную, пока его нет из WMS: администратор и сотрудник склада (V154). */
+  const KIT_EDITOR_ROLES = ['staff', 'admin'];
+  const mayEditKit = () => KIT_EDITOR_ROLES.includes(PORTAL.session ? PORTAL.session.roleCode : '');
 
   /**
    * Состояние карточки. Вкладки перерисовывают тело целиком, и после
@@ -30,6 +33,7 @@
    * @type {{mode: 'view' | 'edit' | 'create', skuId: string | null, row: CardRow,
    *         draft: CardRow, packagings: PackagingRow[],
    *         pkgForm: {packagingId: string | null, values: CardRow} | null,
+   *         kitForm: Array<{code: string, qty: string}> | null,
    *         dict: Record<string, any[]> | null, tab: string}}
    */
   const state = {
@@ -39,6 +43,7 @@
     draft: {},         // только изменённые поля — их и отправляем
     packagings: [],
     pkgForm: null,     // строка упаковки в правке
+    kitForm: null,     // состав комплекта в правке (V154)
     dict: null,
     tab: 'general'
   };
@@ -175,6 +180,8 @@
       col: 'custom_attr' + i, key: 'sku.label.custom_attribute', suffix: ' ' + i
     }))},
     {id: 'packaging', key: 'common.label.packaging', fields: []},
+    // состав комплекта — из WMS, только чтение (V151); у не-комплекта вкладки нет
+    {id: 'kit', key: 'sku.tab.kit', fields: []},
     // отчёты по этому товару — история движения и т. п. (V139, место 06)
     {id: 'reports', key: 'reports.tab.reports', fields: []},
     // кто и когда менял товар (журнал действий, V118); у нового товара её нет
@@ -184,7 +191,8 @@
   const idOf = f => f.id || camel(/** @type {string} */ (f.col));
 
   /** Доступно ли поле этому поклажедателю (справочник колонок, «Доступы»). */
-  const allowed = f => !PORTAL.fieldAllowed || PORTAL.fieldAllowed(idOf(f));
+  const allowed = f => (f.col !== 'is_kit' || PORTAL.kitsEnabled())
+      && (!PORTAL.fieldAllowed || PORTAL.fieldAllowed(idOf(f)));
 
   /**
    * Подпись поля: имя клиента, если он поле переименовал, иначе перевод.
@@ -264,6 +272,7 @@
 
   function bodyHtml(tab){
     if (tab.id === 'packaging') return packagingTabHtml();
+    if (tab.id === 'kit') return kitTabHtml();
     if (tab.id === 'history' || tab.id === 'reports') return '';
     const visible = tab.fields.filter(allowed);
     if (state.mode === 'view'){
@@ -300,8 +309,9 @@
     } else title.textContent = state.row.name || '';
 
     // «История» и «Отчёты» — у сохранённого товара и не во время правки
-    const tabs = TABS.filter(t => (t.id !== 'history' && t.id !== 'reports')
-        || (state.skuId && state.mode === 'view' && (t.id !== 'reports' || !!PORTAL.clientReports)));
+    const tabs = TABS.filter(t => t.id === 'kit' ? isKit() || !!state.kitForm
+        : (t.id !== 'history' && t.id !== 'reports')
+          || (state.skuId && state.mode === 'view' && (t.id !== 'reports' || !!PORTAL.clientReports)));
     if (!tabs.some(t => t.id === state.tab)) state.tab = 'general';
     el('skuDetailTabs').innerHTML = tabs.map(t =>
         '<button class="admin-subtab-btn' + (t.id === state.tab ? ' active' : '') + '" data-tab="' + t.id + '"'
@@ -317,6 +327,124 @@
           {stillWanted: () => state.skuId === skuId && state.tab === 'history'});
     }
     showView('sku-detail');
+  }
+
+  /* ===================== состав комплекта ===================== */
+
+  /** Комплект — у сохранённого товара с признаком или с составом из WMS. */
+  function isKit(){
+    return !!state.skuId && PORTAL.kitsEnabled() && (state.row.isKit === true || state.row.isKit === 'true'
+        || (state.row.kitComponents || []).length > 0);
+  }
+
+  function kitTabHtml(){
+    if (state.kitForm) return kitFormHtml();
+    const rows = /** @type {any[]} */ (state.row.kitComponents || []);
+    const canEdit = mayEditKit() && state.mode === 'view';
+    const hint = '<div class="hint" style="margin-bottom:8px;">' + PORTAL.t('sku.hint.kit_from_wms') + '</div>';
+    const edit = canEdit
+      ? '<div style="margin-top:12px;"><button class="btn" data-kit-edit' + PORTAL.call('PORTAL.skuCard.kitEdit') + '>'
+        + esc(T('sku.button.kit_edit')) + '</button></div>'
+      : '';
+    if (!rows.length){
+      return hint + '<div style="color:var(--muted); font-size:13px;">' + esc(T('sku.text.kit_empty')) + '</div>' + edit;
+    }
+    const th = (key, num) => '<th' + (num ? ' class="num"' : '') + '>' + esc(T(key)) + '</th>';
+    return hint + '<div class="table-card" style="margin-top:4px;"><table data-kit-components><thead><tr>'
+      + th('references.column.code') + th('references.column.name') + th('sku.column.kit_qty', true)
+      + th('sku.text.base_unit_of_measure') + '</tr></thead><tbody>'
+      + rows.map(r => '<tr data-kit-component="' + esc(r.code) + '"><td><strong>' + esc(r.code) + '</strong></td>'
+          + '<td>' + esc(r.name) + '</td><td class="num">' + esc(r.qty) + '</td>'
+          + '<td>' + esc(dash(r.unitName)) + '</td></tr>').join('')
+      + '</tbody></table></div>' + edit;
+  }
+
+  /** Товары, которые могут быть комплектующими: не сам товар и не комплекты. */
+  function componentChoices(){
+    const own = state.row.code;
+    return /** @type {any[]} */ (PORTAL.catalog.sku || []).filter(s => s.code !== own
+        && !(s.isKit === true || s.isKit === 'true'));
+  }
+
+  /** Правка состава: код (из списка товаров), наименование, количество на один комплект. */
+  function kitFormHtml(){
+    const rows = state.kitForm || [];
+    const byCode = new Map(/** @type {any[]} */ (PORTAL.catalog.sku || []).map(s => [s.code, s]));
+    const th = (key, num) => '<th' + (num ? ' class="num"' : '') + '>' + esc(T(key)) + '</th>';
+    const body = rows.map((r, i) => {
+      const sku = byCode.get(r.code);
+      return '<tr data-kit-row="' + i + '">'
+        + '<td><input class="kv-input kv-input-editable" list="kitComponentChoices" data-kit-code value="'
+        + esc(r.code) + '"' + PORTAL.callOnChange('PORTAL.skuCard.kitField', i, 'code', PORTAL.VALUE) + '></td>'
+        + '<td data-kit-name>' + esc(sku ? sku.name : '') + '</td>'
+        + '<td class="num"><input class="kv-input kv-input-editable" type="number" step="any" min="0" data-kit-qty'
+        + ' style="max-width:110px;" value="' + esc(r.qty) + '"'
+        + PORTAL.callOnInput('PORTAL.skuCard.kitField', i, 'qty', PORTAL.VALUE) + '></td>'
+        + '<td>' + esc(dash(sku ? sku.uomName : '')) + '</td>'
+        + '<td style="text-align:right;"><button class="btn ghost icon" data-kit-remove'
+        + PORTAL.call('PORTAL.skuCard.kitRemove', i) + ' aria-label="' + esc(T('common.button.delete')) + '">✕</button></td>'
+        + '</tr>';
+    }).join('');
+    return '<div class="hint" style="margin-bottom:8px;">' + esc(T('sku.hint.kit_manual')) + '</div>'
+      + '<datalist id="kitComponentChoices">' + componentChoices().map(s =>
+          '<option value="' + esc(s.code) + '">' + esc(s.name) + '</option>').join('') + '</datalist>'
+      + '<div class="table-card" style="margin-top:4px;"><table data-kit-form><thead><tr>'
+      + th('references.column.code') + th('references.column.name') + th('sku.column.kit_qty', true)
+      + th('sku.text.base_unit_of_measure') + '<th></th></tr></thead><tbody>' + body + '</tbody></table></div>'
+      + '<div style="margin-top:12px; display:flex; gap:8px;">'
+      + '<button class="btn ghost" data-kit-add' + PORTAL.call('PORTAL.skuCard.kitAdd') + '>'
+      + esc(T('sku.button.kit_add_component')) + '</button>'
+      + '<span style="flex:1;"></span>'
+      + '<button class="btn" data-kit-cancel' + PORTAL.call('PORTAL.skuCard.kitCancel') + '>'
+      + esc(T('common.button.cancel')) + '</button>'
+      + '<button class="btn primary" data-kit-save' + PORTAL.call('PORTAL.skuCard.kitSave') + '>'
+      + esc(T('sku.button.kit_save')) + '</button></div>';
+  }
+
+  function kitEdit(){
+    state.kitForm = /** @type {any[]} */ (state.row.kitComponents || [])
+        .map(r => ({code: String(r.code), qty: String(r.qty)}));
+    if (!state.kitForm.length) state.kitForm.push({code: '', qty: '1'});
+    state.tab = 'kit';
+    render();
+  }
+
+  /** Поле строки состава: код перерисовывает строку (наименование), количество — нет. */
+  function kitField(i, name, value){
+    if (!state.kitForm || !state.kitForm[i]) return;
+    state.kitForm[i][name] = String(value).trim();
+    if (name === 'code') render();
+  }
+
+  async function kitSave(){
+    if (!state.kitForm) return;
+    const rows = state.kitForm.filter(r => r.code !== '');
+    try {
+      const card = await api('PUT', '/api/sku/' + state.skuId + '/kit', {components: rows});
+      state.row = card;
+      state.packagings = card.packagings || [];
+      state.kitForm = null;
+      await PORTAL.reloadProducts();
+      // составы окна строки документа — заново: поступление раскладывает по ним
+      if (PORTAL.reloadDirectories) await PORTAL.reloadDirectories();
+      render();
+      say(T((card.kitComponents || []).length ? 'sku.message.kit_saved' : 'sku.message.kit_cleared'));
+    } catch (e){
+      say(e.message);
+    }
+  }
+
+  /** Из «Справочники → Комплекты»: карточка товара сразу на вкладке «Состав». */
+  async function openKit(skuId, editNow){
+    try {
+      state.mode = 'view';
+      state.tab = 'kit';
+      state.kitForm = null;
+      await openCard(skuId);
+      if (editNow && mayEditKit()) kitEdit();
+    } catch (e){
+      say(T('common.message.card_open_failed', {error: e.message}));
+    }
   }
 
   /* ===================== упаковки ===================== */
@@ -498,6 +626,7 @@
     state.packagings = card.packagings || [];
     state.draft = {};
     state.pkgForm = null;
+    state.kitForm = null;
     render();
   }
 
@@ -517,7 +646,7 @@
     try {
       await dictionaries();
       Object.assign(state, {mode: 'create', skuId: null, row: {}, draft: {}, packagings: [],
-                            pkgForm: null, tab: 'general'});
+                            pkgForm: null, kitForm: null, tab: 'general'});
       render();
     } catch (e){
       say(T('sku.message.new_sku_open_failed', {error: e.message}));
@@ -615,6 +744,13 @@
       render();
     },
     packagingCancel: () => { state.pkgForm = null; render(); },
+    kitEdit,
+    kitField,
+    kitAdd: () => { if (state.kitForm){ state.kitForm.push({code: '', qty: '1'}); render(); } },
+    kitRemove: i => { if (state.kitForm){ state.kitForm.splice(i, 1); render(); } },
+    kitCancel: () => { state.kitForm = null; render(); },
+    kitSave,
+    openKit,
     packagingSave,
     packagingDefault,
     packagingDelete,

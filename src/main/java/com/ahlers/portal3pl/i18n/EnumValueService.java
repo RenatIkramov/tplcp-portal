@@ -91,15 +91,23 @@ public class EnumValueService {
      * @param name         основное (английское) имя
      * @param extra        второй код: обозначение единицы, буквенный код валюты
      * @param translations переводы по кодам языков
+     * @param flag         признак «да/нет» из реестра (у статуса — «можно править
+     *                     транспорт», V150); {@code null} — не менять
      */
     public record EnumValue(String code, String name, String extra, Integer sortOrder,
-                            Boolean isActive, Map<String, Translation> translations) {
+                            Boolean isActive, Map<String, Translation> translations, Boolean flag) {
+
+        public EnumValue(String code, String name, String extra, Integer sortOrder,
+                         Boolean isActive, Map<String, Translation> translations) {
+            this(code, name, extra, sortOrder, isActive, translations, null);
+        }
     }
 
     /** Описание перечисления из реестра. */
     private record Registry(String enumKey, String codeColumn, boolean hasSymbol,
                             String textKey, String codePattern, String extraColumn,
-                            String extraPattern, String extraLabelKey) {
+                            String extraPattern, String extraLabelKey,
+                            String flagColumn, String flagLabelKey, String flagHintKey) {
     }
 
     /* ============================== чтение ============================== */
@@ -131,6 +139,8 @@ public class EnumValueService {
             e.put("extraLabelKey", r.extraColumn() == null ? null : r.extraLabelKey());
             e.put("codeExample", example(values, "code"));
             e.put("extraExample", r.extraColumn() == null ? null : example(values, "extra"));
+            e.put("flagLabelKey", r.flagColumn() == null ? null : r.flagLabelKey());
+            e.put("flagHintKey", r.flagColumn() == null ? null : r.flagHintKey());
             enums.add(e);
 
             for (Map<String, Object> v : values) {
@@ -142,6 +152,7 @@ public class EnumValueService {
                 row.put("code", v.get("code"));
                 row.put("name", v.get("name"));
                 row.put("extra", v.get("extra"));
+                row.put("flag", v.get("flag"));
                 row.put("sortOrder", v.get("sort_order"));
                 row.put("isActive", v.get("is_active"));
                 row.put("isSystem", system.contains(r.enumKey() + "|" + v.get("code")));
@@ -228,32 +239,38 @@ public class EnumValueService {
                         .param("table", r.enumKey())
                         .query(Integer.class)
                         .single());
-                jdbc.sql(("INSERT INTO dbo.%s (id, %s, name, sort_order, is_active%s)"
+                jdbc.sql(("INSERT INTO dbo.%s (id, %s, name, sort_order, is_active%s%s)"
                                 + " VALUES (:id::int, :code::varchar, :name::varchar, :sortOrder,"
-                                + " COALESCE(:isActive, true)%s)")
+                                + " COALESCE(:isActive, true)%s%s)")
                                 .formatted(r.enumKey(), r.codeColumn(),
                                         r.extraColumn() == null ? "" : ", " + r.extraColumn(),
-                                        r.extraColumn() == null ? "" : ", :extra::varchar"))
+                                        r.flagColumn() == null ? "" : ", " + r.flagColumn(),
+                                        r.extraColumn() == null ? "" : ", :extra::varchar",
+                                        r.flagColumn() == null ? "" : ", COALESCE(:flag, false)"))
                         .param("id", Integer.parseInt(id))
                         .param("code", code)
                         .param("name", name)
                         .param("sortOrder", v.sortOrder())
                         .param("isActive", v.isActive())
                         .param("extra", extra)
+                        .param("flag", v.flag())
                         .update();
             } else {
                 id = valueId;
                 jdbc.sql(("UPDATE dbo.%s SET %s = :code::varchar, name = :name::varchar,"
-                                + " sort_order = :sortOrder, is_active = COALESCE(:isActive, true)%s"
+                                + " sort_order = :sortOrder, is_active = COALESCE(:isActive, true)%s%s"
                                 + " WHERE id::text = :id")
                                 .formatted(r.enumKey(), r.codeColumn(),
                                         r.extraColumn() == null ? ""
-                                                : ", " + r.extraColumn() + " = :extra::varchar"))
+                                                : ", " + r.extraColumn() + " = :extra::varchar",
+                                        r.flagColumn() == null ? ""
+                                                : ", " + r.flagColumn() + " = COALESCE(:flag, " + r.flagColumn() + ")"))
                         .param("code", code)
                         .param("name", name)
                         .param("sortOrder", v.sortOrder())
                         .param("isActive", v.isActive())
                         .param("extra", extra)
+                        .param("flag", v.flag())
                         .param("id", id)
                         .update();
             }
@@ -315,13 +332,16 @@ public class EnumValueService {
     private List<Registry> registry() {
         return jdbc.sql("""
                         SELECT enum_key, code_column, has_symbol, text_key, code_pattern,
-                               extra_column, extra_pattern, extra_label_key
+                               extra_column, extra_pattern, extra_label_key,
+                               flag_column, flag_label_key, flag_hint_key
                         FROM dbo.enum_registry ORDER BY sort_order
                         """)
                 .query((rs, n) -> new Registry(rs.getString("enum_key"), rs.getString("code_column"),
                         rs.getBoolean("has_symbol"), rs.getString("text_key"),
                         rs.getString("code_pattern"), rs.getString("extra_column"),
-                        rs.getString("extra_pattern"), rs.getString("extra_label_key")))
+                        rs.getString("extra_pattern"), rs.getString("extra_label_key"),
+                        rs.getString("flag_column"), rs.getString("flag_label_key"),
+                        rs.getString("flag_hint_key")))
                 .list();
     }
 
@@ -337,11 +357,12 @@ public class EnumValueService {
      * в текст запроса попадает только то, что записала миграция.
      */
     private List<Map<String, Object>> values(Registry r) {
-        return jdbc.sql(("SELECT id AS value_id, %s::varchar AS code, name, %s AS extra,"
+        return jdbc.sql(("SELECT id AS value_id, %s::varchar AS code, name, %s AS extra, %s AS flag,"
                         + " sort_order, COALESCE(is_active, true) AS is_active"
                         + " FROM dbo.%s ORDER BY sort_order NULLS LAST, id")
                         .formatted(r.codeColumn(),
                                 r.extraColumn() == null ? "NULL::varchar" : r.extraColumn() + "::varchar",
+                                r.flagColumn() == null ? "NULL::boolean" : r.flagColumn() + "::boolean",
                                 r.enumKey()))
                 .query()
                 .listOfRows();

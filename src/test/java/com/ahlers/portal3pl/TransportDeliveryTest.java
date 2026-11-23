@@ -15,6 +15,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doCallRealMethod;
@@ -93,6 +94,6 @@ class TransportDeliveryTest extends PortalTestBase {
         doCallRealMethod().when(wms).sendTransport(any(DocumentType.class), anyString());
         Map<String, Object> fixed = header(drafts.resendTransport(DocumentType.RECEIPTS, docId));
         assertEquals("01", fixed.get("transportState"));
-        assertEquals(null, fixed.get("transportError"));
+        assertNull(fixed.get("transportError"));
     }
 }

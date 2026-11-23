@@ -201,13 +201,14 @@
       + '<th>' + esc(tr('admin.column.enum_code')) + '</th>'
       + '<th>' + esc(tr('admin.column.enum_base')) + '</th>'
       + (e.extraLabelKey ? '<th>' + esc(tr(e.extraLabelKey)) + '</th>' : '')
+      + (e.flagLabelKey ? '<th>' + esc(tr(e.flagLabelKey)) + '</th>' : '')
       + state.locales.map(l => '<th>' + esc(l.name) + '</th>').join('')
       + '<th class="num">' + esc(tr('partners.text.order')) + '</th>'
       + '<th class="num">' + esc(tr('admin.column.enum_usage')) + '</th>'
       + '<th></th>';
 
     const rows = visibleRows();
-    const span = 5 + state.locales.length + (e.extraLabelKey ? 1 : 0);
+    const span = 5 + state.locales.length + (e.extraLabelKey ? 1 : 0) + (e.flagLabelKey ? 1 : 0);
     body.innerHTML = rows.map(r => row(e, r)).join('')
       || '<tr><td colspan="' + span + '" style="color:var(--muted);">'
          + esc(tr('partners.text.directory_is_empty')) + '</td></tr>';
@@ -231,6 +232,7 @@
       + '<td><strong>' + esc(r.code) + '</strong></td>'
       + '<td>' + esc(r.name) + '</td>'
       + (e.extraLabelKey ? '<td>' + esc(r.extra) + '</td>' : '')
+      + (e.flagLabelKey ? '<td>' + esc(tr(r.flag ? 'common.value.yes' : 'common.value.no')) + '</td>' : '')
       + translations
       + '<td class="num">' + esc(r.sortOrder === null || r.sortOrder === undefined ? '' : r.sortOrder) + '</td>'
       + '<td class="num">' + (r.usage ? esc(r.usage) : '<span style="color:var(--muted);">0</span>') + '</td>'
@@ -324,7 +326,14 @@
       + field('enumValueName', 'admin.label.base_name', r ? r.name : '')
       + '<label class="enum-check"><input type="checkbox" id="enumValueActive"'
       + ((!r || r.isActive !== false) ? ' checked' : '') + (system ? ' disabled' : '') + '/> '
-      + PORTAL.t('admin.label.enum_active') + '</label>';
+      + PORTAL.t('admin.label.enum_active') + '</label>'
+      // признак «да/нет» перечисления (у статуса — «можно править транспорт», V150);
+      // у системного значения он правится: системность бережёт код и «действует»
+      + (e.flagLabelKey
+          ? '<label class="enum-check"><input type="checkbox" id="enumValueFlag"'
+            + (r && r.flag ? ' checked' : '') + '/> ' + PORTAL.t(e.flagLabelKey) + '</label>'
+            + (e.flagHintKey ? '<div class="hint" style="margin-top:-4px;">' + PORTAL.t(e.flagHintKey) + '</div>' : '')
+          : '');
 
     html += '<div class="enum-translations"><div class="enum-subtitle">'
       + PORTAL.t('admin.title.enum_translations') + '</div>';
@@ -397,6 +406,7 @@
       extra: byId('enumValueExtra') ? val('enumValueExtra') : null,
       sortOrder: sort === '' ? null : Number(sort),
       isActive: byId('enumValueActive').checked,
+      flag: byId('enumValueFlag') ? /** @type {HTMLInputElement} */ (byId('enumValueFlag')).checked : null,
       translations: translations
     };
   }

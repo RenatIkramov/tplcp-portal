@@ -30,7 +30,7 @@ import java.io.IOException;
  *       наружу;</li>
  *   <li>{@code Strict-Transport-Security} — только если запрос пришёл по
  *       HTTPS: по HTTP браузер его всё равно не примет, а на машине
- *       разработчика он закрыл бы http://localhost на год.</li>
+ *       разработчика он закрыл бы {@code http://localhost} на год.</li>
  * </ul>
  *
  * <p>{@code Content-Security-Policy} — полный (аудит A3, 14.11.2026):

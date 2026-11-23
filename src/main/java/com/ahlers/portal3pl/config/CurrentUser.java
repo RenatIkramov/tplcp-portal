@@ -174,6 +174,11 @@ public class CurrentUser {
         return Boolean.TRUE.equals(depositorSettings().get("priceInOrders"));
     }
 
+    /** Используются ли комплекты у текущего поклажедателя (V155); не выбран — да. */
+    public boolean kitsEnabled() {
+        return !Boolean.FALSE.equals(depositorSettings().get("kitsEnabled"));
+    }
+
     /** То же в строках поступления (V61). */
     public boolean priceInReceipts() {
         return Boolean.TRUE.equals(depositorSettings().get("priceInReceipts"));
@@ -234,12 +239,14 @@ public class CurrentUser {
             // поклажедатель ещё не выбран — показывать нечего и скрывать нечего
             return java.util.Map.of("hideTransfersTab", false,
                     "priceInReceipts", false,
-                    "priceInOrders", false);
+                    "priceInOrders", false,
+                    "kitsEnabled", true);
         }
         return jdbc.sql("""
                         SELECT hide_transfers_tab AS "hideTransfersTab",
                                price_in_receipts  AS "priceInReceipts",
-                               price_in_orders    AS "priceInOrders"
+                               price_in_orders    AS "priceInOrders",
+                               kits_enabled       AS "kitsEnabled"
                         FROM dbo.depositor_settings_of(:dep::uuid)
                         """)
                 .param("dep", depositorId)
@@ -249,6 +256,7 @@ public class CurrentUser {
                 .findFirst()
                 .orElse(java.util.Map.of("hideTransfersTab", false,
                         "priceInReceipts", false,
-                        "priceInOrders", false));
+                        "priceInOrders", false,
+                        "kitsEnabled", true));
     }
 }

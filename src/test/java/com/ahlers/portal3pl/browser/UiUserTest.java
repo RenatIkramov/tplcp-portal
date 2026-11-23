@@ -7,6 +7,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 
 /**
  * Вошедший на экране — с полями как в ответах сервера (аудит 11.11.2026, D4).
@@ -28,7 +29,7 @@ class UiUserTest extends BrowserTestBase {
                         + " line: document.getElementById('managerLine').textContent})");
         assertEquals(singleValue("SELECT full_name FROM dbo.app_user WHERE login = '" + USER + "'"),
                 user.get("fullName"), "имя вошедшего не то");
-        assertFalse(Boolean.TRUE.equals(user.get("demo")), "у вошедшего снова поля демо: full_name / manager");
+        assertNotEquals(Boolean.TRUE, user.get("demo"), "у вошедшего снова поля демо: full_name / manager");
         assertFalse(String.valueOf(user.get("line")).isBlank(), "строка режима под шапкой пуста");
 
         // права с сервера на лету — тем же правилом, что при входе

@@ -7,45 +7,6 @@
 
   // общие помощники — core.js (аудит A4)
   const {say, messageOf} = window.PORTAL;
-  /** Текст исключения: бросают не только Error. */
-
-  /**
-   * Скачивание файла с сервера.
-   *
-   * Простой переход по ссылке не подходит: нужен тот же cookie сеанса
-   * и разбор отказа (403, если загрузка из Excel отключена) — иначе
-   * вместо объяснения человек получил бы пустой файл или страницу
-   * с ошибкой вместо таблицы.
-   */
-  /**
-   * @param {string} url
-   * @param {string} fallbackName
-   * @returns {Promise<string>} имя сохранённого файла
-   */
-  async function download(url, fallbackName){
-    const resp = await fetch(url, {headers: {'Accept': '*/*'}});
-    if (!resp.ok) throw new Error(await PORTAL.responseMessage(resp));
-
-    // имя файла сервер присылает в заголовке, в том числе по-русски
-    let name = fallbackName;
-    const cd = resp.headers.get('Content-Disposition') || '';
-    const utf8 = cd.match(/filename\*\s*=\s*UTF-8''([^;]+)/i);
-    const plain = cd.match(/filename\s*=\s*"?([^";]+)"?/i);
-    if (utf8) name = decodeURIComponent(utf8[1]);
-    else if (plain) name = plain[1];
-
-    const blob = await resp.blob();
-    const href = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = href;
-    a.download = name;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    // ссылку на blob надо отпустить, иначе файл висит в памяти страницы
-    setTimeout(() => URL.revokeObjectURL(href), 2000);
-    return name;
-  }
 
   /**
    * Скачивание шаблона с откликом на нажатие.
@@ -70,7 +31,9 @@
       btn.innerHTML = T('common.button.preparing_template');
     }
     try {
-      const name = await download(url, T(nameKey) + '.xlsx');
+      // нужен cookie сеанса и разбор отказа (403, если загрузка из Excel
+      // отключена) — простой переход по ссылке дал бы пустой файл
+      const name = await PORTAL.downloadFile(url, T(nameKey) + '.xlsx');
       say(T('common.message.downloading_file', {name: name}));
     } catch (e){
       say(messageOf(e));

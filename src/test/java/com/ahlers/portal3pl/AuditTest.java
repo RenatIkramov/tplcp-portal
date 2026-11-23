@@ -8,6 +8,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
  * Журнал действий (V116): что пишут триггеры и что показывает история.
@@ -83,7 +84,7 @@ class AuditTest extends PortalTestBase {
                              ORDER BY r.doc_id LIMIT 1
                             """)
                     .query(String.class).optional().orElse(null);
-            assertTrue(docId != null, "у клиента нет поступления со строками — проверять нечего");
+            assertNotNull(docId, "у клиента нет поступления со строками — проверять нечего");
             // Документ мог уже меняться — другими проверками или руками. Смотрим
             // только события этой проверки: прежде прежние события документа
             // попадали в счёт, и проверка падала на базе, где его уже правили.

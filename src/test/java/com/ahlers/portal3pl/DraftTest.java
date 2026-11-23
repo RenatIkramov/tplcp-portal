@@ -499,7 +499,7 @@ class DraftTest extends PortalTestBase {
         assertEquals("ТОО «КазТранс»", header(card).get("carrier"), "транспорт при создании");
         assertEquals("999 ZZZ 02", header(card).get("carNumber"));
         assertEquals("Ахметов А.", header(card).get("driverName"));
-        assertEquals(null, header(card).get("transportState"), "из черновика в WMS ничего не уходит");
+        assertNull(header(card).get("transportState"), "из черновика в WMS ничего не уходит");
     }
 
     /** Без права на транспорт его поля в черновике не принимаются. */
@@ -513,7 +513,7 @@ class DraftTest extends PortalTestBase {
             signIn();
             Map<String, Object> card = drafts.updateHeader(DocumentType.RECEIPTS, docId,
                     Map.of("car_number", "999 ZZZ 02", "comment", "шапка пишется"));
-            assertEquals(null, header(card).get("carNumber"), "транспорт без права записался");
+            assertNull(header(card).get("carNumber"), "транспорт без права записался");
             assertEquals("шапка пишется", header(card).get("comment"), "остальная шапка пишется");
         } finally {
             inContext("UPDATE dbo.user_settings SET can_edit_transport = true"
@@ -535,7 +535,7 @@ class DraftTest extends PortalTestBase {
 
         Map<String, Object> bare = header(drafts.confirm(DocumentType.RECEIPTS, without));
         assertEquals("02", bare.get("statusCode"));
-        assertEquals(null, bare.get("transportState"), "пустой транспорт не отправляется");
+        assertNull(bare.get("transportState"), "пустой транспорт не отправляется");
 
         expectRejection(409, () -> drafts.resendTransport(DocumentType.RECEIPTS, withTransport));
     }

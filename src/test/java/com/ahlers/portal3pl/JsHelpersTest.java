@@ -46,15 +46,15 @@ class JsHelpersTest {
                 + String.join("\n", own));
     }
 
+    /** Обработчик строкой в разметке: onclick="…", onchange="…", oninput="…" и прочие on…="…". */
+    private static final Pattern INLINE = Pattern.compile("\\son[a-z]+=\\\\?[\"']");
+
     /**
      * Разметка, которую собирают модули, — без {@code onclick="…"} (аудит A3):
      * щелчок идёт через {@code PORTAL.call} и общий обработчик. Строка
      * скрипта, собранная из данных, — это дыра S1; без неё на страницу
      * можно будет поставить полный CSP.
      */
-    /** Обработчик строкой в разметке: onclick="…", onchange="…", oninput="…" и прочие on…="…". */
-    private static final Pattern INLINE = Pattern.compile("\\son[a-z]+=\\\\?[\"']");
-
     @Test
     void modulesBuildNoOnclick() throws IOException {
         List<String> found = new ArrayList<>();

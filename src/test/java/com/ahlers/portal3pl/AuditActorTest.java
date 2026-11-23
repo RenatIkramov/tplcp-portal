@@ -8,6 +8,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
  * Журнал действий помнит человека, а не логин (аудит 11.11.2026, A8; V126).
@@ -32,7 +33,7 @@ class AuditActorTest extends PortalTestBase {
                     .param("d", depositor).param("a", USER).query().listOfRows();
             String docId = jdbc.sql("SELECT doc_id::text FROM dbo.receipts ORDER BY doc_id LIMIT 1")
                     .query(String.class).optional().orElse(null);
-            assertTrue(docId != null, "у клиента нет поступлений — проверять нечего");
+            assertNotNull(docId, "у клиента нет поступлений — проверять нечего");
             String mark = "кто-это-" + System.nanoTime();
             jdbc.sql("UPDATE dbo.receipts SET comment = :c WHERE doc_id = :id::uuid")
                     .param("c", mark).param("id", docId).update();

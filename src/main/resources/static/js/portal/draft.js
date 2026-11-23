@@ -17,10 +17,10 @@
    * @type {{loaded: boolean, warehouses: SelectOption[], suppliers: SelectOption[],
    *         consignees: SelectOption[], skuByCode: Record<string, SkuRow>, packagings: PackagingRow[],
    *         orderTypes: SelectOption[], docTypes: SelectOption[], transportTypes?: SelectOption[],
-   *         skuList?: object[]}}
+   *         skuList?: object[], kits: Record<string, any[]>}}
    */
   const refs = {loaded:false, warehouses:[], suppliers:[], consignees:[], skuByCode:{},
-                packagings:[], orderTypes:[], docTypes:[]};
+                packagings:[], orderTypes:[], docTypes:[], kits:{}};
   /** @type {{canEditTransport: boolean, priceInReceipts: boolean, priceInOrders: boolean, loaded: boolean, roleCode?: string}} */
   const me = {canEditTransport:false, priceInReceipts:false, priceInOrders:false, loaded:false};
 
@@ -35,15 +35,20 @@
     // и оттуда же берём, если они уже там: по этому набору считает
     // колонка «Используются упаковки», и две копии одного справочника
     // однажды разойдутся.
-    const [w, s, c, sku, packagings, types, meResponse] = await Promise.all([
+    const [w, s, c, sku, packagings, types, meResponse, kits] = await Promise.all([
       api('GET','/api/warehouses'), api('GET','/api/suppliers'),
       api('GET','/api/consignees'), api('GET','/api/sku/options'),
       (PORTAL.catalog && PORTAL.catalog.packaging && PORTAL.catalog.packaging.length)
         ? Promise.resolve(PORTAL.catalog.packaging)
         : api('GET','/api/packaging/options'),
       api('GET','/api/document-dictionaries'),
-      api('GET','/api/me')
+      api('GET','/api/me'),
+      // составы комплектов (V153): в поступлении и перемещении комплект
+      // окно строки сразу раскладывает на комплектующие
+      api('GET','/api/sku/kits')
     ]);
+    refs.kits = {};
+    (kits || []).forEach((/** @type {any} */ k) => { refs.kits[k.kitSkuId] = k.components || []; });
     me.canEditTransport = meResponse.canEditTransport === true;
     // Нужны ли клиенту цена и сумма в окне строки (V61). Решает не роль
     // человека, а настройка поклажедателя: это свойство его документов.
@@ -664,8 +669,12 @@
     }
     // Состав — с версией, которую только что выдала запись шапки: шапка и
     // состав одного сохранения — одна правка, а не две.
-    await api('PUT', '/api/' + type + '/' + docId + '/lines', collectLines(type), seen(card.version));
+    const saved = await api('PUT', '/api/' + type + '/' + docId + '/lines', collectLines(type), seen(card.version));
     const doc = await openFromApi(type, docId, true);
+    // комплект, который окно строки не разложило (состав пришёл позже), разложил сервер (V153)
+    if (saved && Array.isArray(saved.expandedKits) && saved.expandedKits.length && typeof notify === 'function'){
+      notify(T('common.message.kits_expanded', {codes: saved.expandedKits.join(', ')}));
+    }
     // Список документов показывает номер, дату, контрагента и число
     // строк — всё это только что изменилось. Без обновления человек,
     // нажав «Назад», видел бы прежнюю строку и решил бы, что сохранение
@@ -834,7 +843,10 @@
       + '<th class="num">' + esc(T('stock.column.shortage')) + '</th>'
       + '</tr></thead><tbody>'
       + s.lines.map(l => '<tr data-shortage="' + esc(l.skuCode) + '"><td><strong>' + esc(l.skuCode) + '</strong></td>'
-          + '<td style="white-space:normal;">' + esc(l.skuName) + '</td><td>' + esc(l.qualityName) + '</td>'
+          + '<td style="white-space:normal;">' + esc(l.skuName)
+          // комплектующая комплекта заказа (V152): заказ проверяется по составу
+          + (l.kitCodes ? '<div class="hint" data-shortage-kit>' + esc(T('stock.text.in_kits', {codes: l.kitCodes})) + '</div>' : '')
+          + '</td><td>' + esc(l.qualityName) + '</td>'
           + '<td class="num">' + qty(l.requiredQty) + '</td><td class="num">' + qty(l.availableQty) + '</td>'
           + '<td class="num" style="color:#c0392b;font-weight:600;">' + qty(l.shortageQty) + '</td></tr>').join('')
       + '</tbody></table></div>'

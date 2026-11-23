@@ -14,7 +14,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>Правила записи проверяет {@code EnumValueTest}. Здесь — экран:
  * окно открывается из списка, переводы — только на включённые языки,
  * отказ сервера виден в самом окне, а системное значение не предлагает
- * того, что сервер всё равно запретит.
+ * того, что сервер всё равно запретит. У статуса — галочка «можно править
+ * транспорт» (V150).
  */
 class EnumValuesTabTest extends BrowserTestBase {
 
@@ -43,6 +44,8 @@ class EnumValuesTabTest extends BrowserTestBase {
 
         page.click("#enumValuesAdd");
         page.waitForSelector("#enumValueOverlay.active");
+        assertEquals(0, page.querySelectorAll("#enumValueFlag").size(),
+                "у типов заказов нет признака «да/нет» — и галочки в окне быть не должно");
         // Переводы — только на включённые языки, кроме основного
         assertEquals(singleValue("SELECT count(*)::text FROM dbo.dictionary_locale"
                         + " WHERE COALESCE(is_active, false) AND NOT COALESCE(is_default, false)"),
@@ -95,6 +98,10 @@ class EnumValuesTabTest extends BrowserTestBase {
                 "код системного значения не меняется");
         assertTrue(page.isDisabled("#enumValueActive"), "системное значение не отключается");
         assertTrue(page.isDisabled("#enumValueDelete"), "системное значение не удаляется");
+        // а признак статуса «можно править транспорт» (V150) у системного значения правится
+        assertFalse(page.isDisabled("#enumValueFlag"), "у системного статуса нельзя поставить галочку транспорта");
+        assertEquals(singleValue("SELECT allows_transport_edit::text FROM dbo.enum_status WHERE code = '01'"),
+                String.valueOf(page.isChecked("#enumValueFlag")), "галочка не та, что в базе");
         page.click("#enumValueCancel");
         page.waitForFunction("() => !document.getElementById('enumValueOverlay').classList.contains('active')");
         assertNoJsErrors();

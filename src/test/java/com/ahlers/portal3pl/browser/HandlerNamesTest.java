@@ -118,7 +118,7 @@ class HandlerNamesTest extends BrowserTestBase {
             }
         }
         // параметры и локальные переменные, попавшие под «typeof x === 'function'», — не имена функций портала
-        functions.keySet().removeAll(List.of("fn", "target", "value", "handler", "callback"));
+        List.of("fn", "target", "value", "handler", "callback").forEach(functions::remove);
 
         Matcher declared = DECLARED.matcher(Files.readString(WINDOW_TYPES, StandardCharsets.UTF_8));
         while (declared.find()) {

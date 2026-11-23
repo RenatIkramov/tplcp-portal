@@ -161,7 +161,7 @@
     ['renderSuppliers', 'renderConsignees', 'renderClientReports',
      'renderBillingServices', 'renderBillingInvoices', 'renderAdminUsers',
      'renderEnumValues', 'renderDepositorsDir', 'renderWarehousesDir',
-     'renderReportCatalog', 'renderAuditLog', 'renderIntegration', 'renderDocFiles'
+     'renderReportCatalog', 'renderReportRuns', 'renderKits', 'renderAuditLog', 'renderIntegration', 'renderDocFiles'
     ].forEach(name => {
       if (typeof window[name] === 'function') safely(name, window[name]);
     });

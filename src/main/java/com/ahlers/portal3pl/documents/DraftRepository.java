@@ -117,6 +117,90 @@ public class DraftRepository {
                 .update();
     }
 
+    /**
+     * Комплекты в составе раскладываются на комплектующие (V153, документ
+     * «Комплекты — решение»): WMS принимает и перевозит только то, что лежит
+     * на складе. Строка комплекта заменяется строками комплектующих на её
+     * месте — количество × количество в составе; качество, комментарий
+     * и доп. поля копируются, цена — нет (у комплектующих она своя).
+     * Состав переписывается целиком и нумеруется заново, только если
+     * в нём был комплект.
+     *
+     * @return коды разложенных комплектов, в порядке строк; пусто — комплектов не было
+     */
+    public List<String> expandKits(DocumentType type, String docId) {
+        List<Map<String, Object>> lines = jdbc.sql(("SELECT * FROM dbo.%s"
+                        + " WHERE doc_id = :docId::uuid AND batch_number IS NULL ORDER BY line_number")
+                        .formatted(type.lineTable()))
+                .param("docId", docId).query().listOfRows();
+        java.util.UUID[] skus = lines.stream().map(l -> l.get("sku_id")).filter(java.util.Objects::nonNull)
+                .map(java.util.UUID.class::cast).distinct().toArray(java.util.UUID[]::new);
+        if (skus.length == 0) {
+            return List.of();
+        }
+        List<String> unknown = jdbc.sql("""
+                        SELECT s.code FROM dbo.sku s
+                         WHERE s.sku_id = ANY (:skus) AND COALESCE(s.is_kit, false)
+                           AND NOT EXISTS (SELECT 1 FROM dbo.sku_kit_component k WHERE k.kit_sku_id = s.sku_id)
+                         ORDER BY s.code
+                        """).param("skus", skus).query(String.class).list();
+        if (!unknown.isEmpty()) {
+            throw com.ahlers.portal3pl.common.Fail.badRequest("error.kit.no_composition",
+                    "codes", String.join(", ", unknown));
+        }
+        Map<Object, List<Map<String, Object>>> kits = new LinkedHashMap<>();
+        Map<Object, String> kitCodes = new LinkedHashMap<>();
+        for (Map<String, Object> c : jdbc.sql("""
+                        SELECT k.kit_sku_id, ks.code AS kit_code, k.component_sku_id, k.qty
+                          FROM dbo.sku_kit_component k JOIN dbo.sku ks ON ks.sku_id = k.kit_sku_id
+                         WHERE k.kit_sku_id = ANY (:skus)
+                         ORDER BY k.kit_sku_id, k.sort_order
+                        """).param("skus", skus).query().listOfRows()) {
+            kits.computeIfAbsent(c.get("kit_sku_id"), k -> new ArrayList<>()).add(c);
+            kitCodes.put(c.get("kit_sku_id"), (String) c.get("kit_code"));
+        }
+        if (kits.isEmpty()) {
+            return List.of();
+        }
+        String qtyColumn = type.plannedQtyColumn();
+        Set<String> editable = type.editableLineColumns();
+        List<Map<String, Object>> out = new ArrayList<>();
+        List<String> expanded = new ArrayList<>();
+        for (Map<String, Object> line : lines) {
+            Map<String, Object> base = new LinkedHashMap<>();
+            line.forEach((k, v) -> {
+                if (editable.contains(k)) {
+                    base.put(k, v);
+                }
+            });
+            List<Map<String, Object>> parts = kits.get(line.get("sku_id"));
+            if (parts == null) {
+                out.add(base);
+                continue;
+            }
+            String code = kitCodes.get(line.get("sku_id"));
+            if (!expanded.contains(code)) {
+                expanded.add(code);
+            }
+            java.math.BigDecimal qty = line.get(qtyColumn) == null ? java.math.BigDecimal.ZERO
+                    : new java.math.BigDecimal(String.valueOf(line.get(qtyColumn)));
+            for (Map<String, Object> part : parts) {
+                Map<String, Object> component = new LinkedHashMap<>(base);
+                component.put("sku_id", part.get("component_sku_id"));
+                component.put(qtyColumn, qty.multiply((java.math.BigDecimal) part.get("qty")));
+                component.remove("price");
+                component.remove("currency_id");
+                out.add(component);
+            }
+        }
+        deleteAllLines(type, docId);
+        int number = 1;
+        for (Map<String, Object> line : out) {
+            addLine(type, docId, number++, line);
+        }
+        return expanded;
+    }
+
     /** Удаляет весь состав документа — используется при замене состава целиком. */
     public void deleteAllLines(DocumentType type, String docId) {
         jdbc.sql("DELETE FROM dbo.%s WHERE doc_id = :docId::uuid".formatted(type.lineTable()))
@@ -250,8 +334,8 @@ public class DraftRepository {
                 .collect(Collectors.joining(", "));
         String sql = "SELECT num_nonnulls(%s) > 0 FROM dbo.%s WHERE doc_id = :docId::uuid"
                 .formatted(columns, type.headerTable());
-        return Boolean.TRUE.equals(jdbc.sql(sql).param("docId", docId)
-                .query(Boolean.class).optional().orElse(false));
+        return jdbc.sql(sql).param("docId", docId)
+                .query(Boolean.class).optional().orElse(false);
     }
 
     /** Чем кончилась передача транспорта в WMS (V84): код {@link EnumCodes.Transport}. */
@@ -272,19 +356,15 @@ public class DraftRepository {
     }
 
     /**
-     * Версия документа (A9), со строкой шапки, заблокированной до конца
-     * транзакции: проверка и запись тогда не разойдутся с чужим
-     * сохранением. Та же формула, что {@link DocumentRepository#version}.
-     */
-    /**
-     * Строки документа, которым не хватает «Доступно» (V142). Функция базы
+     * Строки документа, которым не хватает «Доступно» (V142; комплект — по
+     * комплектующим, {@code kitCodes} — в каких комплектах заказа, V152). Функция базы
      * берёт блокировку пересчёта остатков клиента — до конца транзакции:
      * резерв этого документа встанет раньше, чем проверку пройдёт следующий.
      */
     public List<Map<String, Object>> stockShortage(DocumentType type, String docId) {
         return SqlRows.toCamelCase(jdbc.sql("""
                         SELECT sku_id::text AS sku_id, sku_code, sku_name, warehouse_id, quality_code, quality_name,
-                               required_qty, available_qty, shortage_qty
+                               required_qty, available_qty, shortage_qty, kit_codes
                           FROM dbo.stock_doc_shortage(:type, :docId::uuid)
                         """)
                 .param("type", type.path()).param("docId", docId).query().listOfRows());
@@ -297,6 +377,11 @@ public class DraftRepository {
                 .query(rs -> { });
     }
 
+    /**
+     * Версия документа (A9), со строкой шапки, заблокированной до конца
+     * транзакции: проверка и запись тогда не разойдутся с чужим
+     * сохранением. Та же формула, что {@link DocumentRepository#version}.
+     */
     public String lockVersion(DocumentType type, String docId) {
         return jdbc.sql(DocumentRepository.VERSION_SQL.formatted(type.headerTable()) + " FOR UPDATE")
                 .param("docId", docId).query(String.class).optional().orElse(null);

@@ -18,6 +18,7 @@ import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 /**
  * Портал не говорит с человеком русским текстом из кода.
@@ -423,7 +424,7 @@ class PortalTextsTest extends PortalTestBase {
         try (Stream<Path> files = Files.walk(STATIC)) {
             List<Path> found = files.filter(p -> p.getFileName().toString().endsWith(".html"))
                     .sorted().toList();
-            assertTrue(!found.isEmpty(), "не нашлось разметки в " + STATIC.toAbsolutePath());
+            assertFalse(found.isEmpty(), "не нашлось разметки в " + STATIC.toAbsolutePath());
             return found;
         } catch (IOException e) {
             throw new UncheckedIOException(e);

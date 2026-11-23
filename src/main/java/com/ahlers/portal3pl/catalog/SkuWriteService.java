@@ -183,7 +183,65 @@ public class SkuWriteService {
         }
         Map<String, Object> card = new LinkedHashMap<>(asText(SqlRows.toCamelCase(rows)).getFirst());
         card.put("packagings", packagings(skuId));
+        card.put("kitComponents", kitComponents(skuId));
         return card;
+    }
+
+    /**
+     * Составы всех комплектов клиента (V153): {@code [{kitSkuId, kitCode,
+     * components: [{skuId, code, name, unitName, qty}]}]}. Под RLS клиента.
+     */
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> kits() {
+        depositorScope.apply();
+        Map<String, Map<String, Object>> byKit = new LinkedHashMap<>();
+        for (Map<String, Object> r : SqlRows.toCamelCase(jdbc.sql("""
+                        SELECT c.kit_sku_id::text AS kit_sku_id, ks.code AS kit_code,
+                               c.component_sku_id::text AS sku_id, s.code, s.name, c.qty,
+                               dbo.enum_name('enum_uom', u.id::text, u.name) AS unit_name
+                          FROM dbo.sku_kit_component c
+                          JOIN dbo.sku ks ON ks.sku_id = c.kit_sku_id
+                          JOIN dbo.sku s ON s.sku_id = c.component_sku_id
+                          LEFT JOIN dbo.enum_uom u ON u.id = s.uom_id
+                         ORDER BY ks.code, c.sort_order, s.code
+                        """).query().listOfRows())) {
+            Map<String, Object> kit = byKit.computeIfAbsent(String.valueOf(r.get("kitSkuId")), id -> {
+                Map<String, Object> k = new LinkedHashMap<>();
+                k.put("kitSkuId", id);
+                k.put("kitCode", r.get("kitCode"));
+                k.put("components", new java.util.ArrayList<Map<String, Object>>());
+                return k;
+            });
+            Map<String, Object> c = new LinkedHashMap<>();
+            c.put("skuId", r.get("skuId"));
+            c.put("code", r.get("code"));
+            c.put("name", r.get("name"));
+            c.put("unitName", r.get("unitName"));
+            c.put("qty", r.get("qty"));
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> list = (List<Map<String, Object>>) kit.get("components");
+            list.add(c);
+        }
+        return new java.util.ArrayList<>(byKit.values());
+    }
+
+    /**
+     * Состав комплекта (V151): комплектующие и сколько их на один комплект,
+     * в порядке из WMS. У товара — не комплекта — пусто. Под RLS клиента.
+     */
+    private List<Map<String, Object>> kitComponents(String skuId) {
+        return asText(SqlRows.toCamelCase(jdbc.sql("""
+                        SELECT c.component_sku_id::text AS sku_id, s.code, s.name, c.qty,
+                               dbo.enum_name('enum_uom', u.id::text, u.name) AS unit_name
+                          FROM dbo.sku_kit_component c
+                          JOIN dbo.sku s ON s.sku_id = c.component_sku_id
+                          LEFT JOIN dbo.enum_uom u ON u.id = s.uom_id
+                         WHERE c.kit_sku_id = :id::uuid
+                         ORDER BY c.sort_order, s.code
+                        """)
+                .param("id", skuId)
+                .query()
+                .listOfRows()));
     }
 
     /* ======================= Упаковки ======================= */
@@ -405,11 +463,11 @@ public class SkuWriteService {
     }
 
     private void requireSkuExists(String skuId) {
-        boolean exists = Boolean.TRUE.equals(jdbc
+        boolean exists = jdbc
                 .sql("SELECT EXISTS (SELECT 1 FROM dbo.sku WHERE sku_id = :id::uuid)")
                 .param("id", skuId)
                 .query(Boolean.class)
-                .single());
+                .single();
         if (!exists) {
             throw notFound();
         }

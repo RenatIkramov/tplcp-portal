@@ -15,7 +15,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Сжатый слой остатков (V141, план «Кэш остатков», поставка К1).
@@ -267,7 +266,7 @@ class StockBalanceTest extends PortalTestBase {
     private record Numbers(BigDecimal quantity, BigDecimal reserved, BigDecimal available, BigDecimal incoming) { }
 
     private static BigDecimal bd(int value) {
-        return new BigDecimal(value).setScale(3);
+        return new BigDecimal(value).setScale(3, java.math.RoundingMode.UNNECESSARY);
     }
 
     /** Товар с годным остатком на складе клиента — с запасом для заказов проверки. */

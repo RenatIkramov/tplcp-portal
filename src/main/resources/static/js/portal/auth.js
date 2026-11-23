@@ -240,6 +240,7 @@
 
     applyTabs(user);
     applyCreateRights(user);
+    applyKits();
 
     const admin = user.role === 'admin';
     const show = (id, visible) => { const el = field(id); if (el) el.style.display = visible ? '' : 'none'; };
@@ -304,7 +305,19 @@
     // открытый раздел мог только что стать скрытым — applyTabs уведёт на заказы
     applyTabs(user);
     applyCreateRights(user);
+    applyKits();
   };
+
+  /**
+   * Комплекты у клиента (V155): выключены — нет подвкладки «Комплекты»;
+   * открытая — уводим на «Товары».
+   */
+  function applyKits(){
+    const on = PORTAL.kitsEnabled();
+    const btn = /** @type {HTMLElement | null} */ (document.querySelector('#view-references [data-refsub="kits"]'));
+    if (btn) btn.style.display = on ? '' : 'none';
+    if (!on && document.getElementById('ref-sub-kits')?.classList.contains('active')) window.showReferencesSub('sku');
+  }
 
   /** Разделы меню, закрытые человеку (флаги видимости, этап 5). */
   function applyTabs(user){

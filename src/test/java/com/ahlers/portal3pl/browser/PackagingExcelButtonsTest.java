@@ -2,9 +2,9 @@ package com.ahlers.portal3pl.browser;
 
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
  * Кнопки Excel на экране упаковок.
@@ -39,12 +39,12 @@ class PackagingExcelButtonsTest extends BrowserTestBase {
         openPackaging();
 
         assertTrue(visible("#uploadPackagingExcelBtn"), "кнопки загрузки упаковок не видно");
-        assertEquals(null, page.getAttribute("#uploadPackagingExcelBtn", "data-call"),
+        assertNull(page.getAttribute("#uploadPackagingExcelBtn", "data-call"),
                 "у кнопки загрузки остался обработчик-заглушка прототипа");
 
         assertFalse(page.querySelectorAll("#packagingTemplateBtn").isEmpty(),
                 "кнопка шаблона упаковок не подключена");
-        assertEquals(null, page.getAttribute("#packagingTemplateBtn", "data-call"),
+        assertNull(page.getAttribute("#packagingTemplateBtn", "data-call"),
                 "у кнопки шаблона остался обработчик-заглушка прототипа");
         assertNoJsErrors();
     }
@@ -66,13 +66,13 @@ class PackagingExcelButtonsTest extends BrowserTestBase {
 
         page.evaluate("() => { showTab('references'); showReferencesSub('packaging'); }");
 
-        assertEquals(null, page.getAttribute("#uploadPackagingExcelBtn", "data-call"),
+        assertNull(page.getAttribute("#uploadPackagingExcelBtn", "data-call"),
                 "до выбора клиента у кнопки загрузки осталась заглушка");
         assertFalse(page.querySelectorAll("#packagingTemplateBtn").isEmpty(),
                 "до выбора клиента кнопка шаблона не подключена");
-        assertEquals(null, page.getAttribute("#packagingTemplateBtn", "data-call"));
-        assertEquals(null, page.getAttribute("#skuTemplateBtn", "data-call"));
-        assertEquals(null, page.getAttribute("#uploadSkuExcelBtn", "data-call"));
+        assertNull(page.getAttribute("#packagingTemplateBtn", "data-call"));
+        assertNull(page.getAttribute("#skuTemplateBtn", "data-call"));
+        assertNull(page.getAttribute("#uploadSkuExcelBtn", "data-call"));
     }
 
     @Test

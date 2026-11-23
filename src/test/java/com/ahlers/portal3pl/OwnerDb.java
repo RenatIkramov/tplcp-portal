@@ -46,7 +46,8 @@ public final class OwnerDb {
     }
 
     static OwnerDb of(Environment env) {
-        String url = env.getProperty("spring.flyway.url", env.getProperty("spring.datasource.url"));
+        String flywayUrl = env.getProperty("spring.flyway.url");
+        String url = flywayUrl != null ? flywayUrl : env.getProperty("spring.datasource.url");
         String user = env.getProperty("spring.flyway.user");
         String password = env.getProperty("spring.flyway.password", "");
         if (url == null || user == null) {

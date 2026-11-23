@@ -189,7 +189,11 @@
   };
 
   /** Кнопка с подписью, которая переживёт смену языка. */
-  /** @param {string} cls @param {string} call PORTAL.call(…) @param {string} textKey */
+  /**
+   * @param {string} cls
+   * @param {string} call PORTAL.call(…)
+   * @param {string} textKey
+   */
   function btn(cls, call, textKey){
     return '<button class="btn ' + cls + '" data-i18n="' + textKey + '"'
       + call + '>' + esc(T(textKey)) + '</button>';

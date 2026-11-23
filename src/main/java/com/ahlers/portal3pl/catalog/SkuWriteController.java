@@ -54,6 +54,12 @@ public class SkuWriteController {
         return service.dictionaries();
     }
 
+    /** Составы комплектов клиента (V153): окно строки раскладывает комплект сразу. */
+    @GetMapping("/api/sku/kits")
+    public List<Map<String, Object>> kits() {
+        return service.kits();
+    }
+
     @GetMapping("/api/sku/{id}")
     public Map<String, Object> card(@PathVariable String id) {
         return service.card(id);

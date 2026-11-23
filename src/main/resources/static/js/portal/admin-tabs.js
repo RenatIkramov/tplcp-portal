@@ -52,8 +52,9 @@
     // «Ошибки» стали «Журналами» (V117): первым — журнал действий.
     {id: 'logs', labelKey: 'admin.button.logs',
      subs: ['audit', 'integration', 'excel']},
-    {id: 'reports', labelKey: 'admin.button.report_settings',
-     subs: ['reports-config']},
+    // «Отчёты»: каталог и запуски всех клиентов (V149)
+    {id: 'reports', labelKey: 'admin.button.reports',
+     subs: ['reports-config', 'reports-runs']},
     // Настройки слоя перевода WMS ↔ портал и сверки остатков (V143)
     {id: 'integration', labelKey: 'admin.button.integration',
      subs: ['wms']},
@@ -79,6 +80,7 @@
     'integration':      'admin.button.integration_errors',
     'excel':            'admin.button.excel_import_errors',
     'reports-config':   'admin.button.report_settings',
+    'reports-runs':     'admin.button.report_runs',
     'wms':              'admin.button.integration',
     'uitexts':          'admin.button.interface_texts',
     'enumValues':       'admin.button.enums'

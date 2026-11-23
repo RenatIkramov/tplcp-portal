@@ -18,6 +18,9 @@ declare global {
     extraLabelKey: string | null;
     codeExample: string | null;
     extraExample: string | null;
+    /** признак «да/нет» значения (у статуса — «можно править транспорт», V150) */
+    flagLabelKey: string | null;
+    flagHintKey: string | null;
   }
 
   interface EnumLocale {
@@ -36,6 +39,7 @@ declare global {
     code: string;
     name: string;
     extra: string | null;
+    flag: boolean | null;
     sortOrder: number | null;
     isActive: boolean | null;
     isSystem: boolean;
@@ -359,5 +363,7 @@ declare global {
     hideTransfersTab: boolean;
     priceInReceipts: boolean;
     priceInOrders: boolean;
+    /** «Используются комплекты» (V155). */
+    kitsEnabled?: boolean;
   }
 }

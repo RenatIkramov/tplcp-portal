@@ -161,24 +161,13 @@
     },
 
     async download(fileId){
-      let resp;
-      try {
-        resp = await fetch(base() + '/' + encodeURIComponent(fileId));
-      } catch (e){ say(messageOf(e)); return; }
-      if (!resp.ok){
-        view.error = await PORTAL.responseMessage(resp);
-        render();
-        return;
-      }
       const f = view.files.find(x => x.fileId === fileId);
-      const url = URL.createObjectURL(await resp.blob());
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = f ? f.fileName : 'file';
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      window.setTimeout(() => URL.revokeObjectURL(url), 10000);
+      try {
+        await PORTAL.downloadFile(base() + '/' + encodeURIComponent(fileId), f ? f.fileName : 'file');
+      } catch (e){
+        view.error = messageOf(e);
+        render();
+      }
     },
 
     askRemove(fileId){

@@ -12,8 +12,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>Правила записи проверяет {@code ReportCatalogTest}. Здесь — экран:
  * отчёт заводится в окне вместе с параметрами и переводами, отказ сервера
- * виден и окно не закрывается, клиенту отчёт выдаётся галочкой со своим
- * названием, а прочие отчёты клиента при этом не трогаются.
+ * виден и окно не закрывается, у сохранённого отчёта есть «История
+ * изменений», клиенту отчёт выдаётся галочкой со своим названием, а прочие
+ * отчёты клиента при этом не трогаются.
  */
 class ReportCatalogScreenTest extends BrowserTestBase {
 
@@ -93,8 +94,15 @@ class ReportCatalogScreenTest extends BrowserTestBase {
                   JOIN dbo.report r USING (report_id) WHERE r.wms_code = 'QA-RPT-SCREEN' AND p.param_key = 'date_to'
                 """));
 
-        // удаление — с вопросом в самом окне
+        // «История изменений» окна отчёта (V148): свёрнута, читается при раскрытии
         page.click("#reportCatalogBody tr:has-text('" + CODE + "')");
+        page.waitForSelector("#reportEditOverlay.active #reportHistory summary");
+        page.click("#reportHistory summary");
+        page.waitForSelector("#reportHistoryBody .history-table");
+        String history = page.innerText("#reportHistoryBody");
+        assertTrue(history.contains("параметр «date_to»"), "в истории отчёта нет его параметра: " + history);
+
+        // удаление — с вопросом в самом окне
         page.waitForSelector("#reportEditOverlay.active #reportDelete");
         page.click("#reportDelete");
         page.click("#reportDeleteYes");

@@ -239,7 +239,7 @@ public class ReportRunService {
             }
             default -> {
                 String sql = DIRECTORY_CHECKS.get(type);
-                if (sql != null && !Boolean.TRUE.equals(jdbc.sql(sql).param("v", value).query(Boolean.class).single())) {
+                if (sql != null && !jdbc.sql(sql).param("v", value).query(Boolean.class).single()) {
                     throw Fail.badRequest("error.report_run.unknown_value", "label", label, "value", value);
                 }
                 return value;
@@ -402,7 +402,7 @@ public class ReportRunService {
         List<Map<String, Object>> due = tx.execute(s -> jdbc.sql(
                         "SELECT run_id::text, wms_job_id FROM dbo.report_run_due(:t, :key)")
                 .param("t", timeoutMinutes).param("key", "error.report_run.timeout").query().listOfRows());
-        for (Map<String, Object> run : due == null ? List.<Map<String, Object>>of() : due) {
+        for (Map<String, Object> run : due) {
             String runId = (String) run.get("run_id");
             try {
                 WmsGateway.ReportState state = wms.reportState((String) run.get("wms_job_id"));
@@ -443,7 +443,7 @@ public class ReportRunService {
             files.delete(fileId);
             throw e;
         }
-        if (!Boolean.TRUE.equals(kept)) {
+        if (!kept) {
             files.delete(fileId);
         }
     }
@@ -460,7 +460,7 @@ public class ReportRunService {
     @Scheduled(cron = "0 23 3 * * *")
     public void cleanup() {
         Integer removed = tx.execute(s -> jdbc.sql("SELECT dbo.report_run_cleanup()").query(Integer.class).single());
-        if (removed != null && removed > 0) {
+        if (removed > 0) {
             log.info("Запуски отчётов: удалено старше срока хранения — {}", removed);
         }
     }

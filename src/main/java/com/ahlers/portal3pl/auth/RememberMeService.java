@@ -133,10 +133,10 @@ public class RememberMeService {
 
     /** Токен погашен меньше {@link #GRACE_SECONDS} секунд назад. */
     private boolean justReplaced(String token) {
-        return Boolean.TRUE.equals(jdbc.sql("SELECT dbo.auth_remember_just_replaced(:hash::varchar, :grace)")
+        return jdbc.sql("SELECT dbo.auth_remember_just_replaced(:hash::varchar, :grace)")
                 .param("hash", fingerprint(token))
                 .param("grace", GRACE_SECONDS)
-                .query(Boolean.class).single());
+                .query(Boolean.class).single();
     }
 
     /** Сколько погашенный токен не стирает cookie у соседних запросов. */

@@ -142,11 +142,33 @@
     return host;
   }
 
-  /** @param {string} key @param {string} id @param {string} value @param {string} call @param {...any} args */
+  /**
+   * @param {string} key
+   * @param {string} id
+   * @param {string} value
+   * @param {string} call
+   * @param {...any} args
+   */
   function field(key, id, value, call, ...args){
     return '<div class="kv"><label for="' + id + '">' + esc(key) + '</label>'
       + '<input type="text" class="kv-input kv-input-editable" id="' + id + '" value="' + esc(value || '') + '"'
       + PORTAL.callOnInput(call, ...args, PORTAL.VALUE) + '></div>';
+  }
+
+  /**
+   * «История изменений» отчёта (журнал действий, V148): свёрнута и
+   * читается с сервера при раскрытии, как у пользователя.
+   * @param {string | null} reportId
+   */
+  function addHistory(reportId){
+    const box = document.getElementById('reportHistory');
+    if (!box || !reportId) return;
+    box.addEventListener('toggle', () => {
+      const body = document.getElementById('reportHistoryBody');
+      if (!(/** @type {HTMLDetailsElement} */ (box)).open || !body) return;
+      PORTAL.history.show(body, PORTAL.history.url('report', reportId),
+          {stillWanted: () => box.isConnected && (/** @type {HTMLDetailsElement} */ (box)).open});
+    });
   }
 
   function renderForm(){
@@ -252,8 +274,12 @@
               + PORTAL.call('PORTAL.reportCatalog.deleteAsk', true) + '>' + esc(T_('reports.button.delete')) + '</button>' : '')
           + '<button type="button" class="btn ghost"' + PORTAL.call('PORTAL.reportCatalog.close') + '>'
           + esc(T_('common.button.cancel')) + '</button></div>')
+      + (f.reportId ? '<details class="history-details" id="reportHistory" style="margin-top:14px;">'
+          + '<summary>' + esc(T_('audit.title.change_history')) + '</summary>'
+          + '<div id="reportHistoryBody" style="margin-top:12px;"></div></details>' : '')
       + '</div>';
     host.classList.add('active');
+    addHistory(f.reportId);
   }
 
   /** @param {any} card @returns {ReportForm} */
@@ -304,7 +330,10 @@
   const placeName = (/** @type {string} */ code) => state.options
       ? (state.options.places.find(p => p.code === code) || {name: code}).name : code;
 
-  /** @param {any} r @param {number} i */
+  /**
+   * @param {any} r
+   * @param {number} i
+   */
   function hiddenRow(r, i){
     const hidden = /** @type {any[]} */ (r.hiddenParams || []);
     if (!hidden.length) return '';

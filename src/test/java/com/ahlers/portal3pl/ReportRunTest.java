@@ -23,6 +23,8 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -322,7 +324,7 @@ class ReportRunTest extends PortalTestBase {
 
         Map<String, Object> row = owner().jdbc.sql("SELECT size_bytes, sha256, kind FROM dbo.stored_file"
                 + " WHERE report_run_id = :r::uuid").param("r", runId).query().singleRow();
-        assertEquals((long) first.content().length, ((Number) row.get("size_bytes")).longValue());
+        assertEquals(first.content().length, ((Number) row.get("size_bytes")).longValue());
         assertEquals("report", row.get("kind"));
         assertEquals(64, String.valueOf(row.get("sha256")).trim().length());
     }
@@ -336,7 +338,7 @@ class ReportRunTest extends PortalTestBase {
         due(runId);
         runs.pollDue();
         assertEquals("02", status(runId).split("\\|")[0], "без файла запуск стал «готов»");
-        assertEquals(null, fileOf(runId));
+        assertNull(fileOf(runId));
 
         org.mockito.Mockito.doCallRealMethod().when(wms).reportFile(anyString());
         due(runId);
@@ -363,12 +365,12 @@ class ReportRunTest extends PortalTestBase {
         String gone = readyRun();
         java.util.UUID goneFile = fileOf(gone);
         owner().jdbc.sql("DELETE FROM dbo.report_run WHERE run_id = :r::uuid").param("r", gone).update();
-        assertTrue(files.read(goneFile) != null, "содержимое пропало раньше уборки");
+        assertNotNull(files.read(goneFile), "содержимое пропало раньше уборки");
 
         cleanup.sweep(java.time.Instant.now().minus(java.time.Duration.ofHours(1)));
-        assertTrue(files.read(goneFile) != null, "уборка удалила свежий файл — он мог быть ещё без описания");
+        assertNotNull(files.read(goneFile), "уборка удалила свежий файл — он мог быть ещё без описания");
         cleanup.sweep(java.time.Instant.now().plusSeconds(60));
-        assertEquals(null, files.read(goneFile), "файл удалённого запуска остался в папке");
+        assertNull(files.read(goneFile), "файл удалённого запуска остался в папке");
 
         String expiring = String.valueOf(runs.start(client(), reportOf(), new Request(Map.of(), null)).get("runId"));
         due(expiring);
@@ -377,8 +379,8 @@ class ReportRunTest extends PortalTestBase {
         owner().jdbc.sql("UPDATE dbo.stored_file SET expires_at = now() - interval '1 minute' WHERE file_id = :f")
                 .param("f", expiringFile).update();
         cleanup.sweep(java.time.Instant.now().minus(java.time.Duration.ofHours(1)));
-        assertEquals(null, files.read(expiringFile), "файл с истёкшим сроком остался");
-        assertEquals(null, fileOf(expiring), "описание с истёкшим сроком осталось");
+        assertNull(files.read(expiringFile), "файл с истёкшим сроком остался");
+        assertNull(fileOf(expiring), "описание с истёкшим сроком осталось");
     }
 
     private String reportOf() {
@@ -401,7 +403,6 @@ class ReportRunTest extends PortalTestBase {
 
     /** Сводка хранилища для администратора (V146): папка, файл отчёта посчитан, итог уборки запомнен. */
     @Test
-    @SuppressWarnings("unchecked")
     void adminSeesTheStorageSummary() {
         readyRun();
         cleanup.sweep(java.time.Instant.now().minus(java.time.Duration.ofHours(1)));

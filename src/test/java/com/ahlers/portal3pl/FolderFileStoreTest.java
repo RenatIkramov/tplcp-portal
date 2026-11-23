@@ -9,6 +9,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -30,7 +31,9 @@ class FolderFileStoreTest {
         store.write(id, content);
         assertArrayEquals(content, store.read(id));
         // файл лежит под своим идентификатором, а не под присланным именем
-        assertEquals(1, Files.walk(dir).filter(p -> p.getFileName().toString().equals(id.toString())).count());
+        try (Stream<Path> all = Files.walk(dir)) {
+            assertEquals(1, all.filter(p -> p.getFileName().toString().equals(id.toString())).count());
+        }
 
         // чужой файл и недописанный .part — не наши
         Path folder = dir.resolve("files").resolve(id.toString().substring(0, 2));

@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 /**
  * Портал работает под полным Content-Security-Policy, а чужой встроенный
@@ -69,7 +70,7 @@ class ContentPolicyTest extends BrowserTestBase {
         page.navigate(baseUrl() + "/");
         page.click("#qaBtn");
         waitForQuiet();
-        assertTrue(!"XSS".equals(page.title()), "встроенный обработчик выполнился — правило не действует");
-        assertTrue(!violations.isEmpty(), "браузер не сообщил о заблокированном скрипте");
+        assertFalse("XSS".equals(page.title()), "встроенный обработчик выполнился — правило не действует");
+        assertFalse(violations.isEmpty(), "браузер не сообщил о заблокированном скрипте");
     }
 }

@@ -125,6 +125,8 @@
       defect: num(r.defectQty),
       incoming: num(r.incomingQty),
       batchCount: num(r.batchCount),
+      // комплект (V152): своего остатка нет, «Доступно» — сколько можно собрать
+      isKit: r.isKit === true,
       syncedAt: r.syncedAt
     };
   }
@@ -240,6 +242,40 @@
       throw new Error(await PORTAL.responseMessage(resp));
     }
     return resp.status === 204 ? null : resp.json();
+  };
+
+  /**
+   * Скачать файл с портала: имя — из Content-Disposition (русское имя
+   * приходит в виде filename* в UTF-8), иначе {@code fallbackName}.
+   * Отказ — исключение с готовым сообщением, как у {@link PORTAL.fetchJson}.
+   * Одна на все экраны: отчёты, файлы документа, шаблоны Excel.
+   */
+  PORTAL.downloadFile = async (url, fallbackName) => {
+    const resp = await fetch(url, {headers: {'Accept': '*/*'}});
+    if (!resp.ok) {
+      throw new Error(await PORTAL.responseMessage(resp));
+    }
+    let name = fallbackName;
+    const cd = resp.headers.get('Content-Disposition') || '';
+    // кавычки — кодами: проверка текстов (PortalTextsTest) читает файл как
+    // разметку, и кавычка внутри выражения сбивала ей разбор строк
+    const utf8 = /filename\*\s*=\s*UTF-8\x27\x27([^;]+)/i.exec(cd);
+    const plain = /filename\s*=\s*\x22?([^\x22;]+)\x22?/i.exec(cd);
+    if (utf8) {
+      try { name = decodeURIComponent(utf8[1]); } catch (e) { name = plain ? plain[1] : fallbackName; }
+    } else if (plain) {
+      name = plain[1];
+    }
+    const href = URL.createObjectURL(await resp.blob());
+    const a = document.createElement('a');
+    a.href = href;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    // ссылку на blob надо отпустить, иначе файл висит в памяти страницы
+    window.setTimeout(() => URL.revokeObjectURL(href), 10000);
+    return name;
   };
 
   /**
@@ -695,15 +731,20 @@
    * поставщики, грузополучатели. Справочники всего портала живут
    * в «Администрирование → Общие справочники».
    */
+  /** Используются ли у клиента комплекты (V155): нет ответа /api/me — да. */
+  PORTAL.kitsEnabled = () => !(PORTAL.user && PORTAL.user.kitsEnabled === false);
+
   let referencesSub = 'sku';
   window.showReferencesSub = function(sub){
+    if (sub === 'kits' && !PORTAL.kitsEnabled()) sub = 'sku';
     referencesSub = sub;
     /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('[data-refsub]'))
         .forEach(b => b.classList.toggle('active', b.dataset.refsub === sub));
-    ['sku', 'packaging', 'suppliers', 'consignees'].forEach(s => {
+    ['sku', 'packaging', 'kits', 'suppliers', 'consignees'].forEach(s => {
       document.getElementById('ref-sub-' + s)?.classList.toggle('active', s === sub);
     });
     if (sub === 'sku' || sub === 'packaging') PORTAL.tables.redraw(sub);
+    if (sub === 'kits' && PORTAL.kits) PORTAL.kits.load();
     if (sub === 'suppliers' && typeof window.renderSuppliers === 'function') window.renderSuppliers();
     if (sub === 'consignees' && typeof window.renderConsignees === 'function') window.renderConsignees();
   };

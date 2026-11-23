@@ -36,7 +36,7 @@ public class AuditService {
     /** Данные клиента: история читается под RLS, как сама карточка. */
     private static final Set<String> CLIENT_OBJECTS = Set.of("sku", "packaging", "supplier", "consignee");
     /** Карточки администрирования: история — только администратору. */
-    private static final Set<String> ADMIN_OBJECTS = Set.of("app_user", "warehouse", "depositor", "operator");
+    private static final Set<String> ADMIN_OBJECTS = Set.of("app_user", "warehouse", "depositor", "operator", "report");
 
     private final JdbcClient jdbc;
     private final AdminUserService users;

@@ -258,9 +258,10 @@ public class DraftService {
 
         int lineNumber = drafts.nextLineNumber(type, docId);
         drafts.addLine(type, docId, lineNumber, quality.normalized(line));
+        List<String> kits = expandKits(type, docId);
         drafts.refreshLineCount(type, docId);
         drafts.touch(type, docId);
-        return card(type, docId);
+        return withKits(card(type, docId), kits);
     }
 
     @Transactional
@@ -277,8 +278,12 @@ public class DraftService {
         if (drafts.updateLine(type, docId, lineNumber, values) == 0) {
             throw Fail.notFound("error.line.not_found");
         }
+        List<String> kits = expandKits(type, docId);
+        if (!kits.isEmpty()) {
+            drafts.refreshLineCount(type, docId);
+        }
         drafts.touch(type, docId);
-        return card(type, docId);
+        return withKits(card(type, docId), kits);
     }
 
     /**
@@ -307,9 +312,29 @@ public class DraftService {
         for (Map<String, Object> line : checked) {
             drafts.addLine(type, docId, lineNumber++, line);
         }
+        List<String> kits = expandKits(type, docId);
         drafts.refreshLineCount(type, docId);
         drafts.touch(type, docId);
-        return card(type, docId);
+        return withKits(card(type, docId), kits);
+    }
+
+    /**
+     * Поступление и перемещение — только комплектующими (V153): комплект WMS
+     * не примет и не перевезёт. У заказа комплект остаётся строкой — его
+     * собирает WMS, резерв стоит на комплектующих (V152).
+     */
+    private List<String> expandKits(DocumentType type, String docId) {
+        return type == DocumentType.ORDERS ? List.of() : drafts.expandKits(type, docId);
+    }
+
+    /** Карточка и коды разложенных комплектов — экран скажет человеку, что строки поменялись. */
+    private static Map<String, Object> withKits(Map<String, Object> card, List<String> kits) {
+        if (kits.isEmpty()) {
+            return card;
+        }
+        Map<String, Object> out = new LinkedHashMap<>(card);
+        out.put("expandedKits", kits);
+        return out;
     }
 
     @Transactional

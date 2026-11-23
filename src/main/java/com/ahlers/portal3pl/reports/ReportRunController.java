@@ -64,7 +64,11 @@ public class ReportRunController {
     @GetMapping("/api/reports/runs/{runId}/file")
     public ResponseEntity<byte[]> file(@PathVariable String runId, HttpServletRequest request) {
         session.requireUser(request);
-        WmsGateway.ReportFile file = runs.file(runId);
+        return attachment(runs.file(runId));
+    }
+
+    /** Файл отчёта ответом «скачать»: имя по-русски — в {@code filename*} (V138; и администратору, V149). */
+    static ResponseEntity<byte[]> attachment(WmsGateway.ReportFile file) {
         MediaType type;
         try {
             type = MediaType.parseMediaType(file.contentType() == null ? "application/octet-stream" : file.contentType());

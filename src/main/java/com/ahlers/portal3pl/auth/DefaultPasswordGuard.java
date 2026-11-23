@@ -2,6 +2,7 @@ package com.ahlers.portal3pl.auth;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.jspecify.annotations.NonNull;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
@@ -75,7 +76,7 @@ public class DefaultPasswordGuard implements ApplicationRunner {
     }
 
     @Override
-    public void run(ApplicationArguments args) {
+    public void run(@NonNull ApplicationArguments args) {
         // Хэш — функцией: прочитать password_hash напрямую портал не может (V133).
         Optional<String> adminId = jdbc.sql("SELECT user_id::text FROM dbo.app_user"
                         + " WHERE lower(login) = 'admin' AND is_active")

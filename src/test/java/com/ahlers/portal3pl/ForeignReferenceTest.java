@@ -17,7 +17,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
  * Документ ссылается только на записи своего клиента (аудит 11.11.2026,
@@ -76,7 +76,7 @@ class ForeignReferenceTest extends PortalTestBase {
         String text = new TransactionTemplate(txManager).execute(tx -> jdbc.sql(
                         "SELECT value FROM dbo.ui_text WHERE text_key = 'error.document.foreign_reference'")
                 .query(String.class).list()).stream().filter(answer.body()::contains).findFirst().orElse(null);
-        assertTrue(text != null, "отказ без понятного текста: " + answer.body());
+        assertNotNull(text, "отказ без понятного текста: " + answer.body());
     }
 
     @Test

@@ -261,17 +261,17 @@ public class ReportCatalogService {
 
     private void requireReport(String reportId) {
         boolean found = reportId != null && reportId.matches("[0-9a-fA-F-]{36}")
-                && Boolean.TRUE.equals(jdbc.sql("SELECT EXISTS (SELECT 1 FROM dbo.report WHERE report_id = :id::uuid)")
-                        .param("id", reportId).query(Boolean.class).single());
+                && jdbc.sql("SELECT EXISTS (SELECT 1 FROM dbo.report WHERE report_id = :id::uuid)")
+                        .param("id", reportId).query(Boolean.class).single();
         if (!found) {
             throw Fail.notFound("error.report.not_found");
         }
     }
 
     private boolean known(String enumTable, String code) {
-        return code != null && Boolean.TRUE.equals(jdbc.sql(
+        return code != null && jdbc.sql(
                         "SELECT EXISTS (SELECT 1 FROM dbo." + enumTable + " WHERE code = :c AND is_active)")
-                .param("c", code).query(Boolean.class).single());
+                .param("c", code).query(Boolean.class).single();
     }
 
     private static String trim(String s) {
@@ -400,10 +400,10 @@ public class ReportCatalogService {
         if (depositorId == null || depositorId.isBlank()) {
             throw Fail.badRequest("error.depositor.required");
         }
-        boolean known = Boolean.TRUE.equals(jdbc.sql("""
+        boolean known = jdbc.sql("""
                         SELECT EXISTS (SELECT 1 FROM dbo.admin_depositor_access()
                                         WHERE depositor_id::text = :dep::text)
-                        """).param("dep", depositorId).query(Boolean.class).single());
+                        """).param("dep", depositorId).query(Boolean.class).single();
         if (!known) {
             throw Fail.notFound("error.depositor.not_found");
         }

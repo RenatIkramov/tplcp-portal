@@ -3,7 +3,6 @@ package com.ahlers.portal3pl.browser;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -34,7 +33,7 @@ class DocumentCardLanguageTest extends BrowserTestBase {
                     + " if (row) row.click(); }", type);
             waitForQuiet();
             String text = visibleText();
-            List<String> russian = LABELS.stream().filter(text::contains).collect(Collectors.toList());
+            List<String> russian = LABELS.stream().filter(text::contains).toList();
             assertTrue(russian.isEmpty(), type + ": на английском экране русские подписи " + russian);
         }
         assertNoJsErrors();

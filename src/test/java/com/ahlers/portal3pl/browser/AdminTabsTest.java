@@ -41,7 +41,7 @@ class AdminTabsTest extends BrowserTestBase {
         assertEquals(List.of(text("admin.button.shared_directories"),
                         text("admin.button.enums"),
                         text("admin.button.logs"),
-                        text("admin.button.report_settings"),
+                        text("admin.button.reports"),
                         text("admin.button.integration"),
                         text("admin.button.interface_texts")),
                 labels("#adminGroupTabs"),
@@ -79,11 +79,16 @@ class AdminTabsTest extends BrowserTestBase {
                         text("admin.button.excel_import_errors")), labels("#adminSubTabs"),
                 "в «Журналах» не те вкладки или не в том порядке");
 
+        // «Отчёты»: каталог и запуски всех клиентов (V149)
+        openGroup("reports");
+        assertEquals(List.of(text("admin.button.report_settings"), text("admin.button.report_runs")),
+                labels("#adminSubTabs"), "в «Отчётах» не те вкладки или не в том порядке");
+
         // Группа из одной вкладки второго ряда не рисует: ряд из одной
         // кнопки, повторяющей название группы, ничего не сообщает.
         // Переводы перечислений ведутся в окне значения (группа
         // «Перечисления», V95) — в «Текстах интерфейса» их вкладки нет (V112).
-        for (String single : List.of("reports", "enumValues", "uitexts")) {
+        for (String single : List.of("enumValues", "uitexts")) {
             openGroup(single);
             assertEquals("none", page.evaluate(
                             "() => getComputedStyle(document.getElementById('adminSubTabs')).display"),
@@ -125,7 +130,7 @@ class AdminTabsTest extends BrowserTestBase {
         List<String> refs = (List<String>) page.evaluate(
                 "() => Array.from(document.querySelectorAll('#view-references [data-refsub]'))"
                         + ".map(b => b.getAttribute('data-refsub'))");
-        assertEquals(List.of("sku", "packaging", "suppliers", "consignees"), refs,
+        assertEquals(List.of("sku", "packaging", "kits", "suppliers", "consignees"), refs,
                 "в «Справочниках» остались не только справочники клиента: " + refs);
 
         for (String moved : List.of("warehousesDir", "users", "depositorsDir",

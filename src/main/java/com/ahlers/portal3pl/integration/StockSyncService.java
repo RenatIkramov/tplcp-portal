@@ -65,7 +65,7 @@ public class StockSyncService {
                initialDelayString = "${portal.stock-sync.check-ms:60000}")
     public void runIfDue() {
         Boolean due = tx.execute(s -> jdbc.sql("SELECT dbo.stock_sync_due()").query(Boolean.class).single());
-        if (Boolean.TRUE.equals(due) && !targets().isEmpty()) {
+        if (due && !targets().isEmpty()) {
             Map<String, Object> result = runAll("schedule");
             log.info("Ночная сверка остатков: пар {}, не удалось {}", result.get("pairs"), result.get("failed"));
         }
@@ -132,7 +132,7 @@ public class StockSyncService {
         List<Map<String, Object>> rows = tx.execute(s -> jdbc.sql(
                 "SELECT depositor_id::text AS depositor_id, depositor_wms_code, warehouse_id, base_url"
                         + " FROM dbo.stock_sync_targets()").query().listOfRows());
-        return rows == null ? List.of() : rows;
+        return rows;
     }
 
     private void fail(String depositorId, String warehouseId, String trigger, String error) {

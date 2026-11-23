@@ -101,7 +101,10 @@
     ]},
     stock: {keyField: 'code', columns: [
       col('warehouse', {render: p => text(p.warehouseName || p.warehouse)}), bold('code'),
-      col('name', {wrap: true}), col('group'), col('unit'),
+      col('name', {wrap: true, render: p => text(p.name) + (p.isKit && PORTAL.kitsEnabled()
+          ? ' <span class="count" data-kit-mark title="' + esc(T('stock.hint.kit_available')) + '">'
+            + esc(T('stock.text.kit')) + '</span>' : '')}),
+      col('group'), col('unit'),
       col('stock', {num: true}), col('available', {num: true}), col('reserved', {num: true}),
       col('blocked', {num: true}), col('defect', {num: true}), col('incoming', {num: true})
     ]},

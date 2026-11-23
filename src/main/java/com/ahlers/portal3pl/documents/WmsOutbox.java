@@ -93,7 +93,7 @@ public class WmsOutbox {
                initialDelayString = "${portal.wms.retry-ms:60000}")
     public void retryDue() {
         List<Long> due = tx.execute(s -> jdbc.sql("SELECT dbo.wms_outbox_due()").query(Long.class).list());
-        for (Long id : due == null ? List.<Long>of() : due) {
+        for (Long id : due) {
             try {
                 deliver(id);
             } catch (RuntimeException e) {

@@ -5,6 +5,7 @@ import com.ahlers.portal3pl.auth.PortalUser;
 import com.ahlers.portal3pl.auth.SessionUser;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.jspecify.annotations.NonNull;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.HandlerInterceptor;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
@@ -44,7 +45,8 @@ public class AdminGuard implements WebMvcConfigurer, HandlerInterceptor {
     }
 
     @Override
-    public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
+    public boolean preHandle(@NonNull HttpServletRequest request, @NonNull HttpServletResponse response,
+                             @NonNull Object handler) {
         PortalUser user = session.requireUser(request);
         users.requireAdmin(user);
         return true;

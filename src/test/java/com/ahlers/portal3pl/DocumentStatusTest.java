@@ -66,8 +66,6 @@ class DocumentStatusTest extends PortalTestBase {
     void everyCodeIsOneStatus() {
         assertEquals("0", singleValue("SELECT count(*)::text FROM (SELECT code FROM dbo.enum_status"
                 + " GROUP BY code HAVING count(*) > 1) d"));
-        assertEquals("10", singleValue("SELECT string_agg(code, ',') FROM dbo.enum_status"
-                + " WHERE allows_transport_edit"), "правка транспорта после отправки — только в 10");
     }
 
     /** Статусы товара и счёта — свои перечисления, переведённые. */

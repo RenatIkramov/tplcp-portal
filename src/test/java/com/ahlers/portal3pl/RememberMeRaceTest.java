@@ -13,7 +13,7 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 /**
  * «Запомнить меня»: загрузка страницы шлёт три запроса разом (аудит
@@ -81,7 +81,7 @@ class RememberMeRaceTest extends PortalTestBase {
                     "раунд " + round + ": сеанс не восстановлен — человек видит форму входа");
             for (CompletableFuture<HttpResponse<String>> f : all) {
                 HttpResponse<String> r = f.get();
-                remember(r).ifPresent(c -> assertTrue(!c.equals("portal_remember="),
+                remember(r).ifPresent(c -> assertFalse(c.equals("portal_remember="),
                         "ответ " + r.uri().getPath() + " стёр cookie «запомнить меня»"));
             }
         }

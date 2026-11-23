@@ -162,15 +162,12 @@ class WmsOutboxTest extends PortalTestBase {
                 return String.valueOf(e.getStatusCode().value());
             }
         };
-        ExecutorService two = Executors.newFixedThreadPool(2);
-        try {
+        try (ExecutorService two = Executors.newFixedThreadPool(2)) {
             Future<String> a = two.submit(press);
             Future<String> b = two.submit(press);
             List<String> answers = new ArrayList<>(List.of(a.get(), b.get()));
             answers.sort(String::compareTo);
             assertEquals(List.of("02", "409"), answers, "ответы двух нажатий");
-        } finally {
-            two.shutdown();
         }
         verify(wms, times(1)).sendDocument(eq(DocumentType.RECEIPTS), eq(docId));
     }

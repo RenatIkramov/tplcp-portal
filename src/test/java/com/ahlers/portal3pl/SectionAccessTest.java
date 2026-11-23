@@ -79,7 +79,7 @@ class SectionAccessTest extends PortalTestBase {
         userSetting("can_create_orders", true);
         HttpResponse<String> allowed = send(client, "POST", "/api/orders",
                 "{\"erp_number\":\"QA-SA-" + System.nanoTime() + "\"}");
-        assertTrue(allowed.statusCode() / 100 == 2, "с галочкой создать нельзя: " + allowed.body());
+        assertEquals(2, allowed.statusCode() / 100, "с галочкой создать нельзя: " + allowed.body());
     }
 
     /** Скрытый «Биллинг» — ни счетов, ни тарифов по адресу. */

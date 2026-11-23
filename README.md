@@ -11,7 +11,7 @@ B2B self-service портал 3PL-оператора. Бэкенд на Spring B
 | `src/main/resources/application.yml`  | подключение к базе, Flyway — свой у каждой машины, в git не идёт (`.gitignore`) |
 | `application.example.yml`             | образец `application.yml` без паролей — скопировать и вписать свои |
 | `src/main/resources/application-prod.yml` | рабочий портал (профиль `prod`), без паролей     |
-| `src/main/resources/db/migration/`    | миграции базы (Flyway), V1…V147                      |
+| `src/main/resources/db/migration/`    | миграции базы (Flyway), V1…V155                      |
 | `src/main/resources/static/`          | фронтенд: `index.html`, `css/`, `js/`                |
 | `src/main/types/portal.d.ts`          | типы для проверки JavaScript (`tsc`, `tsconfig.json`) |
 | `src/test/java/com/ahlers/portal3pl/` | тесты, в том числе браузерные (`browser/`)           |
